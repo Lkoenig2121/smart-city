@@ -58,8 +58,29 @@ export class CityRenderer {
       drawDiamond(ctx, engine.hover.x, engine.hover.y, alpha("#f4d03f", 0.16), alpha("#f4d03f", 0.7));
     }
 
+    // Bucket vehicles and citizens by their depth row (x+y) for correct
+    // draw ordering — things further north/west draw first, so buildings
+    // in front correctly occlude cars behind them.
+    const vehiclesByRow = new Map<number, typeof state.vehicles>();
+    for (const v of state.vehicles) {
+      if (!tileVisible(v.x, v.y, this.camera, this.width, this.height)) continue;
+      const row = Math.floor(v.x) + Math.floor(v.y);
+      let bucket = vehiclesByRow.get(row);
+      if (!bucket) { bucket = []; vehiclesByRow.set(row, bucket); }
+      bucket.push(v);
+    }
+    const citizensByRow = new Map<number, typeof state.citizens>();
+    for (const c of state.citizens) {
+      if (!tileVisible(c.x, c.y, this.camera, this.width, this.height)) continue;
+      const row = Math.floor(c.x) + Math.floor(c.y);
+      let bucket = citizensByRow.get(row);
+      if (!bucket) { bucket = []; citizensByRow.set(row, bucket); }
+      bucket.push(c);
+    }
+
     const drawn = new Set<string>();
     for (let sum = 0; sum <= size * 2; sum++) {
+      // Draw buildings and trees at this depth row
       for (let x = 0; x < size; x++) {
         const y = sum - x;
         if (y < 0 || y >= size) continue;
@@ -79,15 +100,18 @@ export class CityRenderer {
           drawFountain(ctx, x, y, light, this.time);
         }
       }
-    }
 
-    for (const vehicle of state.vehicles) {
-      if (!tileVisible(vehicle.x, vehicle.y, this.camera, this.width, this.height)) continue;
-      drawVehicle(ctx, vehicle, light);
-    }
-    for (const citizen of state.citizens) {
-      if (!tileVisible(citizen.x, citizen.y, this.camera, this.width, this.height)) continue;
-      drawCitizen(ctx, citizen, light);
+      // Draw vehicles and citizens at this depth row (after buildings at
+      // the same row, so they appear on the road surface; but before
+      // buildings at deeper rows, so they go behind them).
+      const rowVehicles = vehiclesByRow.get(sum);
+      if (rowVehicles) {
+        for (const v of rowVehicles) drawVehicle(ctx, v, light);
+      }
+      const rowCitizens = citizensByRow.get(sum);
+      if (rowCitizens) {
+        for (const c of rowCitizens) drawCitizen(ctx, c, light);
+      }
     }
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
