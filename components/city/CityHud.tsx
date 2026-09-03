@@ -51,7 +51,9 @@ export function CityHud({
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-sky-200/80">
               SmartCity
             </p>
-            <p className="text-lg font-semibold leading-tight text-white">{cityName}</p>
+            <p className="text-lg font-semibold leading-tight text-white">
+              {cityName}
+            </p>
           </div>
         </div>
 
@@ -87,7 +89,8 @@ export function CityHud({
             })}
           </div>
           <p className="pt-1 text-center text-[11px] text-white/45">
-            Scroll to zoom · Drag to pan · Click to {TOOLS.find((t) => t.id === tool)?.hint.toLowerCase()}
+            Scroll to zoom · Drag to pan · Click to{" "}
+            {TOOLS.find((t) => t.id === tool)?.hint.toLowerCase()}
             {hoverLabel ? ` · ${hoverLabel}` : ""}
           </p>
         </div>
@@ -100,7 +103,9 @@ export function CityHud({
               <p className="text-[11px] uppercase tracking-[0.22em] text-sky-200/70">
                 {kindLabel(selected.kind)}
               </p>
-              <h2 className="text-xl font-semibold leading-tight">{selected.name}</h2>
+              <h2 className="text-xl font-semibold leading-tight">
+                {selected.name}
+              </h2>
             </div>
             <button
               type="button"
@@ -112,7 +117,11 @@ export function CityHud({
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm">
             <Info
-              label={selected.stats.capacity && selected.kind !== "shop" ? "People" : "Staff"}
+              label={
+                selected.stats.capacity && selected.kind !== "shop"
+                  ? "People"
+                  : "Staff"
+              }
               value={
                 selected.kind === "house" || selected.kind === "apartment"
                   ? `${selected.stats.residents}/${selected.stats.capacity}`
@@ -122,9 +131,18 @@ export function CityHud({
             <Info label="Happiness" value={`${selected.stats.happiness}%`} />
             <Info
               label={selected.stats.revenue ? "Revenue" : "Value"}
-              value={formatMoney(selected.stats.revenue || selected.stats.propertyValue)}
+              value={formatMoney(
+                selected.stats.revenue || selected.stats.propertyValue,
+              )}
             />
-            <Info label="Status" value={selected.stats.status === "open" ? "Open" : selected.stats.status} />
+            <Info
+              label="Status"
+              value={
+                selected.stats.status === "open"
+                  ? "Open"
+                  : selected.stats.status
+              }
+            />
           </div>
           {selected.stats.extra ? (
             <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-sm text-white/70">
@@ -145,7 +163,9 @@ export function CityHud({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-[92px] px-2">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">{label}</p>
+      <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">
+        {label}
+      </p>
       <p className="font-semibold text-white">{value}</p>
     </div>
   );
@@ -154,7 +174,9 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-white/5 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">{label}</p>
+      <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">
+        {label}
+      </p>
       <p className="font-medium">{value}</p>
     </div>
   );
