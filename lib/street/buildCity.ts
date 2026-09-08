@@ -7,7 +7,8 @@ import { BAY_W, FLOOR_H, asphaltTexture, facade, rippleNormal, type FacadeStyle 
 export const TILE = 10;
 
 /** Height of a bridge deck above the water, in world units. */
-export const DECK_H = 5.5;
+export const DECK_H = 3.2;
+const DECK_THICK = 0.4;
 
 const SIDEWALK_W = 1.7;
 export const CURB_H = 0.16;
@@ -177,7 +178,7 @@ export function buildCity(state: CityState): CityMeshes {
     for (let x = 0; x < size; x++) {
       const tile = state.tiles[y][x];
       if (!tile.bridge) continue;
-      addBridge(tile, concreteB, trimB, scratch);
+      addBridge(tile, state.tiles, concreteB, roadB, trimB, scratch);
     }
   }
 
@@ -444,7 +445,9 @@ function addBuilding(
 
 function addBridge(
   tile: Tile,
+  tiles: Tile[][],
   concreteB: MeshBuilder,
+  roadB: MeshBuilder,
   trimB: MeshBuilder,
   scratch: THREE.Color,
 ) {
@@ -455,42 +458,247 @@ function addBridge(
   const z0 = tile.y * TILE;
   const x1 = x0 + TILE;
   const z1 = z0 + TILE;
-  const narrow = 1.4;
+  const curb = 1.55;
 
-  const dx0 = bridge.axis === "ew" ? x0 : x0 + narrow;
-  const dx1 = bridge.axis === "ew" ? x1 : x1 - narrow;
-  const dz0 = bridge.axis === "ns" ? z0 : z0 + narrow;
-  const dz1 = bridge.axis === "ns" ? z1 : z1 - narrow;
+  // Keep the roadway, leave the sides open so the river shows.
+  const dx0 = bridge.axis === "ew" ? x0 : x0 + curb;
+  const dx1 = bridge.axis === "ew" ? x1 : x1 - curb;
+  const dz0 = bridge.axis === "ns" ? z0 : z0 + curb;
+  const dz1 = bridge.axis === "ns" ? z1 : z1 - curb;
 
-  // Deck slab.
-  scratch.set("#4a4c52");
-  concreteB.ground(dx0, dz0, dx1, dz1, DECK_H, scratch);
-  scratch.set("#8f8b83");
-  concreteB.walls(dx0, dz0, dx1, dz1, DECK_H - 0.7, DECK_H, scratch);
+  const yWest = bridgeDeckHeight(tile, x0 + 0.01, z0 + TILE / 2, tiles);
+  const yEast = bridgeDeckHeight(tile, x1 - 0.01, z0 + TILE / 2, tiles);
+  const yNorth = bridgeDeckHeight(tile, x0 + TILE / 2, z0 + 0.01, tiles);
+  const ySouth = bridgeDeckHeight(tile, x0 + TILE / 2, z1 - 0.01, tiles);
 
-  // Parapets along the travelled edges.
-  scratch.set("#b4b8bd");
+  const asphalt = new THREE.Color("#3b3d43");
+  const under = new THREE.Color("#8a8680");
+  const rail = new THREE.Color("#c5c9ce");
+
   if (bridge.axis === "ew") {
-    trimB.box(dx0, dz0 - 0.22, dx1, dz0 + 0.1, DECK_H, DECK_H + 1.05, scratch);
-    trimB.box(dx0, dz1 - 0.1, dx1, dz1 + 0.22, DECK_H, DECK_H + 1.05, scratch);
+    slopedDeck(roadB, dx0, dz0, dx1, dz1, yWest, yEast, "ew", asphalt);
+    slopedDeck(
+      concreteB,
+      dx0,
+      dz0,
+      dx1,
+      dz1,
+      yWest - DECK_THICK,
+      yEast - DECK_THICK,
+      "ew",
+      under,
+    );
+    // Fascia along the travelled edges.
+    slopedFascia(concreteB, dx0, dz0, dx1, yWest, yEast, under);
+    slopedFascia(concreteB, dx0, dz1, dx1, yWest, yEast, under);
+    railing(trimB, dx0, dz0, dx1, yWest, yEast, "ew", rail);
+    railing(trimB, dx0, dz1, dx1, yWest, yEast, "ew", rail);
   } else {
-    trimB.box(dx0 - 0.22, dz0, dx0 + 0.1, dz1, DECK_H, DECK_H + 1.05, scratch);
-    trimB.box(dx1 - 0.1, dz0, dx1 + 0.22, dz1, DECK_H, DECK_H + 1.05, scratch);
+    slopedDeck(roadB, dx0, dz0, dx1, dz1, yNorth, ySouth, "ns", asphalt);
+    slopedDeck(
+      concreteB,
+      dx0,
+      dz0,
+      dx1,
+      dz1,
+      yNorth - DECK_THICK,
+      ySouth - DECK_THICK,
+      "ns",
+      under,
+    );
+    slopedFasciaNS(concreteB, dx0, dz0, dz1, yNorth, ySouth, under);
+    slopedFasciaNS(concreteB, dx1, dz0, dz1, yNorth, ySouth, under);
+    railing(trimB, dz0, dx0, dz1, yNorth, ySouth, "ns", rail);
+    railing(trimB, dz0, dx1, dz1, yNorth, ySouth, "ns", rail);
+  }
+
+  // Lane dash so the span reads as the same street.
+  scratch.set("#cfc7bc");
+  if (bridge.axis === "ew") {
+    const cz = (dz0 + dz1) / 2;
+    slopedDeck(roadB, x0 + 2.2, cz - 0.08, x1 - 2.2, cz + 0.08, yWest + 0.02, yEast + 0.02, "ew", scratch);
+  } else {
+    const cx = (dx0 + dx1) / 2;
+    slopedDeck(roadB, cx - 0.08, z0 + 2.2, cx + 0.08, z1 - 2.2, yNorth + 0.02, ySouth + 0.02, "ns", scratch);
   }
 
   if (bridge.pier) {
     scratch.set("#8a8680");
     const cx = (x0 + x1) / 2;
     const cz = (z0 + z1) / 2;
-    concreteB.box(cx - 1.1, cz - 1.1, cx + 1.1, cz + 1.1, -3, DECK_H - 0.7, scratch);
+    // Pair of columns under the edges — never in the driving lane.
+    if (bridge.axis === "ew") {
+      concreteB.box(cx - 0.4, dz0 - 0.65, cx + 0.4, dz0 - 0.1, -2.4, Math.min(yWest, yEast) - DECK_THICK, scratch);
+      concreteB.box(cx - 0.4, dz1 + 0.1, cx + 0.4, dz1 + 0.65, -2.4, Math.min(yWest, yEast) - DECK_THICK, scratch);
+    } else {
+      concreteB.box(dx0 - 0.65, cz - 0.4, dx0 - 0.1, cz + 0.4, -2.4, Math.min(yNorth, ySouth) - DECK_THICK, scratch);
+      concreteB.box(dx1 + 0.1, cz - 0.4, dx1 + 0.65, cz + 0.4, -2.4, Math.min(yNorth, ySouth) - DECK_THICK, scratch);
+    }
   }
 
+  // Towers sit beside the roadway so they never swallow the walker.
   if (bridge.pylon) {
-    scratch.set("#cfd4d8");
+    scratch.set("#d5dae0");
     const cx = (x0 + x1) / 2;
-    const cz = (z0 + z1) / 2;
-    trimB.box(cx - 0.6, cz - 0.6, cx + 0.6, cz + 0.6, DECK_H, DECK_H + 26, scratch);
+    const mid = (z0 + z1) / 2;
+    if (bridge.axis === "ew") {
+      addPylon(trimB, cx, dz0 - 0.35, scratch);
+      addPylon(trimB, cx, dz1 + 0.35, scratch);
+    } else {
+      addPylon(trimB, dx0 - 0.35, mid, scratch);
+      addPylon(trimB, dx1 + 0.35, mid, scratch);
+    }
   }
+}
+
+/** Deck height under a world point. Shared by the mesh and the walker. */
+export function bridgeDeckHeight(tile: Tile, x: number, z: number, tiles?: Tile[][]) {
+  const bridge = tile.bridge;
+  if (!bridge) return 0;
+  const abutment = bridge.abutment ?? inferAbutment(tile, tiles);
+  const localX = (x - tile.x * TILE) / TILE;
+  const localZ = (z - tile.y * TILE) / TILE;
+  if (bridge.axis === "ew") {
+    if (abutment === "start") return DECK_H * clamp01(localX);
+    if (abutment === "end") return DECK_H * clamp01(1 - localX);
+    return DECK_H;
+  }
+  if (abutment === "start") return DECK_H * clamp01(localZ);
+  if (abutment === "end") return DECK_H * clamp01(1 - localZ);
+  return DECK_H;
+}
+
+function inferAbutment(tile: Tile, tiles?: Tile[][]) {
+  const bridge = tile.bridge;
+  if (!bridge || !tiles) return null;
+  if (bridge.axis === "ew") {
+    const west = tiles[tile.y]?.[tile.x - 1]?.bridge;
+    const east = tiles[tile.y]?.[tile.x + 1]?.bridge;
+    if (!west && east) return "start" as const;
+    if (west && !east) return "end" as const;
+  } else {
+    const north = tiles[tile.y - 1]?.[tile.x]?.bridge;
+    const south = tiles[tile.y + 1]?.[tile.x]?.bridge;
+    if (!north && south) return "start" as const;
+    if (north && !south) return "end" as const;
+  }
+  return null;
+}
+
+function clamp01(n: number) {
+  return Math.min(1, Math.max(0, n));
+}
+
+function slopedDeck(
+  builder: MeshBuilder,
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  yA: number,
+  yB: number,
+  axis: "ew" | "ns",
+  color: THREE.Color,
+) {
+  if (axis === "ew") {
+    builder.quad(
+      { x: x0, y: yA, z: z1 },
+      { x: x1, y: yB, z: z1 },
+      { x: x1, y: yB, z: z0 },
+      { x: x0, y: yA, z: z0 },
+      color,
+    );
+  } else {
+    builder.quad(
+      { x: x0, y: yA, z: z0 },
+      { x: x0, y: yB, z: z1 },
+      { x: x1, y: yB, z: z1 },
+      { x: x1, y: yA, z: z0 },
+      color,
+    );
+  }
+}
+
+function slopedFascia(
+  builder: MeshBuilder,
+  x0: number,
+  z: number,
+  x1: number,
+  y0: number,
+  y1: number,
+  color: THREE.Color,
+) {
+  builder.quad(
+    { x: x0, y: y0 - DECK_THICK, z },
+    { x: x1, y: y1 - DECK_THICK, z },
+    { x: x1, y: y1, z },
+    { x: x0, y: y0, z },
+    color,
+  );
+}
+
+function slopedFasciaNS(
+  builder: MeshBuilder,
+  x: number,
+  z0: number,
+  z1: number,
+  y0: number,
+  y1: number,
+  color: THREE.Color,
+) {
+  builder.quad(
+    { x, y: y0 - DECK_THICK, z: z0 },
+    { x, y: y1 - DECK_THICK, z: z1 },
+    { x, y: y1, z: z1 },
+    { x, y: y0, z: z0 },
+    color,
+  );
+}
+
+function railing(
+  builder: MeshBuilder,
+  a0: number,
+  side: number,
+  a1: number,
+  y0: number,
+  y1: number,
+  axis: "ew" | "ns",
+  color: THREE.Color,
+) {
+  const posts = 4;
+  for (let i = 0; i <= posts; i++) {
+    const t = i / posts;
+    const y = y0 + (y1 - y0) * t;
+    if (axis === "ew") {
+      const x = a0 + (a1 - a0) * t;
+      builder.box(x - 0.05, side - 0.05, x + 0.05, side + 0.05, y, y + 1.05, color);
+    } else {
+      const z = a0 + (a1 - a0) * t;
+      builder.box(side - 0.05, z - 0.05, side + 0.05, z + 0.05, y, y + 1.05, color);
+    }
+  }
+  if (axis === "ew") {
+    builder.quad(
+      { x: a0, y: y0 + 1.05, z: side },
+      { x: a1, y: y1 + 1.05, z: side },
+      { x: a1, y: y1 + 1.12, z: side },
+      { x: a0, y: y0 + 1.12, z: side },
+      color,
+    );
+  } else {
+    builder.quad(
+      { x: side, y: y0 + 1.05, z: a0 },
+      { x: side, y: y1 + 1.05, z: a1 },
+      { x: side, y: y1 + 1.12, z: a1 },
+      { x: side, y: y0 + 1.12, z: a0 },
+      color,
+    );
+  }
+}
+
+function addPylon(builder: MeshBuilder, x: number, z: number, color: THREE.Color) {
+  builder.box(x - 0.28, z - 0.28, x + 0.28, z + 0.28, -2.4, DECK_H + 9, color);
+  builder.box(x - 0.4, z - 0.4, x + 0.4, z + 0.4, DECK_H + 8.6, DECK_H + 9.3, color);
 }
 
 function buildWater(state: CityState) {

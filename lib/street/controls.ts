@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
-import { DECK_H, TILE, type Blocker } from "./buildCity";
+import { bridgeDeckHeight, TILE, type Blocker } from "./buildCity";
 
 export const EYE_HEIGHT = 1.7;
 
@@ -168,6 +168,8 @@ export class StreetControls {
       const eased = t * t * (3 - 2 * t);
       this.position.x = this.hop.from.x + (this.hop.to.x - this.hop.from.x) * eased;
       this.position.z = this.hop.from.z + (this.hop.to.z - this.hop.from.z) * eased;
+      // Height comes from the surface underfoot so a hop across the river
+      // rides the deck instead of cutting through it.
       if (t >= 1) {
         this.hop = null;
         this.rest = HOP_REST;
@@ -220,11 +222,13 @@ export class StreetControls {
     const destZ = junctionZ ?? reachedZ;
     if (destX === fromTileX && destZ === fromTileZ) return;
 
+    const destWorldX = destX * TILE + TILE / 2;
+    const destWorldZ = destZ * TILE + TILE / 2;
     const distance = Math.abs(destX - fromTileX) + Math.abs(destZ - fromTileZ);
     const to = new THREE.Vector3(
-      destX * TILE + TILE / 2,
-      this.position.y,
-      destZ * TILE + TILE / 2,
+      destWorldX,
+      this.groundAt(destWorldX, destWorldZ) + EYE_HEIGHT,
+      destWorldZ,
     );
 
     this.hop = {
@@ -359,7 +363,11 @@ export class StreetControls {
         this.grounded = true;
       }
     } else {
-      this.position.y += (floor - this.position.y) * Math.min(1, dt * 9);
+      // Snap onto ramps and decks; a slow lerp here puts the camera inside
+      // the slab for several frames.
+      const gap = floor - this.position.y;
+      if (this.hop || Math.abs(gap) > 0.28) this.position.y = floor;
+      else this.position.y += gap * Math.min(1, dt * 9);
     }
   }
 
@@ -416,9 +424,8 @@ export class StreetControls {
     const tz = Math.floor(z / TILE);
     const tile = this.state.tiles[tz]?.[tx];
     if (!tile) return 0;
-    if (tile.bridge) return DECK_H;
+    if (tile.bridge) return bridgeDeckHeight(tile, x, z, this.state.tiles);
 
-    // Blend up the approach so stepping onto a span is not a jolt.
     const neighbours = [
       this.state.tiles[tz]?.[tx - 1],
       this.state.tiles[tz]?.[tx + 1],
@@ -426,13 +433,11 @@ export class StreetControls {
       this.state.tiles[tz + 1]?.[tx],
     ];
     const approach = neighbours.find((n) => n?.bridge);
-    if (!approach) return tile.road ? 0.02 : 0;
+    if (!approach?.bridge) return tile.road ? 0.02 : 0;
 
-    const cx = approach.x * TILE + TILE / 2;
-    const cz = approach.y * TILE + TILE / 2;
-    const distance = Math.max(Math.abs(x - cx), Math.abs(z - cz));
-    const t = Math.min(1, Math.max(0, (distance - TILE / 2) / TILE));
-    return DECK_H * (1 - t);
+    // Stay on the bank until we actually step onto the span, so the camera
+    // never rides through the underside of the deck.
+    return tile.road ? 0.02 : 0;
   }
 
   applyTo(camera: THREE.PerspectiveCamera) {
