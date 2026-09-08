@@ -1,5 +1,6 @@
 import { tileCenter } from "@/lib/city/iso";
-import type { Vehicle } from "@/lib/city/types";
+import type { CityState, Vehicle } from "@/lib/city/types";
+import { laneOffset } from "@/lib/simulation/traffic/pathfinding";
 import { lit, shade, type Lighting } from "./palette";
 
 export function drawVehicle(
@@ -7,8 +8,10 @@ export function drawVehicle(
   vehicle: Vehicle,
   light: Lighting,
   lift = 0,
+  state?: CityState,
 ) {
-  const raw = tileCenter(vehicle.x, vehicle.y);
+  const lane = state ? laneOffset(state, vehicle) : { x: 0, y: 0 };
+  const raw = tileCenter(vehicle.x + lane.x, vehicle.y + lane.y);
   const c = { x: raw.x, y: raw.y - lift };
   const next = vehicle.path[Math.min(vehicle.pathIndex + 1, vehicle.path.length - 1)];
   const ang = next ? Math.atan2(next.y - vehicle.y, next.x - vehicle.x) : 0;

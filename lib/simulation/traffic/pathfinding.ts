@@ -123,6 +123,8 @@ export function nearestRoad(state: CityState, x: number, y: number): Vec2 | null
  * rather than the carriageway.
  */
 const SIDEWALK_LANE = 0.38;
+/** Offset from the road centre into the right-hand driving lane, in tiles. */
+const DRIVE_LANE = 0.17;
 
 function sidewalkSide(id: string) {
   let hash = 0;
@@ -139,28 +141,7 @@ export function sidewalkOffset(state: CityState, citizen: { id: string; x: numbe
   const ty = Math.round(citizen.y);
   if (!isRoad(state, tx, ty)) return { x: 0, y: 0 };
 
-  const next = citizen.path[Math.min(citizen.pathIndex + 1, citizen.path.length - 1)];
-  let fx = next ? next.x - citizen.x : 0;
-  let fy = next ? next.y - citizen.y : 0;
-
-  if (Math.hypot(fx, fy) < 0.08) {
-    const road = state.tiles[ty][tx].road!;
-    if (road.north || road.south) {
-      fx = 0;
-      fy = 1;
-    } else {
-      fx = 1;
-      fy = 0;
-    }
-  }
-
-  if (Math.abs(fx) >= Math.abs(fy)) {
-    fx = Math.sign(fx) || 1;
-    fy = 0;
-  } else {
-    fy = Math.sign(fy) || 1;
-    fx = 0;
-  }
+  const { fx, fy } = travelAxis(citizen) ?? { fx: 1, fy: 0 };
 
   // Perpendicular: facing along (fx, fy), this is the right-hand sidewalk.
   let ox = -fy;
@@ -179,4 +160,50 @@ export function sidewalkOffset(state: CityState, citizen: { id: string; x: numbe
   }
 
   return { x: ox * SIDEWALK_LANE, y: oy * SIDEWALK_LANE };
+}
+
+const lastLaneAxis = new Map<string, { fx: number; fy: number }>();
+
+function snapAxis(fx: number, fy: number) {
+  if (fx === 0 && fy === 0) return null;
+  if (Math.abs(fx) >= Math.abs(fy)) return { fx: Math.sign(fx) || 1, fy: 0 };
+  return { fx: 0, fy: Math.sign(fy) || 1 };
+}
+
+function travelAxis(agent: { x: number; y: number; path: Vec2[]; pathIndex: number }) {
+  const path = agent.path;
+  const i = Math.max(0, agent.pathIndex);
+  const from = path[i];
+  const to = path[i + 1];
+
+  // The tile-to-tile segment, not the live remainder. Using the leftover
+  // distance flips the axis when a car is a few centimetres from a node.
+  if (from && to) {
+    const axis = snapAxis(to.x - from.x, to.y - from.y);
+    if (axis) return axis;
+  }
+
+  const prev = path[i - 1];
+  if (prev && from) {
+    const axis = snapAxis(from.x - prev.x, from.y - prev.y);
+    if (axis) return axis;
+  }
+
+  return snapAxis(
+    (to?.x ?? from?.x ?? agent.x) - agent.x,
+    (to?.y ?? from?.y ?? agent.y) - agent.y,
+  );
+}
+
+/**
+ * Offset from the road-tile centre into the right-hand lane. Opposite
+ * directions naturally take opposite sides, so two-way streets pass.
+ */
+export function laneOffset(
+  _state: CityState,
+  vehicle: { id: string; x: number; y: number; path: Vec2[]; pathIndex: number },
+): Vec2 {
+  const axis = travelAxis(vehicle) ?? lastLaneAxis.get(vehicle.id) ?? { fx: 1, fy: 0 };
+  lastLaneAxis.set(vehicle.id, axis);
+  return { x: -axis.fy * DRIVE_LANE, y: axis.fx * DRIVE_LANE };
 }

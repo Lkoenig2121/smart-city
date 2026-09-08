@@ -112,7 +112,7 @@ export class CityRenderer {
       const rowVehicles = vehiclesByRow.get(sum);
       if (rowVehicles) {
         for (const v of rowVehicles) {
-          drawVehicle(ctx, v, light, deckLift(state, v.x, v.y));
+          drawVehicle(ctx, v, light, deckLift(state, v.x, v.y), state);
         }
       }
       const rowCitizens = citizensByRow.get(sum);

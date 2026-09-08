@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
-import { sidewalkOffset } from "@/lib/simulation/traffic/pathfinding";
+import { laneOffset, sidewalkOffset } from "@/lib/simulation/traffic/pathfinding";
 import { CURB_H, DECK_H, TILE } from "./buildCity";
 
 /**
@@ -24,6 +24,7 @@ export class AgentLayer {
   private up = new THREE.Vector3(0, 1, 0);
 
   private headings = new Map<string, number>();
+  private lanes = new Map<string, { x: number; y: number }>();
 
   constructor(
     private state: CityState,
@@ -143,8 +144,14 @@ export class AgentLayer {
         continue;
       }
 
-      const wx = vehicle.x * TILE + TILE / 2;
-      const wz = vehicle.y * TILE + TILE / 2;
+      const targetLane = laneOffset(this.state, vehicle);
+      const lane = this.lanes.get(vehicle.id) ?? { ...targetLane };
+      const blend = Math.min(1, dt * 6);
+      lane.x += (targetLane.x - lane.x) * blend;
+      lane.y += (targetLane.y - lane.y) * blend;
+      this.lanes.set(vehicle.id, lane);
+      const wx = (vehicle.x + lane.x) * TILE + TILE / 2;
+      const wz = (vehicle.y + lane.y) * TILE + TILE / 2;
       const base = this.groundAt(wx, wz);
 
       const next = vehicle.path[Math.min(vehicle.pathIndex + 1, vehicle.path.length - 1)];
