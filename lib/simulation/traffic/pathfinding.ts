@@ -116,3 +116,67 @@ export function nearestRoad(state: CityState, x: number, y: number): Vec2 | null
   }
   return best;
 }
+
+/**
+ * How far off the lane centre a pedestrian stands, in tiles. Matches the 3D
+ * sidewalk strip (~1.7m of a 10m tile), so people read as walking the curb
+ * rather than the carriageway.
+ */
+const SIDEWALK_LANE = 0.38;
+
+function sidewalkSide(id: string) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  return hash & 1 ? 1 : -1;
+}
+
+/**
+ * Offset from the road-tile centre onto a sidewalk. Each person keeps a
+ * consistent side of the street, flipped if that edge has no pavement.
+ */
+export function sidewalkOffset(state: CityState, citizen: { id: string; x: number; y: number; path: Vec2[]; pathIndex: number }): Vec2 {
+  const tx = Math.round(citizen.x);
+  const ty = Math.round(citizen.y);
+  if (!isRoad(state, tx, ty)) return { x: 0, y: 0 };
+
+  const next = citizen.path[Math.min(citizen.pathIndex + 1, citizen.path.length - 1)];
+  let fx = next ? next.x - citizen.x : 0;
+  let fy = next ? next.y - citizen.y : 0;
+
+  if (Math.hypot(fx, fy) < 0.08) {
+    const road = state.tiles[ty][tx].road!;
+    if (road.north || road.south) {
+      fx = 0;
+      fy = 1;
+    } else {
+      fx = 1;
+      fy = 0;
+    }
+  }
+
+  if (Math.abs(fx) >= Math.abs(fy)) {
+    fx = Math.sign(fx) || 1;
+    fy = 0;
+  } else {
+    fy = Math.sign(fy) || 1;
+    fx = 0;
+  }
+
+  // Perpendicular: facing along (fx, fy), this is the right-hand sidewalk.
+  let ox = -fy;
+  let oy = fx;
+  if (sidewalkSide(citizen.id) < 0) {
+    ox = -ox;
+    oy = -oy;
+  }
+
+  // Prefer the curb that actually has pavement (neighbour is not more road).
+  const preferred = isRoad(state, tx + Math.round(ox), ty + Math.round(oy));
+  const opposite = isRoad(state, tx - Math.round(ox), ty - Math.round(oy));
+  if (preferred && !opposite) {
+    ox = -ox;
+    oy = -oy;
+  }
+
+  return { x: ox * SIDEWALK_LANE, y: oy * SIDEWALK_LANE };
+}

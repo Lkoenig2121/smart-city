@@ -118,7 +118,7 @@ export class CityRenderer {
       const rowCitizens = citizensByRow.get(sum);
       if (rowCitizens) {
         for (const c of rowCitizens) {
-          drawCitizen(ctx, c, light, deckLift(state, c.x, c.y));
+          drawCitizen(ctx, c, light, deckLift(state, c.x, c.y), state);
         }
       }
     }

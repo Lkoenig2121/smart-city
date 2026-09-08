@@ -1,5 +1,6 @@
 import { tileCenter } from "@/lib/city/iso";
-import type { Citizen } from "@/lib/city/types";
+import type { Citizen, CityState } from "@/lib/city/types";
+import { sidewalkOffset } from "@/lib/simulation/traffic/pathfinding";
 import { lit, type Lighting } from "./palette";
 
 export function drawCitizen(
@@ -7,11 +8,13 @@ export function drawCitizen(
   citizen: Citizen,
   light: Lighting,
   lift = 0,
+  state?: CityState,
 ) {
   if (citizen.activity === "sleep") return;
   if (citizen.activity === "work" && citizen.path.length < 2) return;
 
-  const raw = tileCenter(citizen.x, citizen.y);
+  const offset = state ? sidewalkOffset(state, citizen) : { x: 0, y: 0 };
+  const raw = tileCenter(citizen.x + offset.x, citizen.y + offset.y);
   const c = { x: raw.x, y: raw.y - lift };
   const bob = Math.sin(citizen.x * 12 + citizen.y * 9) * 0.6;
   ctx.beginPath();

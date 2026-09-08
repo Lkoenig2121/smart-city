@@ -10,7 +10,7 @@ export const TILE = 10;
 export const DECK_H = 5.5;
 
 const SIDEWALK_W = 1.7;
-const CURB_H = 0.16;
+export const CURB_H = 0.16;
 const WALL_INSET = 0.55;
 
 const TERRAIN_COLOR: Record<Terrain, string> = {

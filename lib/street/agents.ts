@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
-import { DECK_H, TILE } from "./buildCity";
+import { sidewalkOffset } from "@/lib/simulation/traffic/pathfinding";
+import { CURB_H, DECK_H, TILE } from "./buildCity";
 
 /**
  * Draws the citizens and vehicles the simulation is already moving around, as
@@ -104,9 +105,11 @@ export class AgentLayer {
         continue;
       }
 
-      const wx = citizen.x * TILE + TILE / 2;
-      const wz = citizen.y * TILE + TILE / 2;
-      const base = this.groundAt(wx, wz);
+      const offset = sidewalkOffset(this.state, citizen);
+      const wx = (citizen.x + offset.x) * TILE + TILE / 2;
+      const wz = (citizen.y + offset.y) * TILE + TILE / 2;
+      const onPavement = offset.x !== 0 || offset.y !== 0;
+      const base = this.groundAt(wx, wz) + (onPavement ? CURB_H : 0);
 
       const next = citizen.path[Math.min(citizen.pathIndex + 1, citizen.path.length - 1)];
       const dx = next ? next.x - citizen.x : 0;
