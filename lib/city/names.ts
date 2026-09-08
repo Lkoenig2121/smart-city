@@ -110,6 +110,8 @@ export function buildingName(kind: BuildingKind, rand: Rand, index: number) {
       return `${pick(rand, FIRMS)} ${pick(rand, FIRM_SUFFIX)}`;
     case "skyscraper":
       return `${pick(rand, FIRMS)} Tower`;
+    case "tower":
+      return `${pick(rand, FIRMS)} ${pick(rand, ["Center", "One", "Spire", "Financial Center"])}`;
     case "hospital":
       return "Riverside General Hospital";
     case "school":

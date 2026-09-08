@@ -2,8 +2,14 @@ import { tileCenter } from "@/lib/city/iso";
 import type { Vehicle } from "@/lib/city/types";
 import { lit, shade, type Lighting } from "./palette";
 
-export function drawVehicle(ctx: CanvasRenderingContext2D, vehicle: Vehicle, light: Lighting) {
-  const c = tileCenter(vehicle.x, vehicle.y);
+export function drawVehicle(
+  ctx: CanvasRenderingContext2D,
+  vehicle: Vehicle,
+  light: Lighting,
+  lift = 0,
+) {
+  const raw = tileCenter(vehicle.x, vehicle.y);
+  const c = { x: raw.x, y: raw.y - lift };
   const next = vehicle.path[Math.min(vehicle.pathIndex + 1, vehicle.path.length - 1)];
   const ang = next ? Math.atan2(next.y - vehicle.y, next.x - vehicle.x) : 0;
   const dir = (ang + Math.PI * 2) % (Math.PI * 2);

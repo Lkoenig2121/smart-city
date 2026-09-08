@@ -1,3 +1,4 @@
+import { BRIDGE_DECK } from "@/lib/city/generateCity";
 import { createBuilding, footprintFor } from "@/lib/simulation/buildings/buildings";
 import type { BuildingKind, CityState, Tool } from "@/lib/city/types";
 import { createInitialCity, getBuildingAt, recountPopulation } from "./cityState";
@@ -41,6 +42,7 @@ export class CityEngine {
     if (this.tool === "bulldoze") {
       if (tile.road) {
         tile.road = null;
+        tile.bridge = null;
         this.reconnectRoads();
         return true;
       }
@@ -56,9 +58,23 @@ export class CityEngine {
     }
 
     if (this.tool === "road") {
-      if (tile.terrain === "water" || tile.buildingId) return false;
+      if (tile.buildingId) return false;
       tile.road = { north: false, east: false, south: false, west: false };
       tile.tree = null;
+      // Roads laid over water become a bridge span.
+      if (tile.terrain === "water") {
+        tile.bridge = {
+          axis: this.spanAxis(x, y),
+          deck: BRIDGE_DECK,
+          pier: (x + y) % 2 === 0,
+          pylon: false,
+          abutment: null,
+          graffiti:
+            Math.random() < 0.6
+              ? { variant: Math.floor(Math.random() * 6), hue: Math.floor(Math.random() * 360) }
+              : null,
+        };
+      }
       this.reconnectRoads();
       return true;
     }
@@ -116,6 +132,16 @@ export class CityEngine {
     this.state.buildings.delete(id);
     if (this.selectedId === id) this.selectedId = null;
     recountPopulation(this.state);
+  }
+
+  /** Guesses which way a hand-built span runs from its neighbouring roads. */
+  private spanAxis(x: number, y: number): "ns" | "ew" {
+    const { tiles } = this.state;
+    const eastWest =
+      Number(Boolean(tiles[y]?.[x - 1]?.road)) + Number(Boolean(tiles[y]?.[x + 1]?.road));
+    const northSouth =
+      Number(Boolean(tiles[y - 1]?.[x]?.road)) + Number(Boolean(tiles[y + 1]?.[x]?.road));
+    return northSouth > eastWest ? "ns" : "ew";
   }
 
   reconnectRoads() {

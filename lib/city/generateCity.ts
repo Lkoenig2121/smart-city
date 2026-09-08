@@ -6,6 +6,7 @@ import type {
   BuildingKind,
   Citizen,
   CityState,
+  Graffiti,
   RoadCell,
   Terrain,
   Tile,
@@ -16,14 +17,25 @@ import type {
 const SIZE = 40;
 const ARTERIALS = [5, 12, 20, 27, 34];
 
+/** Water spans `riverXAt(y)` through `riverXAt(y) + RIVER_W - 1`. */
+const RIVER_W = 4;
+
+export const BRIDGE_DECK = 22;
+
+function riverXAt(y: number) {
+  return 7 + Math.round(Math.sin(y * 0.18) * 1.2);
+}
+
 function emptyTile(x: number, y: number): Tile {
   return {
     x,
     y,
     terrain: "grass",
     road: null,
+    bridge: null,
     buildingId: null,
     tree: null,
+    graffiti: null,
   };
 }
 
@@ -88,8 +100,49 @@ function fillRect(
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       if (!inBounds(x, y)) continue;
-      if (tiles[y][x].road || tiles[y][x].buildingId) continue;
-      tiles[y][x].terrain = terrain;
+      const tile = tiles[y][x];
+      if (tile.road || tile.buildingId) continue;
+      if (tile.terrain === "water" || tile.terrain === "sand") continue;
+      tile.terrain = terrain;
+    }
+  }
+}
+
+function makeGraffiti(rand: () => number): Graffiti {
+  return { variant: randInt(rand, 0, 5), hue: randInt(rand, 0, 359) };
+}
+
+/**
+ * Carries a road across the river at row `y`, marking each water tile as an
+ * elevated deck with piers, and pylons at the shoulders for `signature` spans.
+ */
+function buildBridge(tiles: Tile[][], y: number, rand: () => number, signature: boolean) {
+  const start = riverXAt(y);
+  const span: number[] = [];
+  for (let x = start; x < start + RIVER_W; x++) {
+    if (inBounds(x, y) && tiles[y][x].terrain === "water") span.push(x);
+  }
+  if (span.length === 0) return;
+
+  span.forEach((x, i) => {
+    const tile = tiles[y][x];
+    tile.road = { north: false, east: false, south: false, west: false };
+    tile.tree = null;
+    tile.bridge = {
+      axis: "ew",
+      deck: BRIDGE_DECK,
+      pier: i === 1 || i === span.length - 2,
+      pylon: signature && (i === 0 || i === span.length - 1),
+      abutment: i === 0 ? "start" : i === span.length - 1 ? "end" : null,
+      graffiti: rand() < 0.75 ? makeGraffiti(rand) : null,
+    };
+  });
+
+  // Tag the concrete embankment on both banks.
+  for (const x of [span[0] - 1, span[span.length - 1] + 1]) {
+    const tile = tiles[y]?.[x];
+    if (tile && tile.terrain !== "water" && rand() < 0.8) {
+      tile.graffiti = makeGraffiti(rand);
     }
   }
 }
@@ -100,16 +153,17 @@ export function generateCity(seed = 20260903): CityState {
     Array.from({ length: SIZE }, (_, x) => emptyTile(x, y)),
   );
 
-  for (let i = 0; i < SIZE; i++) {
-    const riverX = Math.round(1 + Math.sin(i * 0.28) * 1.2);
-    for (let w = 0; w < 2; w++) {
-      if (inBounds(riverX + w, i)) {
-        tiles[i][riverX + w].terrain = "water";
-        tiles[i][riverX + w].tree = null;
-      }
+  for (let y = 0; y < SIZE; y++) {
+    const riverX = riverXAt(y);
+    for (let w = 0; w < RIVER_W; w++) {
+      const tile = tiles[y][riverX + w];
+      if (!tile) continue;
+      tile.terrain = "water";
+      tile.tree = null;
     }
-    if (inBounds(riverX + 2, i) && tiles[i][riverX + 2].terrain !== "water") {
-      tiles[i][riverX + 2].terrain = "sand";
+    for (const bank of [riverX - 1, riverX + RIVER_W]) {
+      const tile = tiles[y][bank];
+      if (tile && tile.terrain !== "water") tile.terrain = "sand";
     }
   }
 
@@ -126,29 +180,36 @@ export function generateCity(seed = 20260903): CityState {
     return building;
   };
 
-  place("school", 6, 6);
   place("hospital", 29, 6);
-  place("city_hall", 17, 16);
+  place("school", 28, 17);
+  place("city_hall", 21, 17);
   place("police", 28, 13);
   place("fire", 31, 13);
   place("park_pavilion", 17, 25);
 
-  const skyPlots = [
-    [13, 6],
-    [14, 7],
-    [21, 6],
-    [22, 7],
-    [13, 13],
-    [21, 13],
+  // Downtown core: 2x2 plots that fall between the street grid lines.
+  const supertall: [number, number][] = [
     [17, 9],
-    [23, 10],
+    [13, 6],
+    [21, 13],
   ];
-  for (const [x, y] of skyPlots) place("skyscraper", x, y);
+  const highrise: [number, number][] = [
+    [21, 6],
+    [25, 6],
+    [13, 9],
+    [21, 9],
+    [25, 9],
+    [13, 13],
+    [17, 13],
+    [25, 13],
+  ];
+  for (const [x, y] of supertall) place("tower", x, y);
+  for (const [x, y] of highrise) place("skyscraper", x, y);
 
   fillRect(tiles, 14, 22, 25, 31, "park");
-  fillRect(tiles, 6, 6, 11, 10, "playground");
   fillRect(tiles, 16, 15, 22, 19, "plaza");
   fillRect(tiles, 28, 6, 33, 11, "lot");
+  fillRect(tiles, 28, 19, 30, 19, "playground");
 
   for (const a of ARTERIALS) {
     for (let i = 3; i < SIZE - 1; i++) {
@@ -156,11 +217,23 @@ export function generateCity(seed = 20260903): CityState {
       addRoad(tiles, i, a);
     }
   }
+
+  // East-bank street grid.
   for (const y of [8, 16, 24, 31]) {
-    for (let x = 6; x <= 36; x++) addRoad(tiles, x, y);
+    for (let x = 13; x <= 36; x++) addRoad(tiles, x, y);
   }
-  for (const x of [8, 16, 24, 31]) {
+  for (const x of [16, 24, 31]) {
     for (let y = 6; y <= 36; y++) addRoad(tiles, x, y);
+  }
+
+  // West-bank riverfront strip.
+  for (const y of [8, 16, 24, 31]) {
+    for (let x = 1; x <= 4; x++) addRoad(tiles, x, y);
+  }
+  for (let y = 6; y <= 34; y++) addRoad(tiles, 2, y);
+
+  for (const y of [12, 20, 27]) {
+    buildBridge(tiles, y, rand, y === 20);
   }
 
   connectRoads(tiles);
@@ -175,17 +248,13 @@ export function generateCity(seed = 20260903): CityState {
   }
 
   const shopStrip = [
-    [6, 13],
-    [7, 13],
-    [9, 21],
-    [11, 21],
-    [13, 21],
+    [1, 13],
+    [3, 13],
     [21, 33],
     [22, 33],
     [28, 21],
     [33, 21],
     [35, 28],
-    [6, 28],
     [36, 16],
   ];
   for (const [x, y] of shopStrip) place("shop", x, y);
@@ -227,13 +296,31 @@ export function generateCity(seed = 20260903): CityState {
     }
   }
 
+  // Tags accumulate on the retaining walls along both riverbanks.
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      const tile = tiles[y][x];
+      if (tile.terrain !== "sand" || tile.graffiti) continue;
+      if (tile.buildingId) continue;
+      if (rand() < 0.22) tile.graffiti = makeGraffiti(rand);
+    }
+  }
+
   const homes = [...buildings.values()].filter(
     (b) => b.kind === "house" || b.kind === "apartment",
   );
   const workplaces = [...buildings.values()].filter((b) =>
-    ["office", "shop", "skyscraper", "hospital", "school", "police", "fire", "city_hall"].includes(
-      b.kind,
-    ),
+    [
+      "office",
+      "shop",
+      "skyscraper",
+      "tower",
+      "hospital",
+      "school",
+      "police",
+      "fire",
+      "city_hall",
+    ].includes(b.kind),
   );
 
   const citizens: Citizen[] = [];
@@ -251,8 +338,8 @@ export function generateCity(seed = 20260903): CityState {
       health: randInt(rand, 62, 98),
       education: randInt(rand, 40, 96),
       transport: pick(rand, ["walk", "car", "bus"]),
-      x: home ? home.origin.x + 0.3 : randRange(rand, 8, 30),
-      y: home ? home.origin.y + 0.3 : randRange(rand, 8, 30),
+      x: home ? home.origin.x + 0.3 : randRange(rand, 14, 30),
+      y: home ? home.origin.y + 0.3 : randRange(rand, 14, 30),
       path: [],
       pathIndex: 0,
       speed: randRange(rand, 0.9, 1.6),
@@ -280,8 +367,8 @@ export function generateCity(seed = 20260903): CityState {
       id: `v${i}`,
       kind: i === 0 ? "ambulance" : i === 1 ? "firetruck" : pick(rand, kinds),
       color: pick(rand, colors),
-      x: 12,
-      y: 12,
+      x: 20,
+      y: 20,
       path: [],
       pathIndex: 0,
       speed: randRange(rand, 1.6, 2.6),

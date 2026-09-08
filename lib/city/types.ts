@@ -13,6 +13,7 @@ export type BuildingKind =
   | "shop"
   | "office"
   | "skyscraper"
+  | "tower"
   | "hospital"
   | "school"
   | "police"
@@ -50,13 +51,34 @@ export interface Tree {
   scale: number;
 }
 
+/** A spray-painted tag rendered on a pier, abutment, or low wall. */
+export interface Graffiti {
+  variant: number;
+  hue: number;
+}
+
+export interface BridgeCell {
+  axis: "ns" | "ew";
+  /** Height of the deck above the water surface, in screen pixels. */
+  deck: number;
+  /** Support column reaching down into the water. */
+  pier: boolean;
+  /** Cable-stay pylon rising above the deck. */
+  pylon: boolean;
+  /** Which side touches land, if any — used to draw the abutment. */
+  abutment: "start" | "end" | null;
+  graffiti: Graffiti | null;
+}
+
 export interface Tile {
   x: number;
   y: number;
   terrain: Terrain;
   road: RoadCell | null;
+  bridge: BridgeCell | null;
   buildingId: string | null;
   tree: Tree | null;
+  graffiti: Graffiti | null;
 }
 
 export interface BuildingStats {

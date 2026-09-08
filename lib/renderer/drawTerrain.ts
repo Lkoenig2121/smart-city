@@ -1,6 +1,7 @@
 import { diamondPoints, tileCenter } from "@/lib/city/iso";
 import { hash2 } from "@/lib/city/rng";
-import type { Terrain } from "@/lib/city/types";
+import type { Graffiti, Terrain } from "@/lib/city/types";
+import { paintGraffiti } from "./drawBridges";
 import { drawDiamond } from "./drawIso";
 import { alpha, lit, mix, shade, type Lighting } from "./palette";
 
@@ -21,6 +22,7 @@ export function drawTerrainTile(
   terrain: Terrain,
   light: Lighting,
   time: number,
+  graffiti: Graffiti | null = null,
 ) {
   const n = hash2(x, y, 11);
   const n2 = hash2(x, y, 29);
@@ -61,6 +63,51 @@ export function drawTerrainTile(
   if (terrain === "playground") {
     drawDiamond(ctx, x, y, lit(mix("#5aa35a", "#d4a24c", n2 * 0.25), light, "ground"));
   }
+
+  if (terrain === "sand" && graffiti) {
+    drawEmbankment(ctx, x, y, graffiti, light);
+  }
+}
+
+/** A low concrete lip along the river, the kind that collects tags. */
+function drawEmbankment(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  graffiti: Graffiti,
+  light: Lighting,
+) {
+  const d = diamondPoints(x, y);
+  const h = 11;
+  const face = [
+    d.bottom,
+    d.right,
+    { x: d.right.x, y: d.right.y - h },
+    { x: d.bottom.x, y: d.bottom.y - h },
+  ];
+
+  ctx.beginPath();
+  ctx.moveTo(face[0].x, face[0].y);
+  for (let i = 1; i < face.length; i++) ctx.lineTo(face[i].x, face[i].y);
+  ctx.closePath();
+  ctx.fillStyle = lit("#8f8c84", light, "right");
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(face[3].x, face[3].y);
+  ctx.lineTo(face[2].x, face[2].y);
+  ctx.strokeStyle = lit("#b3afa6", light, "top");
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  paintGraffiti(
+    ctx,
+    { x: (d.bottom.x + d.right.x) / 2, y: (d.bottom.y + d.right.y) / 2 - h * 0.5 },
+    22,
+    h - 2,
+    graffiti,
+    light,
+  );
 }
 
 function drawWaterTile(

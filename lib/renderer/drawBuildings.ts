@@ -1,6 +1,7 @@
 import { TILE_H, TILE_W, diamondPoints, gridToScreen } from "@/lib/city/iso";
 import { hash2 } from "@/lib/city/rng";
 import type { Building } from "@/lib/city/types";
+import { paintGraffiti } from "./drawBridges";
 import { drawGroundShadow, drawIsoBox, drawSlopedRoof, drawWindowGrid } from "./drawIso";
 import { alpha, lit, mix, shade, type Lighting } from "./palette";
 
@@ -34,6 +35,9 @@ export function drawBuilding(
       break;
     case "skyscraper":
       drawSkyscraper(ctx, building, light);
+      break;
+    case "tower":
+      drawTower(ctx, building, light);
       break;
     case "hospital":
       drawHospital(ctx, building, light);
@@ -77,6 +81,30 @@ function glassColor(light: Lighting, seed: number) {
     return mix("#f6e27a", "#ffe9a8", seed);
   }
   return mix("#9fd4ef", "#d7eef8", 0.35 + seed * 0.4);
+}
+
+/** Tags the street-facing base of older, low-rise stock. */
+function tagStreetWall(
+  ctx: CanvasRenderingContext2D,
+  b: Building,
+  box: ReturnType<typeof drawIsoBox>,
+  light: Lighting,
+) {
+  const roll = hash2(b.origin.x, b.origin.y, 91);
+  if (roll < 0.68) return;
+  const hue = Math.floor(hash2(b.origin.y, b.origin.x, 12) * 360);
+  const anchor = {
+    x: (box.B.x + box.R.x) / 2 + 2,
+    y: (box.B.y + box.R.y) / 2 - 7,
+  };
+  paintGraffiti(
+    ctx,
+    anchor,
+    18,
+    12,
+    { variant: Math.floor(roll * 6), hue },
+    light,
+  );
 }
 
 function drawHouse(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
@@ -136,6 +164,7 @@ function drawApartment(ctx: CanvasRenderingContext2D, b: Building, light: Lighti
     3, b.floors, glassColor(light, seed + 0.1), shade(right, 0.7),
   );
   roofProps(ctx, box, light);
+  tagStreetWall(ctx, b, box, light);
 }
 
 function drawShop(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
@@ -158,6 +187,7 @@ function drawShop(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
     2, 1, glassColor(light, 0.4), shade(right, 0.65),
   );
   drawSlopedRoof(ctx, box, lit(shade(b.roofColor, 0.8), light, "left"), lit(b.roofColor, light, "right"));
+  tagStreetWall(ctx, b, box, light);
 }
 
 function drawOffice(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
@@ -178,45 +208,124 @@ function drawOffice(ctx: CanvasRenderingContext2D, b: Building, light: Lighting)
   roofProps(ctx, box, light);
 }
 
-function drawSkyscraper(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
-  const baseH = 36 + b.floors * 11;
+/** Draws a stacked shaft with setbacks; shared by high-rises and landmarks. */
+function drawStackedShaft(
+  ctx: CanvasRenderingContext2D,
+  b: Building,
+  light: Lighting,
+  stages: { inset: number; height: number; cols: number }[],
+) {
   const left = lit(shade(b.wallColor, 0.82), light, "left");
   const right = lit(b.wallColor, light, "right");
   const roof = lit(b.roofColor, light, "top");
-  const box = drawIsoBox(ctx, b.origin.x, b.origin.y, 2, 2, baseH, left, right, roof, 8);
-  drawWindowGrid(
-    ctx,
-    box.L.x, box.L.y, box.B.x, box.B.y, box.Be.x, box.Be.y, box.Le.x, box.Le.y,
-    5, Math.min(b.floors, 16), glassColor(light, 0.33), "#4a6070",
-  );
-  drawWindowGrid(
-    ctx,
-    box.B.x, box.B.y, box.R.x, box.R.y, box.Re.x, box.Re.y, box.Be.x, box.Be.y,
-    5, Math.min(b.floors, 16), glassColor(light, 0.41), "#587384",
-  );
+  let last = drawIsoBox(ctx, b.origin.x, b.origin.y, 2, 2, stages[0].height, left, right, roof, 8);
 
-  const cap = drawIsoBox(
-    ctx,
-    b.origin.x + 0.28,
-    b.origin.y + 0.28,
-    1.4,
-    1.4,
-    baseH + 26,
-    shade(left, 0.95),
-    shade(right, 0.95),
-    roof,
-    0,
-  );
+  stages.forEach((stage, i) => {
+    const span = 2 - stage.inset * 2;
+    const box =
+      i === 0
+        ? last
+        : drawIsoBox(
+            ctx,
+            b.origin.x + stage.inset,
+            b.origin.y + stage.inset,
+            span,
+            span,
+            stage.height,
+            shade(left, 1 - i * 0.04),
+            shade(right, 1 - i * 0.03),
+            roof,
+            i === 0 ? 8 : 0,
+          );
+
+    const rows = Math.max(4, Math.round(stage.height / 12));
+    drawWindowGrid(
+      ctx,
+      box.L.x, box.L.y, box.B.x, box.B.y, box.Be.x, box.Be.y, box.Le.x, box.Le.y,
+      stage.cols, rows, glassColor(light, hash2(b.origin.x, b.origin.y + i, 3)), "#44586a",
+    );
+    drawWindowGrid(
+      ctx,
+      box.B.x, box.B.y, box.R.x, box.R.y, box.Re.x, box.Re.y, box.Be.x, box.Be.y,
+      stage.cols, rows, glassColor(light, hash2(b.origin.y, b.origin.x + i, 7)), "#546b7d",
+    );
+
+    // Cornice band marking each setback.
+    ctx.beginPath();
+    ctx.moveTo(box.Le.x, box.Le.y);
+    ctx.lineTo(box.Be.x, box.Be.y);
+    ctx.lineTo(box.Re.x, box.Re.y);
+    ctx.strokeStyle = alpha(lit(b.accentColor, light, "top"), 0.35);
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    last = box;
+  });
+
+  return last;
+}
+
+function drawMast(
+  ctx: CanvasRenderingContext2D,
+  apex: { x: number; y: number },
+  height: number,
+  light: Lighting,
+) {
   ctx.beginPath();
   ctx.strokeStyle = lit("#c5d0d6", light, "top");
   ctx.lineWidth = 2;
-  ctx.moveTo(cap.Be.x, cap.Be.y);
-  ctx.lineTo(cap.Be.x, cap.Be.y - 28);
+  ctx.moveTo(apex.x, apex.y);
+  ctx.lineTo(apex.x, apex.y - height);
   ctx.stroke();
   ctx.beginPath();
   ctx.fillStyle = light.phase === "night" ? "#ff6b5a" : "#d0d6db";
-  ctx.arc(cap.Be.x, cap.Be.y - 28, 2.2, 0, Math.PI * 2);
+  ctx.arc(apex.x, apex.y - height, 2.2, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function drawSkyscraper(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
+  const baseH = 40 + b.floors * 9;
+  const cap = drawStackedShaft(ctx, b, light, [
+    { inset: 0, height: baseH, cols: 5 },
+    { inset: 0.3, height: baseH + b.floors * 3.4, cols: 4 },
+  ]);
+  drawMast(ctx, cap.Be, 26, light);
+}
+
+function drawTower(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
+  const podium = 54;
+  const shaft = podium + b.floors * 7.6;
+  const crown = shaft + b.floors * 2.2;
+
+  const cap = drawStackedShaft(ctx, b, light, [
+    { inset: 0, height: podium, cols: 6 },
+    { inset: 0.18, height: shaft, cols: 5 },
+    { inset: 0.42, height: crown, cols: 3 },
+  ]);
+
+  // Observation deck ring just below the crown.
+  ctx.beginPath();
+  ctx.moveTo(cap.Le.x, cap.Le.y + 14);
+  ctx.lineTo(cap.Be.x, cap.Be.y + 20);
+  ctx.lineTo(cap.Re.x, cap.Re.y + 14);
+  ctx.strokeStyle = alpha(
+    light.phase === "night" ? "#ffe9a8" : lit("#dfe9f0", light, "top"),
+    0.8,
+  );
+  ctx.lineWidth = 3.2;
+  ctx.stroke();
+
+  drawMast(ctx, cap.Be, 54, light);
+
+  // Aircraft warning lights up the spire.
+  if (light.phase === "night" || light.phase === "dusk") {
+    for (const t of [0.34, 0.68]) {
+      ctx.beginPath();
+      ctx.fillStyle = alpha("#ff6b5a", 0.85);
+      ctx.arc(cap.Be.x, cap.Be.y - 54 * t, 1.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 }
 
 function drawHospital(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {

@@ -2,11 +2,17 @@ import { tileCenter } from "@/lib/city/iso";
 import type { Citizen } from "@/lib/city/types";
 import { lit, type Lighting } from "./palette";
 
-export function drawCitizen(ctx: CanvasRenderingContext2D, citizen: Citizen, light: Lighting) {
+export function drawCitizen(
+  ctx: CanvasRenderingContext2D,
+  citizen: Citizen,
+  light: Lighting,
+  lift = 0,
+) {
   if (citizen.activity === "sleep") return;
   if (citizen.activity === "work" && citizen.path.length < 2) return;
 
-  const c = tileCenter(citizen.x, citizen.y);
+  const raw = tileCenter(citizen.x, citizen.y);
+  const c = { x: raw.x, y: raw.y - lift };
   const bob = Math.sin(citizen.x * 12 + citizen.y * 9) * 0.6;
   ctx.beginPath();
   ctx.fillStyle = "rgba(20,20,20,0.18)";

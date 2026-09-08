@@ -24,6 +24,7 @@ export function footprintFor(kind: BuildingKind): { w: number; d: number } {
     case "city_hall":
       return { w: 2, d: 2 };
     case "skyscraper":
+    case "tower":
       return { w: 2, d: 2 };
     case "office":
       return { w: 1, d: 1 };
@@ -95,6 +96,18 @@ export function defaultStats(kind: BuildingKind, rand: () => number): BuildingSt
         happiness: randInt(rand, 70, 91),
         propertyValue: randInt(rand, 48000000, 120000000),
         status: "open",
+      };
+    case "tower":
+      return {
+        residents: 0,
+        capacity: 0,
+        employees: randInt(rand, 620, 1400),
+        jobs: randInt(rand, 780, 1700),
+        revenue: randInt(rand, 28000000, 74000000),
+        happiness: randInt(rand, 72, 93),
+        propertyValue: randInt(rand, 180000000, 420000000),
+        status: "open",
+        extra: { observationDeck: "Open", elevators: randInt(rand, 18, 34) },
       };
     case "hospital":
       return {
@@ -212,7 +225,13 @@ export function createBuilding(
       wallColor = pick(rand, ["#6f8ea3", "#5a7184", "#7f99aa", "#4d6270"]);
       roofColor = "#2a3138";
       accentColor = "#d5e8f4";
-      floors = randInt(rand, 14, 22);
+      floors = randInt(rand, 22, 34);
+      break;
+    case "tower":
+      wallColor = pick(rand, ["#41566b", "#4d6478", "#38495c", "#5b7285"]);
+      roofColor = "#20272e";
+      accentColor = "#e2f1fb";
+      floors = randInt(rand, 44, 62);
       break;
     case "hospital":
       wallColor = "#f4efe6";
@@ -279,7 +298,9 @@ export function kindLabel(kind: BuildingKind) {
     case "office":
       return "Offices";
     case "skyscraper":
-      return "Tower";
+      return "High-rise";
+    case "tower":
+      return "Landmark Tower";
     case "hospital":
       return "Hospital";
     case "school":

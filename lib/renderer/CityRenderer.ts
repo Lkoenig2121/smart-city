@@ -1,6 +1,7 @@
 import { TILE_H, diamondPoints } from "@/lib/city/iso";
 import type { CityState } from "@/lib/city/types";
 import type { CityEngine } from "@/lib/simulation/city/cityEngine";
+import { drawBridge } from "./drawBridges";
 import { drawBuilding } from "./drawBuildings";
 import { drawCitizen } from "./drawCitizens";
 import { drawFountain, drawTree } from "./drawVegetation";
@@ -49,8 +50,9 @@ export class CityRenderer {
       for (let x = 0; x < size; x++) {
         if (!tileVisible(x, y, this.camera, this.width, this.height)) continue;
         const tile = state.tiles[y][x];
-        drawTerrainTile(ctx, x, y, tile.terrain, light, this.time);
-        if (tile.road) drawRoadTile(ctx, x, y, tile.road, light);
+        drawTerrainTile(ctx, x, y, tile.terrain, light, this.time, tile.graffiti);
+        // Bridge decks are elevated, so they draw with the structures below.
+        if (tile.road && !tile.bridge) drawRoadTile(ctx, x, y, tile.road, light);
       }
     }
 
@@ -80,12 +82,15 @@ export class CityRenderer {
 
     const drawn = new Set<string>();
     for (let sum = 0; sum <= size * 2; sum++) {
-      // Draw buildings and trees at this depth row
+      // Draw buildings, bridges and trees at this depth row
       for (let x = 0; x < size; x++) {
         const y = sum - x;
         if (y < 0 || y >= size) continue;
-        if (!tileVisible(x, y, this.camera, this.width, this.height, 220)) continue;
+        if (!tileVisible(x, y, this.camera, this.width, this.height, 800)) continue;
         const tile = state.tiles[y][x];
+        if (tile.bridge) {
+          drawBridge(ctx, x, y, tile.bridge, light, this.time);
+        }
         if (tile.buildingId && !drawn.has(tile.buildingId)) {
           const building = state.buildings.get(tile.buildingId);
           if (building && building.origin.x === x && building.origin.y === y) {
@@ -106,11 +111,15 @@ export class CityRenderer {
       // buildings at deeper rows, so they go behind them).
       const rowVehicles = vehiclesByRow.get(sum);
       if (rowVehicles) {
-        for (const v of rowVehicles) drawVehicle(ctx, v, light);
+        for (const v of rowVehicles) {
+          drawVehicle(ctx, v, light, deckLift(state, v.x, v.y));
+        }
       }
       const rowCitizens = citizensByRow.get(sum);
       if (rowCitizens) {
-        for (const c of rowCitizens) drawCitizen(ctx, c, light);
+        for (const c of rowCitizens) {
+          drawCitizen(ctx, c, light, deckLift(state, c.x, c.y));
+        }
       }
     }
 
@@ -171,6 +180,33 @@ function lightingForDummy() {
 
 function inCity(state: CityState, x: number, y: number) {
   return x >= 0 && y >= 0 && x < state.size && y < state.size;
+}
+
+/**
+ * Height to raise anything travelling over a bridge, interpolated so vehicles
+ * ramp on and off the deck instead of snapping up at the bank.
+ */
+function deckLift(state: CityState, x: number, y: number) {
+  const gx = Math.floor(x);
+  const gy = Math.floor(y);
+  const here = state.tiles[gy]?.[gx];
+  if (!here) return 0;
+  if (here.bridge) return here.bridge.deck;
+
+  const neighbours = [
+    state.tiles[gy]?.[gx - 1],
+    state.tiles[gy]?.[gx + 1],
+    state.tiles[gy - 1]?.[gx],
+    state.tiles[gy + 1]?.[gx],
+  ];
+  const approach = neighbours.find((tile) => tile?.bridge);
+  if (!approach?.bridge) return 0;
+
+  // Blend across the approach tile based on how close we are to the deck.
+  const dx = Math.abs(x - approach.x);
+  const dy = Math.abs(y - approach.y);
+  const distance = Math.min(1, Math.max(dx, dy));
+  return approach.bridge.deck * (1 - distance);
 }
 
 void TILE_H;
