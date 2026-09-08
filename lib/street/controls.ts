@@ -19,6 +19,8 @@ const RUN_SPEED = 42.75;
 const ACCEL = 117;
 const FRICTION = 12;
 const RADIUS = 0.42;
+const GRAVITY = 32;
+const JUMP_SPEED = 10.2;
 const PITCH_LIMIT = Math.PI / 2 - 0.04;
 const LOOK_SENSITIVITY = 0.0022;
 
@@ -54,6 +56,7 @@ export class StreetControls {
   private keys = new Set<string>();
   private hop: Hop | null = null;
   private rest = 0;
+  private grounded = true;
   /** Buildings bucketed by tile so collision only tests nearby boxes. */
   private grid = new Map<string, Blocker[]>();
 
@@ -103,6 +106,7 @@ export class StreetControls {
     this.hop = null;
     this.rest = 0;
     this.velocity.set(0, 0, 0);
+    this.grounded = true;
   }
 
   /** Places the walker at the centre of a tile, facing along the street. */
@@ -115,6 +119,7 @@ export class StreetControls {
     this.velocity.set(0, 0, 0);
     this.hop = null;
     this.rest = 0;
+    this.grounded = true;
   }
 
   keyDown(code: string) {
@@ -144,10 +149,7 @@ export class StreetControls {
   update(dt: number) {
     if (this.mode === "hop") this.updateHop(dt);
     else this.updateFree(dt);
-
-    // Settle onto whatever surface is underfoot, easing onto bridge ramps.
-    const target = this.groundAt(this.position.x, this.position.z) + EYE_HEIGHT;
-    this.position.y += (target - this.position.y) * Math.min(1, dt * 9);
+    this.applyJump(dt);
   }
 
   // ─── Street View style stepping ────────────────────────────────────────────
@@ -336,6 +338,29 @@ export class StreetControls {
     // Move on each axis separately so sliding along a wall feels natural.
     this.step(this.velocity.x * dt, 0);
     this.step(0, this.velocity.z * dt);
+  }
+
+  /** Space launches off the ground; gravity brings you back onto the surface. */
+  private applyJump(dt: number) {
+    const floor = this.groundAt(this.position.x, this.position.z) + EYE_HEIGHT;
+
+    if (this.grounded && this.has("Space")) {
+      this.velocity.y = JUMP_SPEED;
+      this.grounded = false;
+    }
+
+    if (!this.grounded) {
+      this.velocity.y -= GRAVITY * dt;
+      this.position.y += this.velocity.y * dt;
+      // Only snap back once the jump is falling, or we'd cancel it the same frame.
+      if (this.velocity.y <= 0 && this.position.y <= floor) {
+        this.position.y = floor;
+        this.velocity.y = 0;
+        this.grounded = true;
+      }
+    } else {
+      this.position.y += (floor - this.position.y) * Math.min(1, dt * 9);
+    }
   }
 
   private step(dx: number, dz: number) {

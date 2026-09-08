@@ -206,11 +206,13 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
                 intersection ·{" "}
                 <span className="font-medium text-white">A</span> /{" "}
                 <span className="font-medium text-white">D</span> to turn ·{" "}
+                <span className="font-medium text-white">Space</span> to jump ·{" "}
                 <span className="font-medium text-white">Mouse</span> to look
               </p>
             ) : (
               <p className="mt-2 text-sm leading-relaxed text-slate-300">
                 <span className="font-medium text-white">W A S D</span> or arrows to walk ·{" "}
+                <span className="font-medium text-white">Space</span> to jump ·{" "}
                 <span className="font-medium text-white">Shift</span> to run ·{" "}
                 <span className="font-medium text-white">Mouse</span> to look
               </p>
@@ -230,11 +232,13 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
               <span className="font-semibold text-white">W</span>/
               <span className="font-semibold text-white">S</span> next intersection ·{" "}
               <span className="font-semibold text-white">A</span>/
-              <span className="font-semibold text-white">D</span> turn
+              <span className="font-semibold text-white">D</span> turn ·{" "}
+              <span className="font-semibold text-white">Space</span> jump
             </>
           ) : (
             <>
               <span className="font-semibold text-white">WASD</span> walk ·{" "}
+              <span className="font-semibold text-white">Space</span> jump ·{" "}
               <span className="font-semibold text-white">Shift</span> run
             </>
           )}
