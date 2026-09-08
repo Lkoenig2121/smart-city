@@ -59,6 +59,8 @@ export interface CityMeshes {
   lamps: THREE.Vector3[];
   /** Materials whose emissive strength tracks the time of day. */
   emissiveMaterials: THREE.MeshStandardMaterial[];
+  /** Street-lamp globes; brighter at night than window glass. */
+  lampGlow: THREE.MeshStandardMaterial | null;
   dispose: () => void;
 }
 
@@ -87,6 +89,7 @@ export function buildCity(state: CityState): CityMeshes {
   const concreteB = new MeshBuilder();
   const roofB = new MeshBuilder();
   const trimB = new MeshBuilder();
+  const lampHeadB = new MeshBuilder();
   const wallB: Partial<Record<FacadeStyle, MeshBuilder>> = {};
 
   const wallsFor = (style: FacadeStyle) => {
@@ -154,11 +157,11 @@ export function buildCity(state: CityState): CityMeshes {
           }
         }
 
-        // A lamp post on alternating corners.
-        if ((x + y) % 3 === 0 && !(north && south && east && west)) {
+        // A lamp post on every other block, including crossings.
+        if ((x + y) % 2 === 0) {
           const px = west ? x1 - SIDEWALK_W * 0.5 : x0 + SIDEWALK_W * 0.5;
           const pz = z0 + SIDEWALK_W * 0.5;
-          addLamp(trimB, px, pz, lamps);
+          addLamp(trimB, lampHeadB, px, pz, lamps);
         }
         continue;
       }
@@ -178,7 +181,7 @@ export function buildCity(state: CityState): CityMeshes {
     for (let x = 0; x < size; x++) {
       const tile = state.tiles[y][x];
       if (!tile.bridge) continue;
-      addBridge(tile, state.tiles, concreteB, roadB, trimB, scratch);
+      addBridge(tile, state.tiles, concreteB, roadB, trimB, lampHeadB, lamps, scratch);
     }
   }
 
@@ -234,6 +237,18 @@ export function buildCity(state: CityState): CityMeshes {
     { cast: true, receive: true },
   );
 
+  let lampGlow: THREE.MeshStandardMaterial | null = null;
+  if (!lampHeadB.empty) {
+    lampGlow = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      emissive: new THREE.Color("#ffc37a"),
+      emissiveIntensity: 0,
+      roughness: 0.28,
+      metalness: 0.05,
+    });
+    addMesh(lampHeadB, lampGlow, { cast: false, receive: false });
+  }
+
   for (const [style, builder] of Object.entries(wallB) as Array<[FacadeStyle, MeshBuilder]>) {
     if (!builder || builder.empty) continue;
     const art = facade(style);
@@ -272,6 +287,7 @@ export function buildCity(state: CityState): CityMeshes {
     blockers,
     lamps,
     emissiveMaterials,
+    lampGlow,
     dispose: () => {
       for (const item of disposables) item.dispose();
     },
@@ -291,17 +307,37 @@ function addSidewalk(
   builder.walls(x0, z0, x1, z1, 0, CURB_H, color);
 }
 
-function addLamp(builder: MeshBuilder, x: number, z: number, lamps: THREE.Vector3[]) {
+function addLamp(
+  postB: MeshBuilder,
+  headB: MeshBuilder,
+  x: number,
+  z: number,
+  lamps: THREE.Vector3[],
+  opts?: { armX?: number; armZ?: number; y?: number },
+) {
   const grey = new THREE.Color("#4a4f55");
-  const head = new THREE.Color("#d8d2c2");
+  const head = new THREE.Color("#fff4d0");
   const h = 6.2;
+  const base = opts?.y ?? CURB_H;
+  const top = base + h;
+  const armX = opts?.armX ?? 1.5;
+  const armZ = opts?.armZ ?? 0;
+  const hx = x + armX;
+  const hz = z + armZ;
 
-  builder.box(x - 0.12, z - 0.12, x + 0.12, z + 0.12, CURB_H, h, grey);
-  // Short arm reaching over the carriageway.
-  builder.box(x - 0.1, z - 0.1, x + 1.5, z + 0.1, h - 0.35, h - 0.12, grey);
-  builder.box(x + 1.1, z - 0.28, x + 1.9, z + 0.28, h - 0.62, h - 0.34, head);
+  postB.box(x - 0.12, z - 0.12, x + 0.12, z + 0.12, base, top, grey);
+  postB.box(
+    Math.min(x, hx) - 0.1,
+    Math.min(z, hz) - 0.1,
+    Math.max(x, hx) + 0.1,
+    Math.max(z, hz) + 0.1,
+    top - 0.35,
+    top - 0.12,
+    grey,
+  );
+  headB.box(hx - 0.38, hz - 0.28, hx + 0.38, hz + 0.28, top - 0.7, top - 0.28, head);
 
-  lamps.push(new THREE.Vector3(x + 1.5, h - 0.6, z));
+  lamps.push(new THREE.Vector3(hx, top - 0.55, hz));
 }
 
 function addBuilding(
@@ -449,6 +485,8 @@ function addBridge(
   concreteB: MeshBuilder,
   roadB: MeshBuilder,
   trimB: MeshBuilder,
+  lampHeadB: MeshBuilder,
+  lamps: THREE.Vector3[],
   scratch: THREE.Color,
 ) {
   const bridge = tile.bridge;
@@ -534,6 +572,25 @@ function addBridge(
       concreteB.box(dx0 - 0.65, cz - 0.4, dx0 - 0.1, cz + 0.4, -2.4, Math.min(yNorth, ySouth) - DECK_THICK, scratch);
       concreteB.box(dx1 + 0.1, cz - 0.4, dx1 + 0.65, cz + 0.4, -2.4, Math.min(yNorth, ySouth) - DECK_THICK, scratch);
     }
+  }
+
+  // One lamp per span tile so the crossing is not a black gap at night.
+  if (bridge.axis === "ew") {
+    const lx = x0 + TILE * 0.35;
+    const lz = dz0 + 0.2;
+    addLamp(trimB, lampHeadB, lx, lz, lamps, {
+      armX: 0,
+      armZ: 1.15,
+      y: bridgeDeckHeight(tile, lx, lz, tiles),
+    });
+  } else {
+    const lx = dx0 + 0.2;
+    const lz = z0 + TILE * 0.35;
+    addLamp(trimB, lampHeadB, lx, lz, lamps, {
+      armX: 1.15,
+      armZ: 0,
+      y: bridgeDeckHeight(tile, lx, lz, tiles),
+    });
   }
 
   // Towers sit beside the roadway so they never swallow the walker.

@@ -11,7 +11,7 @@ const BASE_FOV = 72;
 const HOP_ZOOM = 7;
 
 /** How many lamps get a real point light at once. */
-const LIVE_LAMPS = 7;
+const LIVE_LAMPS = 16;
 
 /**
  * Owns the Three.js scene for the walkable view: static city geometry, the
@@ -30,6 +30,8 @@ export class StreetWorld {
 
   private sun = new THREE.DirectionalLight(0xffffff, 2.2);
   private hemi = new THREE.HemisphereLight(0xbfd8ea, 0x3d4a3a, 1);
+  /** Warm fill so the pavement underfoot never drops to black between lamps. */
+  private streetFill = new THREE.PointLight(0xffd6a8, 0, 16, 1.6);
   private lampLights: THREE.PointLight[] = [];
   private sky: THREE.Texture | null = null;
   private skyKey = "";
@@ -73,9 +75,11 @@ export class StreetWorld {
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
     this.scene.add(this.hemi);
+    this.streetFill.position.set(0, -100, 0);
+    this.scene.add(this.streetFill);
 
     for (let i = 0; i < LIVE_LAMPS; i++) {
-      const light = new THREE.PointLight(0xffc98a, 0, 26, 2);
+      const light = new THREE.PointLight(0xffc98a, 0, 38, 1.55);
       light.position.set(0, -100, 0);
       this.lampLights.push(light);
       this.scene.add(light);
@@ -169,19 +173,28 @@ export class StreetWorld {
     );
 
     const night = light.phase === "night";
-    this.sun.intensity = night ? 0.16 : light.sun * 2.6;
+    const lampsOn = night || light.phase === "dusk";
+    this.sun.intensity = night ? 0.55 : light.sun * 2.6;
     this.sun.color.set(
-      light.phase === "dawn" || light.phase === "dusk" ? "#ffb27a" : night ? "#9bb6d8" : "#fff6e8",
+      light.phase === "dawn" || light.phase === "dusk" ? "#ffb27a" : night ? "#b7cce8" : "#fff6e8",
     );
 
-    this.hemi.intensity = night ? 0.42 : light.ambient * 1.05;
-    this.hemi.color.set(light.skyTop);
-    this.hemi.groundColor.set(night ? "#141c28" : "#4a5340");
+    this.hemi.intensity = night ? 1.05 : light.ambient * 1.05;
+    this.hemi.color.set(night ? "#8aa4c8" : light.skyTop);
+    this.hemi.groundColor.set(night ? "#2c3a4c" : "#4a5340");
+    this.renderer.toneMappingExposure = night ? 1.32 : 1.05;
 
     // Facade windows glow with the same curve the isometric view uses.
     for (const material of this.city.emissiveMaterials) {
-      material.emissiveIntensity = light.windowLit * 1.5;
+      material.emissiveIntensity = light.windowLit * (night ? 2.1 : 1.5);
     }
+    if (this.city.lampGlow) {
+      this.city.lampGlow.emissiveIntensity = lampsOn ? 3.4 : 0.04;
+    }
+
+    const here = this.controls.position;
+    this.streetFill.position.set(here.x, here.y + 2.2, here.z);
+    this.streetFill.intensity = night ? 14 : lampsOn ? 6 : 0;
 
     // Sky and fog follow the horizon colour.
     const key = `${light.skyTop}|${light.skyBottom}`;
@@ -192,12 +205,12 @@ export class StreetWorld {
       this.skyKey = key;
     }
     if (this.scene.fog instanceof THREE.Fog) {
-      this.scene.fog.color.set(light.skyBottom);
-      this.scene.fog.near = night ? 30 : 70;
-      this.scene.fog.far = night ? 340 : 640;
+      this.scene.fog.color.set(night ? "#243656" : light.skyBottom);
+      this.scene.fog.near = night ? 90 : 70;
+      this.scene.fog.far = night ? 520 : 640;
     }
 
-    this.updateLamps(night || light.phase === "dusk");
+    this.updateLamps(lampsOn);
   }
 
   /** Moves the small pool of point lights onto the closest lamp posts. */
@@ -222,8 +235,8 @@ export class StreetWorld {
       }
       light.position.copy(lamp.position);
       // Fade the furthest ones out so they do not pop in and out.
-      const fade = 1 - Math.min(1, Math.sqrt(lamp.distance) / 46);
-      light.intensity = 26 * fade;
+      const fade = 1 - Math.min(1, Math.sqrt(lamp.distance) / 58);
+      light.intensity = 90 * fade;
     }
   }
 
