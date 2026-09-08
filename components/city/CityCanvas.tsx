@@ -8,6 +8,21 @@ import type { Building, Tool } from "@/lib/city/types";
 import { useEffect, useRef, useState } from "react";
 import { CityHud } from "./CityHud";
 
+const PAN_KEYS: Record<string, string> = {
+  w: "up",
+  arrowup: "up",
+  s: "down",
+  arrowdown: "down",
+  a: "left",
+  arrowleft: "left",
+  d: "right",
+  arrowright: "right",
+  shift: "fast",
+};
+
+/** Screen pixels per second of camera travel. */
+const PAN_SPEED = 900;
+
 interface HudSnap {
   cityName: string;
   population: number;
@@ -76,6 +91,29 @@ export function CityCanvas() {
     };
     canvas.addEventListener("wheel", wheel, { passive: false });
 
+    const held = new Set<string>();
+    const isTyping = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      (target.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
+    const keyDown = (event: KeyboardEvent) => {
+      if (isTyping(event.target)) return;
+      const key = PAN_KEYS[event.key.toLowerCase()];
+      if (!key) return;
+      event.preventDefault();
+      held.add(key);
+    };
+    const keyUp = (event: KeyboardEvent) => {
+      const key = PAN_KEYS[event.key.toLowerCase()];
+      if (key) held.delete(key);
+    };
+    const blur = () => held.clear();
+
+    window.addEventListener("keydown", keyDown);
+    window.addEventListener("keyup", keyUp);
+    window.addEventListener("blur", blur);
+
     let frame = 0;
     let last = performance.now();
     let hudAcc = 0;
@@ -83,6 +121,19 @@ export function CityCanvas() {
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
+
+      if (held.size) {
+        let dx = (held.has("left") ? 1 : 0) - (held.has("right") ? 1 : 0);
+        let dy = (held.has("up") ? 1 : 0) - (held.has("down") ? 1 : 0);
+        if (dx || dy) {
+          const len = Math.hypot(dx, dy);
+          dx /= len;
+          dy /= len;
+          const speed = PAN_SPEED * (held.has("fast") ? 2.2 : 1) * dt;
+          renderer.camera.nudge(dx * speed, dy * speed);
+        }
+      }
+
       engine.tick(dt);
       renderer.render(engine, dt);
       hudAcc += dt;
@@ -120,6 +171,9 @@ export function CityCanvas() {
       cancelAnimationFrame(frame);
       ro.disconnect();
       canvas.removeEventListener("wheel", wheel);
+      window.removeEventListener("keydown", keyDown);
+      window.removeEventListener("keyup", keyUp);
+      window.removeEventListener("blur", blur);
     };
   }, []);
 

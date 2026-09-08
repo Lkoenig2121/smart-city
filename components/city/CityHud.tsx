@@ -89,7 +89,7 @@ export function CityHud({
             })}
           </div>
           <p className="pt-1 text-center text-[11px] text-white/45">
-            Scroll to zoom · Drag to pan · Click to{" "}
+            Scroll to zoom · Drag or WASD/arrows to pan · Click to{" "}
             {TOOLS.find((t) => t.id === tool)?.hint.toLowerCase()}
             {hoverLabel ? ` · ${hoverLabel}` : ""}
           </p>

@@ -30,6 +30,12 @@ export class CityCamera {
     this.y += dy;
   }
 
+  /** Moves only the target so `update` eases the camera into place. */
+  nudge(dx: number, dy: number) {
+    this.targetX += dx;
+    this.targetY += dy;
+  }
+
   zoomAt(screenX: number, screenY: number, factor: number) {
     const next = Math.min(2.4, Math.max(0.42, this.targetZoom * factor));
     const wx = (screenX - this.targetX) / this.targetZoom;
