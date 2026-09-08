@@ -25,6 +25,7 @@ interface HudProps {
   hoverLabel: string;
   onTool: (tool: Tool) => void;
   onClose: () => void;
+  onEnterStreet: () => void;
 }
 
 export function CityHud({
@@ -39,6 +40,7 @@ export function CityHud({
   hoverLabel,
   onTool,
   onClose,
+  onEnterStreet,
 }: HudProps) {
   return (
     <>
@@ -57,12 +59,24 @@ export function CityHud({
           </div>
         </div>
 
-        <div className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-white/10 bg-[#101826]/72 px-3 py-2 text-sm text-white/90 shadow-2xl backdrop-blur-md">
-          <Stat label="Population" value={population.toLocaleString()} />
-          <span className="h-8 w-px bg-white/10" />
-          <Stat label="Treasury" value={formatMoney(treasury)} />
-          <span className="h-8 w-px bg-white/10" />
-          <Stat label={day} value={`${time} · ${phase}`} />
+        <div className="pointer-events-auto flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#101826]/72 px-3 py-2 text-sm text-white/90 shadow-2xl backdrop-blur-md">
+            <Stat label="Population" value={population.toLocaleString()} />
+            <span className="h-8 w-px bg-white/10" />
+            <Stat label="Treasury" value={formatMoney(treasury)} />
+            <span className="h-8 w-px bg-white/10" />
+            <Stat label={day} value={`${time} · ${phase}`} />
+          </div>
+
+          <button
+            type="button"
+            onClick={onEnterStreet}
+            title="Walk the streets in first person"
+            className="flex items-center gap-2 rounded-2xl border border-white/10 bg-gradient-to-br from-sky-400 to-emerald-500 px-3.5 py-3 text-sm font-semibold text-[#0a1a22] shadow-2xl transition hover:from-sky-300 hover:to-emerald-400"
+          >
+            <span className="text-base leading-none">👣</span>
+            Street View
+          </button>
         </div>
       </header>
 

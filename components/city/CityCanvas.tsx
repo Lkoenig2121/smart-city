@@ -4,9 +4,10 @@ import { CityEngine } from "@/lib/simulation/city/cityEngine";
 import { formatClock, dayPhase } from "@/lib/simulation/city/cityTick";
 import { CityRenderer } from "@/lib/renderer/CityRenderer";
 import { getBuildingAt } from "@/lib/simulation/city/cityState";
-import type { Building, Tool } from "@/lib/city/types";
-import { useEffect, useRef, useState } from "react";
+import type { Building, CityState, Tool } from "@/lib/city/types";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CityHud } from "./CityHud";
+import { StreetView } from "./StreetView";
 
 const PAN_KEYS: Record<string, string> = {
   w: "up",
@@ -42,6 +43,13 @@ export function CityCanvas() {
   const rendererRef = useRef<CityRenderer | null>(null);
   const [ready, setReady] = useState(false);
   const [hud, setHud] = useState<HudSnap | null>(null);
+  const [street, setStreet] = useState<{ state: CityState; entry: { x: number; y: number } } | null>(
+    null,
+  );
+  /** While the street view is open it owns the simulation clock. */
+  const streetActive = useRef(false);
+  streetActive.current = street !== null;
+
   const drag = useRef({
     active: false,
     moved: false,
@@ -99,6 +107,8 @@ export function CityCanvas() {
 
     const keyDown = (event: KeyboardEvent) => {
       if (isTyping(event.target)) return;
+      // The street view has its own movement keys.
+      if (streetActive.current) return;
       const key = PAN_KEYS[event.key.toLowerCase()];
       if (!key) return;
       event.preventDefault();
@@ -121,6 +131,14 @@ export function CityCanvas() {
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
+
+      // Hand the frame over entirely while walking the streets, so the
+      // simulation is not advanced twice and we are not drawing two views.
+      if (streetActive.current) {
+        held.clear();
+        frame = requestAnimationFrame(loop);
+        return;
+      }
 
       if (held.size) {
         let dx = (held.has("left") ? 1 : 0) - (held.has("right") ? 1 : 0);
@@ -175,6 +193,23 @@ export function CityCanvas() {
       window.removeEventListener("keyup", keyUp);
       window.removeEventListener("blur", blur);
     };
+  }, []);
+
+  /** Drops into first person at whatever the camera is currently centred on. */
+  const enterStreet = useCallback(() => {
+    const engine = engineRef.current;
+    const renderer = rendererRef.current;
+    if (!engine || !renderer) return;
+    const centre = renderer.camera.pickTile(renderer.width / 2, renderer.height / 2);
+    const clamped = {
+      x: Math.max(0, Math.min(engine.state.size - 1, centre.x)),
+      y: Math.max(0, Math.min(engine.state.size - 1, centre.y)),
+    };
+    setStreet({ state: engine.state, entry: clamped });
+  }, []);
+
+  const tickFromStreet = useCallback((dt: number) => {
+    engineRef.current?.tick(dt);
   }, []);
 
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -234,7 +269,7 @@ export function CityCanvas() {
         }}
         onWheel={(event) => event.preventDefault()}
       />
-      {hud ? (
+      {hud && !street ? (
         <CityHud
           {...hud}
           onTool={(tool) => {
@@ -244,8 +279,19 @@ export function CityCanvas() {
           onClose={() => {
             if (engineRef.current) engineRef.current.selectedId = null;
           }}
+          onEnterStreet={enterStreet}
         />
       ) : null}
+
+      {street ? (
+        <StreetView
+          state={street.state}
+          entry={street.entry}
+          onTick={tickFromStreet}
+          onExit={() => setStreet(null)}
+        />
+      ) : null}
+
       {!ready ? (
         <div className="absolute inset-0 grid place-items-center bg-[#122033] text-white">
           Raising the city…
