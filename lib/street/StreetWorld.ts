@@ -1,6 +1,7 @@
 import * as THREE from "three";
-import type { CityState } from "@/lib/city/types";
+import type { Building, CityState } from "@/lib/city/types";
 import { findStadium, stadiumIsOpen } from "@/lib/city/stadium";
+import { lodgingBuildings } from "@/lib/city/lodging";
 import { lightingFor, type Lighting } from "@/lib/renderer/palette";
 import { AgentLayer } from "./agents";
 import { buildCity, TILE, type CityMeshes } from "./buildCity";
@@ -109,28 +110,44 @@ export class StreetWorld {
     const stadium = findStadium(this.state);
     if (!stadium || !stadiumIsOpen(stadium)) return false;
     const range = TILE * 3.5;
-    if (this.distanceToStadium(stadium, this.controls.position.x, this.controls.position.z) < range) {
+    if (this.distanceToBuilding(stadium, this.controls.position.x, this.controls.position.z) < range) {
       return true;
     }
-    // Hop landings are junctions; keep the prompt up for a hop that starts
-    // or ends beside the park so E can be pressed mid-move.
     const hop = this.controls.hopEnds;
     if (!hop) return false;
     return (
-      this.distanceToStadium(stadium, hop.from.x, hop.from.z) < range ||
-      this.distanceToStadium(stadium, hop.to.x, hop.to.z) < range
+      this.distanceToBuilding(stadium, hop.from.x, hop.from.z) < range ||
+      this.distanceToBuilding(stadium, hop.to.x, hop.to.z) < range
     );
   }
 
-  private distanceToStadium(
-    stadium: NonNullable<ReturnType<typeof findStadium>>,
-    x: number,
-    z: number,
-  ) {
-    const minX = stadium.origin.x * TILE;
-    const maxX = (stadium.origin.x + stadium.width) * TILE;
-    const minZ = stadium.origin.y * TILE;
-    const maxZ = (stadium.origin.y + stadium.depth) * TILE;
+  nearLodgingEntrance() {
+    const range = TILE * 3.5;
+    let best: Building | null = null;
+    let bestDist = range;
+    for (const building of lodgingBuildings(this.state)) {
+      const here = this.distanceToBuilding(building, this.controls.position.x, this.controls.position.z);
+      const hop = this.controls.hopEnds;
+      const hopDist = hop
+        ? Math.min(
+            this.distanceToBuilding(building, hop.from.x, hop.from.z),
+            this.distanceToBuilding(building, hop.to.x, hop.to.z),
+          )
+        : Infinity;
+      const dist = Math.min(here, hopDist);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = building;
+      }
+    }
+    return best;
+  }
+
+  private distanceToBuilding(building: Building, x: number, z: number) {
+    const minX = building.origin.x * TILE;
+    const maxX = (building.origin.x + building.width) * TILE;
+    const minZ = building.origin.y * TILE;
+    const maxZ = (building.origin.y + building.depth) * TILE;
     const dx = x < minX ? minX - x : x > maxX ? x - maxX : 0;
     const dz = z < minZ ? minZ - z : z > maxZ ? z - maxZ : 0;
     return Math.hypot(dx, dz);

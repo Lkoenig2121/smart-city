@@ -314,7 +314,9 @@ export function createBuilding(
   };
 }
 
-export function kindLabel(kind: BuildingKind) {
+export function kindLabel(target: Building | BuildingKind) {
+  const kind = typeof target === "string" ? target : target.kind;
+  const lodging = typeof target === "string" ? undefined : target.stats.extra?.lodging;
   switch (kind) {
     case "house":
       return "Residence";
@@ -325,8 +327,12 @@ export function kindLabel(kind: BuildingKind) {
     case "office":
       return "Offices";
     case "skyscraper":
+      if (lodging === "hotel") return "Hotel";
+      if (lodging === "residences") return "Residences";
       return "High-rise";
     case "tower":
+      if (lodging === "hotel") return "Hotel";
+      if (lodging === "residences") return "Residences";
       return "Landmark Tower";
     case "hospital":
       return "Hospital";

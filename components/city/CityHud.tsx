@@ -117,7 +117,7 @@ export function CityHud({
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] uppercase tracking-[0.22em] text-sky-200/70">
-                {kindLabel(selected.kind)}
+                {kindLabel(selected)}
               </p>
               <h2 className="text-xl font-semibold leading-tight">
                 {selected.name}

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Building, BuildingKind, CityState, Terrain, Tile } from "@/lib/city/types";
+import { lodgingUse } from "@/lib/city/lodging";
 import { MeshBuilder } from "./meshBuilder";
 import { BAY_W, FLOOR_H, asphaltTexture, facade, rippleNormal, type FacadeStyle } from "./textures";
 
@@ -406,6 +407,12 @@ function addBuilding(
       const mx = (bx0 + bx1) / 2;
       const mz = (bz0 + bz1) / 2;
       trimB.box(mx - 0.35, mz - 0.35, mx + 0.35, mz + 0.35, base, base + 14, accent);
+      const lodging = lodgingUse(building);
+      if (lodging) {
+        const gold = new THREE.Color(lodging === "hotel" ? "#c9a44c" : "#8a5a3a");
+        trimB.box(x0 + 4.2, z1 - 0.2, x1 - 4.2, z1 + 1.6, 3.2, 3.55, gold);
+        trimB.box(x0 + 5.4, z1 - 0.35, x1 - 5.4, z1 + 0.2, 3.55, 5.4, gold);
+      }
       break;
     }
 

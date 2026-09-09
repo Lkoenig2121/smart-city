@@ -1,6 +1,7 @@
 import { TILE_H, TILE_W, diamondPoints, gridToScreen } from "@/lib/city/iso";
 import { hash2 } from "@/lib/city/rng";
 import type { Building } from "@/lib/city/types";
+import { lodgingUse } from "@/lib/city/lodging";
 import { paintGraffiti } from "./drawBridges";
 import { drawGroundShadow, drawIsoBox, drawSlopedRoof, drawWindowGrid } from "./drawIso";
 import { alpha, lit, mix, shade, type Lighting } from "./palette";
@@ -293,6 +294,7 @@ function drawSkyscraper(ctx: CanvasRenderingContext2D, b: Building, light: Light
     { inset: 0.3, height: baseH + b.floors * 3.4, cols: 4 },
   ]);
   drawMast(ctx, cap.Be, 26, light);
+  drawLodgingPlaque(ctx, b, cap.B, light);
 }
 
 function drawTower(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
@@ -329,6 +331,24 @@ function drawTower(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) 
       ctx.fill();
     }
   }
+  drawLodgingPlaque(ctx, b, cap.B, light);
+}
+
+function drawLodgingPlaque(
+  ctx: CanvasRenderingContext2D,
+  b: Building,
+  face: { x: number; y: number },
+  light: Lighting,
+) {
+  const use = lodgingUse(b);
+  if (!use) return;
+  const hotel = use === "hotel";
+  ctx.fillStyle = lit(hotel ? "#c9a44c" : "#8a5a3a", light, "right");
+  ctx.fillRect(face.x - 26, face.y - 36, 52, 12);
+  ctx.fillStyle = "#f4f1ea";
+  ctx.font = "bold 7px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(hotel ? "HOTEL" : "RESIDENCES", face.x, face.y - 27);
 }
 
 function drawHospital(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {

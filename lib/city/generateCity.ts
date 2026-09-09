@@ -1,4 +1,5 @@
 import { createBuilding, footprintFor } from "@/lib/simulation/buildings/buildings";
+import { markLodging } from "./lodging";
 import { citizenName } from "./names";
 import { mulberry32, pick, randInt, randRange } from "./rng";
 import type {
@@ -203,8 +204,16 @@ export function generateCity(seed = 20260903): CityState {
     [17, 13],
     [25, 13],
   ];
-  for (const [x, y] of supertall) place("tower", x, y);
-  for (const [x, y] of highrise) place("skyscraper", x, y);
+  for (const [x, y] of supertall) {
+    const building = place("tower", x, y);
+    if (building && x === 21 && y === 13) markLodging(building, "hotel");
+    if (building && x === 13 && y === 6) markLodging(building, "residences");
+  }
+  for (const [x, y] of highrise) {
+    const building = place("skyscraper", x, y);
+    if (building && x === 17 && y === 13) markLodging(building, "hotel");
+    if (building && x === 25 && y === 13) markLodging(building, "residences");
+  }
 
   fillRect(tiles, 14, 22, 25, 31, "park");
   fillRect(tiles, 16, 15, 22, 19, "plaza");
