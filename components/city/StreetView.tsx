@@ -14,6 +14,7 @@ import type { MoveMode } from "@/lib/street/controls";
 import { StreetWorld } from "@/lib/street/StreetWorld";
 import { StadiumWorld } from "@/lib/street/StadiumWorld";
 import { LodgingWorld } from "@/lib/street/LodgingWorld";
+import { attachPointerInput } from "@/lib/street/keys";
 import { formatClock } from "@/lib/simulation/city/cityTick";
 import { useEffect, useRef, useState } from "react";
 import { StreetMinimap } from "./StreetMinimap";
@@ -85,40 +86,23 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
 
-    const onPointerMove = (event: MouseEvent) => {
-      if (document.pointerLockElement !== canvas) return;
-      world.controls.look(event.movementX, event.movementY);
-    };
-    const onLockChange = () => {
-      const active = document.pointerLockElement === canvas;
-      setLocked(active);
-      if (!active) world.controls.clearKeys();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code === "Escape") return;
-      if (event.code.startsWith("Arrow") || event.code === "Space") event.preventDefault();
-      if (event.code === "KeyE") {
+    const detachInput = attachPointerInput(canvas, world.controls, {
+      setLocked,
+      consumeKey: (event) => {
+        if (event.code !== "KeyE") return false;
         event.preventDefault();
         if (atGateRef.current) {
           setInterior({ kind: "stadium" });
-          return;
+          return true;
         }
         const door = lodgingDoorRef.current;
         if (door) {
           setInterior({ kind: "lodging", buildingId: door.id, zone: "lobby" });
-          return;
+          return true;
         }
-      }
-      world.controls.keyDown(event.code);
-    };
-    const onKeyUp = (event: KeyboardEvent) => world.controls.keyUp(event.code);
-    const onBlur = () => world.controls.clearKeys();
-
-    document.addEventListener("mousemove", onPointerMove);
-    document.addEventListener("pointerlockchange", onLockChange);
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("blur", onBlur);
+        return false;
+      },
+    });
 
     let frame = 0;
     let last = performance.now();
@@ -147,11 +131,7 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
     return () => {
       cancelAnimationFrame(frame);
       ro.disconnect();
-      document.removeEventListener("mousemove", onPointerMove);
-      document.removeEventListener("pointerlockchange", onLockChange);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("blur", onBlur);
+      detachInput();
       if (document.pointerLockElement === canvas) document.exitPointerLock();
       world.dispose();
       worldRef.current = null;
@@ -187,33 +167,15 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
       if (stadium) setSpawn(stadiumGateTile(stadium));
       setInterior(null);
     };
-    const onPointerMove = (event: MouseEvent) => {
-      if (document.pointerLockElement !== canvas) return;
-      world.controls.look(event.movementX, event.movementY);
-    };
-    const onLockChange = () => {
-      const active = document.pointerLockElement === canvas;
-      setLocked(active);
-      if (!active) world.controls.clearKeys();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code === "Escape") return;
-      if (event.code.startsWith("Arrow") || event.code === "Space") event.preventDefault();
-      if (event.code === "KeyE") {
+    const detachInput = attachPointerInput(canvas, world.controls, {
+      setLocked,
+      consumeKey: (event) => {
+        if (event.code !== "KeyE") return false;
         event.preventDefault();
         leave();
-        return;
-      }
-      world.controls.keyDown(event.code);
-    };
-    const onKeyUp = (event: KeyboardEvent) => world.controls.keyUp(event.code);
-    const onBlur = () => world.controls.clearKeys();
-
-    document.addEventListener("mousemove", onPointerMove);
-    document.addEventListener("pointerlockchange", onLockChange);
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("blur", onBlur);
+        return true;
+      },
+    });
 
     let frame = 0;
     let last = performance.now();
@@ -235,11 +197,7 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
     return () => {
       cancelAnimationFrame(frame);
       ro.disconnect();
-      document.removeEventListener("mousemove", onPointerMove);
-      document.removeEventListener("pointerlockchange", onLockChange);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("blur", onBlur);
+      detachInput();
       if (document.pointerLockElement === canvas) document.exitPointerLock();
       world.dispose();
       stadiumRef.current = null;
@@ -278,37 +236,19 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
       setInterior(null);
       setAtDesk(false);
     };
-    const onPointerMove = (event: MouseEvent) => {
-      if (document.pointerLockElement !== canvas) return;
-      world.controls.look(event.movementX, event.movementY);
-    };
-    const onLockChange = () => {
-      const active = document.pointerLockElement === canvas;
-      setLocked(active);
-      if (!active) world.controls.clearKeys();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code === "Escape") return;
-      if (event.code.startsWith("Arrow") || event.code === "Space") event.preventDefault();
-      if (event.code === "KeyE") {
+    const detachInput = attachPointerInput(canvas, world.controls, {
+      setLocked,
+      consumeKey: (event) => {
+        if (event.code !== "KeyE") return false;
         event.preventDefault();
         if (interior.zone !== "lobby") {
           setInterior({ kind: "lodging", buildingId: building.id, zone: "lobby" });
-          return;
+          return true;
         }
         if (world.nearExit()) leaveStreet();
-        return;
-      }
-      world.controls.keyDown(event.code);
-    };
-    const onKeyUp = (event: KeyboardEvent) => world.controls.keyUp(event.code);
-    const onBlur = () => world.controls.clearKeys();
-
-    document.addEventListener("mousemove", onPointerMove);
-    document.addEventListener("pointerlockchange", onLockChange);
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("blur", onBlur);
+        return true;
+      },
+    });
 
     let frame = 0;
     let last = performance.now();
@@ -334,11 +274,7 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
     return () => {
       cancelAnimationFrame(frame);
       ro.disconnect();
-      document.removeEventListener("mousemove", onPointerMove);
-      document.removeEventListener("pointerlockchange", onLockChange);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("blur", onBlur);
+      detachInput();
       if (document.pointerLockElement === canvas) document.exitPointerLock();
       world.dispose();
       lodgingRef.current = null;
@@ -461,6 +397,7 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
                 <span className="font-medium text-white">S</span> hop ·{" "}
                 <span className="font-medium text-white">A</span>/
                 <span className="font-medium text-white">D</span> turn ·{" "}
+                <span className="font-medium text-white">Shift</span> run ·{" "}
                 <span className="font-medium text-white">Space</span> jump ·{" "}
                 <span className="font-medium text-white">Mouse</span> look
               </p>
@@ -483,6 +420,7 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
             <>
               <span className="font-semibold text-white">W</span>/
               <span className="font-semibold text-white">S</span> next intersection ·{" "}
+              <span className="font-semibold text-white">Shift</span> run ·{" "}
               <span className="font-semibold text-white">A</span>/
               <span className="font-semibold text-white">D</span> turn ·{" "}
               <span className="font-semibold text-white">Space</span> jump
@@ -490,6 +428,7 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
           ) : (
             <>
               <span className="font-semibold text-white">WASD</span> walk ·{" "}
+              <span className="font-semibold text-white">Shift</span> run ·{" "}
               <span className="font-semibold text-white">Space</span> jump ·{" "}
               <span className="font-semibold text-white">E</span>{" "}
               {inside ? "leave" : "enter"}

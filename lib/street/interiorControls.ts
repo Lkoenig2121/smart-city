@@ -1,11 +1,13 @@
 import * as THREE from "three";
 import type { Blocker } from "./buildCity";
+import { InputKeys } from "./keys";
 
 export const EYE_HEIGHT = 1.7;
 
 const WALK_SPEED = 8.4;
-const RUN_SPEED = 14;
+const RUN_SPEED = 22;
 const ACCEL = 70;
+const RUN_ACCEL = 160;
 const FRICTION = 10;
 const RADIUS = 0.42;
 const GRAVITY = 32;
@@ -23,7 +25,7 @@ export class InteriorControls {
   pitch = 0;
 
   private velocity = new THREE.Vector3();
-  private keys = new Set<string>();
+  private keys = new InputKeys();
   private grounded = true;
 
   constructor(
@@ -40,12 +42,12 @@ export class InteriorControls {
     this.grounded = true;
   }
 
-  keyDown(code: string) {
-    this.keys.add(code);
+  keyDown(event: KeyboardEvent) {
+    this.keys.down(event);
   }
 
-  keyUp(code: string) {
-    this.keys.delete(code);
+  keyUp(event: KeyboardEvent) {
+    this.keys.up(event);
   }
 
   clearKeys() {
@@ -58,7 +60,7 @@ export class InteriorControls {
   }
 
   private has(...codes: string[]) {
-    return codes.some((code) => this.keys.has(code));
+    return this.keys.has(...codes);
   }
 
   update(dt: number) {
@@ -69,7 +71,9 @@ export class InteriorControls {
     if (this.has("KeyD", "ArrowRight")) r += 1;
     if (this.has("KeyA", "ArrowLeft")) r -= 1;
 
-    const speed = this.has("ShiftLeft", "ShiftRight") ? RUN_SPEED : WALK_SPEED;
+    const running = this.keys.running;
+    const speed = running ? RUN_SPEED : WALK_SPEED;
+    const accel = running ? RUN_ACCEL : ACCEL;
     const sin = Math.sin(this.yaw);
     const cos = Math.cos(this.yaw);
 
@@ -77,8 +81,8 @@ export class InteriorControls {
       const len = Math.hypot(f, r);
       f /= len;
       r /= len;
-      this.velocity.x += (-sin * f + cos * r) * ACCEL * dt;
-      this.velocity.z += (-cos * f - sin * r) * ACCEL * dt;
+      this.velocity.x += (-sin * f + cos * r) * accel * dt;
+      this.velocity.z += (-cos * f - sin * r) * accel * dt;
     }
 
     const damp = Math.max(0, 1 - FRICTION * dt);

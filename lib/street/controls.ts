@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
 import { bridgeDeckHeight, TILE, type Blocker } from "./buildCity";
+import { InputKeys } from "./keys";
 
 export const EYE_HEIGHT = 1.7;
 
@@ -11,12 +12,15 @@ const HOP_SECONDS_PER_TILE = 0.16;
 const HOP_MIN_SECONDS = 0.26;
 /** Pause after landing before a held key triggers the next hop. */
 const HOP_REST = 0.07;
+/** How much faster hops travel while Shift is held. */
+const HOP_RUN_SCALE = 0.42;
 
 const TURN_SPEED = 2.1;
 
 const WALK_SPEED = 19.8;
-const RUN_SPEED = 42.75;
+const RUN_SPEED = 46;
 const ACCEL = 117;
+const RUN_ACCEL = 240;
 const FRICTION = 12;
 const RADIUS = 0.42;
 const GRAVITY = 32;
@@ -53,7 +57,7 @@ export class StreetControls {
   mode: MoveMode = "hop";
 
   private velocity = new THREE.Vector3();
-  private keys = new Set<string>();
+  private keys = new InputKeys();
   private hop: Hop | null = null;
   private rest = 0;
   private grounded = true;
@@ -128,12 +132,12 @@ export class StreetControls {
     this.grounded = true;
   }
 
-  keyDown(code: string) {
-    this.keys.add(code);
+  keyDown(event: KeyboardEvent) {
+    this.keys.down(event);
   }
 
-  keyUp(code: string) {
-    this.keys.delete(code);
+  keyUp(event: KeyboardEvent) {
+    this.keys.up(event);
   }
 
   clearKeys() {
@@ -149,7 +153,7 @@ export class StreetControls {
   }
 
   private has(...codes: string[]) {
-    return codes.some((code) => this.keys.has(code));
+    return this.keys.has(...codes);
   }
 
   update(dt: number) {
@@ -168,7 +172,7 @@ export class StreetControls {
     if (turn !== 0) this.yaw += turn * TURN_SPEED * dt;
 
     if (this.hop) {
-      this.hop.elapsed += dt;
+      this.hop.elapsed += dt * (this.keys.running ? 1 / HOP_RUN_SCALE : 1);
       const t = Math.min(1, this.hop.elapsed / this.hop.duration);
       // Smoothstep, so the move accelerates away and glides to a stop.
       const eased = t * t * (3 - 2 * t);
@@ -178,14 +182,17 @@ export class StreetControls {
       // rides the deck instead of cutting through it.
       if (t >= 1) {
         this.hop = null;
-        this.rest = HOP_REST;
+        this.rest = this.keys.running ? 0 : HOP_REST;
       }
       return;
     }
 
     if (this.rest > 0) {
-      this.rest -= dt;
-      return;
+      if (this.keys.running) this.rest = 0;
+      else {
+        this.rest -= dt;
+        return;
+      }
     }
 
     const forward = this.has("KeyW", "ArrowUp");
@@ -320,7 +327,9 @@ export class StreetControls {
     if (this.has("KeyD", "ArrowRight")) r += 1;
     if (this.has("KeyA", "ArrowLeft")) r -= 1;
 
-    const speed = this.has("ShiftLeft", "ShiftRight") ? RUN_SPEED : WALK_SPEED;
+    const running = this.keys.running;
+    const speed = running ? RUN_SPEED : WALK_SPEED;
+    const accel = running ? RUN_ACCEL : ACCEL;
     const sin = Math.sin(this.yaw);
     const cos = Math.cos(this.yaw);
 
@@ -331,8 +340,8 @@ export class StreetControls {
       // Forward is (-sin, -cos) and right is (cos, -sin) for this yaw.
       const wx = -sin * f + cos * r;
       const wz = -cos * f - sin * r;
-      this.velocity.x += wx * ACCEL * dt;
-      this.velocity.z += wz * ACCEL * dt;
+      this.velocity.x += wx * accel * dt;
+      this.velocity.z += wz * accel * dt;
     }
 
     // Damp toward rest and clamp to the current top speed.
