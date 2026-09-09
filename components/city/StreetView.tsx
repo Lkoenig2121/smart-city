@@ -318,30 +318,27 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
 
       {/* Click-to-look prompt */}
       {!locked && !failed ? (
-        <div className="pointer-events-none absolute inset-0 grid place-items-center">
-          <div className="rounded-2xl border border-white/15 bg-black/60 px-6 py-5 text-center backdrop-blur">
-            <p className="text-base font-semibold text-white">Click to look around</p>
+        <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
+          <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
+            <p className="text-xs font-semibold text-white">Click to look around</p>
             {mode === "hop" && !inside ? (
-              <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                <span className="font-medium text-white">W</span> /{" "}
-                <span className="font-medium text-white">S</span> jump to the next
-                intersection ·{" "}
-                <span className="font-medium text-white">A</span> /{" "}
-                <span className="font-medium text-white">D</span> to turn ·{" "}
-                <span className="font-medium text-white">Space</span> to jump ·{" "}
-                <span className="font-medium text-white">Mouse</span> to look
+              <p className="mt-0.5 text-[0.65rem] leading-snug text-slate-300">
+                <span className="font-medium text-white">W</span>/
+                <span className="font-medium text-white">S</span> hop ·{" "}
+                <span className="font-medium text-white">A</span>/
+                <span className="font-medium text-white">D</span> turn ·{" "}
+                <span className="font-medium text-white">Space</span> jump ·{" "}
+                <span className="font-medium text-white">Mouse</span> look
               </p>
             ) : (
-              <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                <span className="font-medium text-white">W A S D</span> or arrows to walk ·{" "}
-                <span className="font-medium text-white">Space</span> to jump ·{" "}
-                <span className="font-medium text-white">Shift</span> to run ·{" "}
-                <span className="font-medium text-white">Mouse</span> to look
+              <p className="mt-0.5 text-[0.65rem] leading-snug text-slate-300">
+                <span className="font-medium text-white">WASD</span> walk ·{" "}
+                <span className="font-medium text-white">Space</span> jump ·{" "}
+                <span className="font-medium text-white">Shift</span> run ·{" "}
+                <span className="font-medium text-white">Mouse</span> look
               </p>
             )}
-            <p className="mt-1.5 text-xs text-slate-400">
-              Press Escape to release the cursor.
-            </p>
+            <p className="mt-0.5 text-[0.6rem] text-slate-400">Esc releases the cursor</p>
           </div>
         </div>
       ) : null}
