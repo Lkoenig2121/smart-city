@@ -238,6 +238,12 @@ export function generateCity(seed = 20260903): CityState {
 
   connectRoads(tiles);
 
+  // Southeast landmark: the Ravens' park sits on a clear plot with parking
+  // between it and the arterial, so Street View can walk up to the gate.
+  place("baseball_stadium", 35, 35);
+  fillRect(tiles, 32, 32, 39, 34, "lot");
+  fillRect(tiles, 32, 35, 34, 39, "lot");
+
   for (let y = 6; y <= 18; y++) {
     for (let x = 13; x <= 26; x++) {
       const tile = tiles[y][x];
@@ -263,7 +269,7 @@ export function generateCity(seed = 20260903): CityState {
     for (let x = 0; x < SIZE; x++) {
       const tile = tiles[y][x];
       if (tile.road || tile.buildingId || tile.terrain === "water") continue;
-      if (tile.terrain === "park" || tile.terrain === "playground" || tile.terrain === "plaza") {
+      if (tile.terrain === "park" || tile.terrain === "playground" || tile.terrain === "plaza" || tile.terrain === "lot") {
         continue;
       }
 
@@ -320,6 +326,7 @@ export function generateCity(seed = 20260903): CityState {
       "police",
       "fire",
       "city_hall",
+      "baseball_stadium",
     ].includes(b.kind),
   );
 
@@ -348,6 +355,12 @@ export function generateCity(seed = 20260903): CityState {
     });
   }
 
+  if ([...buildings.values()].some((b) => b.kind === "baseball_stadium")) {
+    for (const citizen of citizens) {
+      citizen.happiness = Math.min(100, citizen.happiness + 12);
+    }
+  }
+
   const population = [...buildings.values()].reduce((sum, b) => sum + b.stats.residents, 0);
 
   const vehicles: Vehicle[] = [];
@@ -362,7 +375,7 @@ export function generateCity(seed = 20260903): CityState {
     "#ecf0f1",
   ];
   const kinds: VehicleKind[] = ["car", "car", "car", "car", "taxi", "bus", "truck"];
-  for (let i = 0; i < 38; i++) {
+  for (let i = 0; i < 48; i++) {
     vehicles.push({
       id: `v${i}`,
       kind: i === 0 ? "ambulance" : i === 1 ? "firetruck" : pick(rand, kinds),

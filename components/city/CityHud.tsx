@@ -8,7 +8,9 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: "apartment", label: "Flats", hint: "Place apartments" },
   { id: "shop", label: "Shops", hint: "Place a business" },
   { id: "office", label: "Offices", hint: "Place an office" },
+  { id: "stadium", label: "Stadium", hint: "Ravens Ballpark · $750K · 5,000 people, road, parking" },
   { id: "park", label: "Parks", hint: "Grow a park tile" },
+  { id: "parking", label: "Parking", hint: "Paint a parking lot" },
   { id: "tree", label: "Trees", hint: "Plant a tree" },
   { id: "bulldoze", label: "Clear", hint: "Remove a tile" },
 ];
@@ -132,29 +134,37 @@ export function CityHud({
           <div className="grid grid-cols-2 gap-2 text-sm">
             <Info
               label={
-                selected.stats.capacity && selected.kind !== "shop"
-                  ? "People"
-                  : "Staff"
+                selected.kind === "baseball_stadium"
+                  ? "Staff"
+                  : selected.stats.capacity && selected.kind !== "shop"
+                    ? "People"
+                    : "Staff"
               }
               value={
                 selected.kind === "house" || selected.kind === "apartment"
                   ? `${selected.stats.residents}/${selected.stats.capacity}`
-                  : `${selected.stats.employees}`
+                  : selected.kind === "baseball_stadium"
+                    ? `${selected.stats.employees}/${selected.stats.jobs}`
+                    : `${selected.stats.employees}`
               }
             />
             <Info label="Happiness" value={`${selected.stats.happiness}%`} />
             <Info
-              label={selected.stats.revenue ? "Revenue" : "Value"}
-              value={formatMoney(
-                selected.stats.revenue || selected.stats.propertyValue,
-              )}
+              label={selected.kind === "baseball_stadium" ? "Daily gate" : selected.stats.revenue ? "Revenue" : "Value"}
+              value={
+                selected.kind === "baseball_stadium"
+                  ? `${formatMoney(selected.stats.revenue)}/day`
+                  : formatMoney(selected.stats.revenue || selected.stats.propertyValue)
+              }
             />
             <Info
               label="Status"
               value={
-                selected.stats.status === "open"
-                  ? "Open"
-                  : selected.stats.status
+                selected.constructionLeft && selected.constructionLeft > 0
+                  ? `Building ${Math.ceil(selected.constructionLeft)}s`
+                  : selected.stats.status === "open"
+                    ? "Open"
+                    : selected.stats.status
               }
             />
           </div>

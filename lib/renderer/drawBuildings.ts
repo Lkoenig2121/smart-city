@@ -57,6 +57,9 @@ export function drawBuilding(
     case "park_pavilion":
       drawPavilion(ctx, building, light);
       break;
+    case "baseball_stadium":
+      drawStadium(ctx, building, light);
+      break;
   }
 
   if (selected) {
@@ -403,6 +406,211 @@ function drawPavilion(ctx: CanvasRenderingContext2D, b: Building, light: Lightin
     14,
   );
   drawSlopedRoof(ctx, box, lit(shade(b.roofColor, 0.75), light, "left"), lit(b.roofColor, light, "right"));
+}
+
+type IsoPt = { x: number; y: number };
+
+function quadPt(Te: IsoPt, Re: IsoPt, Be: IsoPt, Le: IsoPt, u: number, v: number): IsoPt {
+  const ax = Te.x + (Re.x - Te.x) * u;
+  const ay = Te.y + (Re.y - Te.y) * u;
+  const bx = Le.x + (Be.x - Le.x) * u;
+  const by = Le.y + (Be.y - Le.y) * u;
+  return { x: ax + (bx - ax) * v, y: ay + (by - ay) * v };
+}
+
+function fillPoly(ctx: CanvasRenderingContext2D, pts: IsoPt[], fill: string) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+}
+
+function drawStadium(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
+  const building = b.constructionLeft && b.constructionLeft > 0;
+  const brick = building ? "#9a8f7a" : "#8a5340";
+
+  const facade = drawIsoBox(
+    ctx,
+    b.origin.x,
+    b.origin.y,
+    b.width,
+    b.depth,
+    28,
+    lit(shade(brick, 0.68), light, "left"),
+    lit(brick, light, "right"),
+    lit("#3d2a22", light, "top"),
+    6,
+  );
+
+  const bowl = drawIsoBox(
+    ctx,
+    b.origin.x + 0.18,
+    b.origin.y + 0.14,
+    b.width - 0.36,
+    b.depth - 0.28,
+    34,
+    lit("#1e4a2c", light, "left"),
+    lit("#2a5d38", light, "right"),
+    lit("#1f4d2e", light, "top"),
+    8,
+  );
+
+  const { Te, Re, Be, Le } = bowl;
+  const p = (u: number, v: number) => quadPt(Te, Re, Be, Le, u, v);
+
+  // Jewel-box seating is the forest-green top; the field is a fan cut out of it.
+  const field = [
+    p(0.5, 0.86),
+    p(0.78, 0.62),
+    p(0.9, 0.36),
+    p(0.84, 0.16),
+    p(0.66, 0.08),
+    p(0.5, 0.06),
+    p(0.34, 0.08),
+    p(0.16, 0.16),
+    p(0.1, 0.36),
+    p(0.22, 0.62),
+  ];
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(field[0].x, field[0].y);
+  for (const pt of field.slice(1)) ctx.lineTo(pt.x, pt.y);
+  ctx.closePath();
+  ctx.clip();
+
+  const grassA = lit("#3aa14a", light, "ground");
+  const grassB = lit("#2d7d3a", light, "ground");
+  for (let i = 0; i < 11; i++) {
+    const u0 = i / 11;
+    const u1 = (i + 1) / 11;
+    fillPoly(ctx, [p(u0, 0.02), p(u1, 0.02), p(u1, 0.9), p(u0, 0.9)], i % 2 === 0 ? grassA : grassB);
+  }
+
+  const dirt = lit("#c45a32", light, "ground");
+  ctx.beginPath();
+  ctx.moveTo(field[0].x, field[0].y);
+  for (const pt of field.slice(1)) ctx.lineTo(pt.x, pt.y);
+  ctx.closePath();
+  ctx.strokeStyle = dirt;
+  ctx.lineWidth = 5;
+  ctx.stroke();
+  const dirtLite = lit("#d47a48", light, "top");
+  fillPoly(
+    ctx,
+    [p(0.5, 0.78), p(0.7, 0.56), p(0.5, 0.36), p(0.3, 0.56)],
+    dirt,
+  );
+  fillPoly(
+    ctx,
+    [p(0.5, 0.7), p(0.62, 0.56), p(0.5, 0.44), p(0.38, 0.56)],
+    lit("#348a40", light, "ground"),
+  );
+
+  ctx.strokeStyle = dirt;
+  ctx.lineWidth = 3.4;
+  ctx.beginPath();
+  ctx.moveTo(p(0.5, 0.7).x, p(0.5, 0.7).y);
+  ctx.lineTo(p(0.62, 0.56).x, p(0.62, 0.56).y);
+  ctx.lineTo(p(0.5, 0.44).x, p(0.5, 0.44).y);
+  ctx.lineTo(p(0.38, 0.56).x, p(0.38, 0.56).y);
+  ctx.closePath();
+  ctx.stroke();
+
+  const home = p(0.5, 0.78);
+  ctx.beginPath();
+  ctx.ellipse(home.x, home.y, 7, 3.6, 0, 0, Math.PI * 2);
+  ctx.fillStyle = dirt;
+  ctx.fill();
+
+  const mound = p(0.5, 0.56);
+  ctx.beginPath();
+  ctx.ellipse(mound.x, mound.y, 4.2, 2.2, 0, 0, Math.PI * 2);
+  ctx.fillStyle = dirtLite;
+  ctx.fill();
+
+  ctx.fillStyle = lit("#f4f1ea", light, "top");
+  for (const base of [p(0.5, 0.78), p(0.7, 0.56), p(0.5, 0.36), p(0.3, 0.56)]) {
+    ctx.fillRect(base.x - 2, base.y - 1.3, 4, 2.5);
+  }
+
+  ctx.strokeStyle = lit("#f2eee6", light, "top");
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(home.x, home.y);
+  ctx.lineTo(p(0.86, 0.2).x, p(0.86, 0.2).y);
+  ctx.moveTo(home.x, home.y);
+  ctx.lineTo(p(0.14, 0.2).x, p(0.14, 0.2).y);
+  ctx.stroke();
+
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.moveTo(field[0].x, field[0].y);
+  for (const pt of field.slice(1)) ctx.lineTo(pt.x, pt.y);
+  ctx.closePath();
+  ctx.strokeStyle = lit("#6a3a28", light, "ground");
+  ctx.lineWidth = 2.4;
+  ctx.stroke();
+  ctx.strokeStyle = lit("#1a3f24", light, "top");
+  ctx.lineWidth = 3.6;
+  ctx.stroke();
+
+  const roofBand = [
+    [p(0.04, 0.88), p(0.96, 0.88), p(0.92, 0.99), p(0.08, 0.99)],
+    [p(0.02, 0.32), p(0.12, 0.36), p(0.12, 0.88), p(0.02, 0.92)],
+    [p(0.98, 0.32), p(0.98, 0.92), p(0.88, 0.88), p(0.88, 0.36)],
+  ];
+  for (const band of roofBand) {
+    fillPoly(ctx, band, lit("#2a2d2c", light, "top"));
+  }
+
+  const cf = p(0.5, 0.07);
+  ctx.fillStyle = lit("#14301c", light, "right");
+  ctx.fillRect(cf.x - 12, cf.y - 24, 24, 18);
+  ctx.fillStyle = lit("#c0392b", light, "top");
+  ctx.fillRect(cf.x - 12, cf.y - 24, 24, 3);
+  ctx.fillStyle = lit("#1a1a1a", light, "top");
+  ctx.beginPath();
+  ctx.arc(cf.x, cf.y - 24, 3.2, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = "#e8c36a";
+  ctx.font = "bold 6px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("RAVENS", cf.x, cf.y - 13);
+
+  const towers: IsoPt[] = [p(0.1, 0.9), p(0.9, 0.9), p(0.06, 0.52), p(0.94, 0.52)];
+  for (const tower of towers) {
+    ctx.strokeStyle = lit("#e8eef2", light, "right");
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(tower.x, tower.y + 4);
+    ctx.lineTo(tower.x, tower.y - 22);
+    ctx.moveTo(tower.x - 5, tower.y - 6);
+    ctx.lineTo(tower.x, tower.y - 22);
+    ctx.lineTo(tower.x + 5, tower.y - 6);
+    ctx.moveTo(tower.x - 4, tower.y - 12);
+    ctx.lineTo(tower.x + 4, tower.y - 12);
+    ctx.stroke();
+    ctx.fillStyle = light.phase === "night" ? "#ffe08a" : lit("#f7f4ea", light, "top");
+    ctx.fillRect(tower.x - 6, tower.y - 26, 12, 5);
+  }
+
+  ctx.fillStyle = lit("#c0392b", light, "right");
+  ctx.fillRect(facade.B.x - 22, facade.B.y - 32, 44, 12);
+  ctx.fillStyle = "#f4f7fb";
+  ctx.font = "bold 8px sans-serif";
+  ctx.fillText("RAVENS", facade.B.x, facade.B.y - 23);
+
+  if (building) {
+    ctx.fillStyle = alpha("#c9a227", 0.85);
+    ctx.fillRect(bowl.Be.x - 22, bowl.Be.y - 8, 44, 11);
+    ctx.fillStyle = "#1a1206";
+    ctx.font = "bold 8px sans-serif";
+    ctx.fillText("UNDER CONSTRUCTION", bowl.Be.x, bowl.Be.y);
+  }
 }
 
 function roofProps(ctx: CanvasRenderingContext2D, box: ReturnType<typeof drawIsoBox>, light: Lighting) {

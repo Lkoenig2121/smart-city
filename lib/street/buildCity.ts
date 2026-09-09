@@ -41,6 +41,7 @@ const STYLE_OF: Record<BuildingKind, FacadeStyle> = {
   fire: "brick",
   city_hall: "civic",
   park_pavilion: "residential",
+  baseball_stadium: "civic",
 };
 
 /** Axis-aligned box a walker cannot pass through. */
@@ -352,8 +353,8 @@ function addBuilding(
   const x1 = (building.origin.x + building.width) * TILE - WALL_INSET;
   const z1 = (building.origin.y + building.depth) * TILE - WALL_INSET;
 
-  // An open pavilion can be walked through; everything else is solid.
-  if (building.kind !== "park_pavilion") {
+  // An open pavilion can be walked through; the stadium is a ring with a gate.
+  if (building.kind !== "park_pavilion" && building.kind !== "baseball_stadium") {
     blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1 });
   }
 
@@ -476,7 +477,73 @@ function addBuilding(
       roofB.gable(x0 - 0.5, z0 - 0.5, x1 + 0.5, z1 + 0.5, 3, 1.6, roof, "x");
       break;
     }
+
+    case "baseball_stadium": {
+      addStadiumMesh(building, walls, roofB, trimB, blockers, wall, roof, accent);
+      break;
+    }
   }
+}
+
+function addStadiumMesh(
+  building: Building,
+  walls: MeshBuilder,
+  roofB: MeshBuilder,
+  trimB: MeshBuilder,
+  blockers: Blocker[],
+  wall: THREE.Color,
+  grass: THREE.Color,
+  accent: THREE.Color,
+) {
+  const x0 = building.origin.x * TILE + 0.35;
+  const z0 = building.origin.y * TILE + 0.35;
+  const x1 = (building.origin.x + building.width) * TILE - 0.35;
+  const z1 = (building.origin.y + building.depth) * TILE - 0.35;
+  const h = 13;
+  const mx = (x0 + x1) / 2;
+  const mz = (z0 + z1) / 2;
+  const navy = new THREE.Color("#1f4d8c");
+  const dirt = new THREE.Color("#c4a56a");
+  const steel = new THREE.Color("#d5dde4");
+  const lamp = new THREE.Color("#fff3c4");
+
+  blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1 });
+
+  // Outer bowl.
+  walls.walls(x0, z0, x1, z1, 0, h, wall, BAY_W, 3.2);
+  // Recessed north gate so the entrance reads from the arterial.
+  trimB.box(mx - 5.2, z0 - 0.35, mx + 5.2, z0 + 1.1, 0, 5.4, accent);
+  trimB.box(mx - 5.4, z0 - 0.2, mx + 5.4, z0 + 1.2, 5.2, 7.1, navy);
+  // Ravens fascia.
+  trimB.box(mx - 6.5, z0 - 0.45, mx + 6.5, z0 + 0.15, 7.2, 9.4, navy);
+
+  // Seating terraces stepping down to the field.
+  for (let i = 0; i < 5; i++) {
+    const inset = 2.4 + i * 1.55;
+    const y = 2 + i * 1.45;
+    roofB.box(x0 + inset, z0 + inset, x1 - inset, z0 + inset + 1.35, y, y + 1.2, navy);
+    roofB.box(x0 + inset, z1 - inset - 1.35, x1 - inset, z1 - inset, y, y + 1.2, navy);
+    roofB.box(x0 + inset, z0 + inset, x0 + inset + 1.35, z1 - inset, y, y + 1.2, navy);
+    roofB.box(x1 - inset - 1.35, z0 + inset, x1 - inset, z1 - inset, y, y + 1.2, navy);
+  }
+
+  roofB.ground(x0 + 10, z0 + 9, x1 - 10, z1 - 9, 0.05, grass);
+  roofB.ground(mx - 6, mz - 2, mx + 6, mz + 8, 0.07, dirt);
+
+  // Light towers at the four corners.
+  for (const [lx, lz] of [
+    [x0 + 2.2, z0 + 2.2],
+    [x1 - 2.2, z0 + 2.2],
+    [x0 + 2.2, z1 - 2.2],
+    [x1 - 2.2, z1 - 2.2],
+  ]) {
+    trimB.box(lx - 0.22, lz - 0.22, lx + 0.22, lz + 0.22, 0, 24, steel);
+    trimB.box(lx - 1.2, lz - 0.45, lx + 1.2, lz + 0.45, 22.4, 23.6, lamp);
+  }
+
+  // Scoreboard above the south stands.
+  trimB.box(mx - 6, z1 - 2.8, mx + 6, z1 - 1.5, 8, 14.5, new THREE.Color("#161b21"));
+  trimB.box(mx - 0.3, z1 - 2.2, mx + 0.3, z1 - 1.9, 14.5, 16.2, accent);
 }
 
 function addBridge(

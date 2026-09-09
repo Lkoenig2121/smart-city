@@ -172,11 +172,13 @@ export function CityCanvas() {
           selected: engine.selectedId
             ? (engine.state.buildings.get(engine.selectedId) ?? null)
             : null,
-          hoverLabel: hover
-            ? hover.name
-            : engine.hover
-              ? `Tile ${engine.hover.x}, ${engine.hover.y}`
-              : "",
+          hoverLabel: engine.placementHint
+            ? engine.placementHint
+            : hover
+              ? hover.name
+              : engine.hover
+                ? `Tile ${engine.hover.x}, ${engine.hover.y}`
+                : "",
         });
       }
       frame = requestAnimationFrame(loop);

@@ -1,5 +1,10 @@
 import { BRIDGE_DECK } from "@/lib/city/generateCity";
 import { createBuilding, footprintFor } from "@/lib/simulation/buildings/buildings";
+import {
+  STADIUM_BUILD_SECONDS,
+  STADIUM_COST,
+  stadiumPlacementError,
+} from "@/lib/city/stadium";
 import type { BuildingKind, CityState, Tool } from "@/lib/city/types";
 import { createInitialCity, getBuildingAt, recountPopulation } from "./cityState";
 import { tickCity } from "./cityTick";
@@ -9,6 +14,8 @@ export class CityEngine {
   tool: Tool = "inspect";
   selectedId: string | null = null;
   hover: { x: number; y: number } | null = null;
+  /** Last reason a tool click did nothing, shown in the HUD. */
+  placementHint = "";
   private seed: number;
 
   constructor(seed = 20260903) {
@@ -31,6 +38,7 @@ export class CityEngine {
   }
 
   applyTool(x: number, y: number) {
+    this.placementHint = "";
     const tile = this.state.tiles[y]?.[x];
     if (!tile) return false;
 
@@ -92,8 +100,22 @@ export class CityEngine {
       return true;
     }
 
+    if (this.tool === "parking") {
+      if (tile.road || tile.buildingId || tile.terrain === "water") return false;
+      tile.terrain = "lot";
+      tile.tree = null;
+      return true;
+    }
+
     const kind = toolToKind(this.tool);
     if (!kind) return false;
+    if (kind === "baseball_stadium") {
+      const error = stadiumPlacementError(this.state, x, y);
+      if (error) {
+        this.placementHint = error;
+        return false;
+      }
+    }
     return this.placeBuilding(kind, x, y);
   }
 
@@ -117,6 +139,11 @@ export class CityEngine {
     }
     recountPopulation(this.state);
     this.selectedId = id;
+    if (kind === "baseball_stadium") {
+      this.state.budget.treasury -= STADIUM_COST;
+      building.constructionLeft = STADIUM_BUILD_SECONDS;
+      building.stats.status = "closed";
+    }
     return true;
   }
 
@@ -171,6 +198,8 @@ function toolToKind(tool: Tool): BuildingKind | null {
       return "shop";
     case "office":
       return "office";
+    case "stadium":
+      return "baseball_stadium";
     default:
       return null;
   }

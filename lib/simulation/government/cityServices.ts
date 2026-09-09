@@ -6,4 +6,5 @@ export const SERVICE_KINDS: BuildingKind[] = [
   "hospital",
   "school",
   "park_pavilion",
+  "baseball_stadium",
 ];

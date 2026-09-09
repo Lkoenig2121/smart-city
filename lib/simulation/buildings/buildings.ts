@@ -35,6 +35,8 @@ export function footprintFor(kind: BuildingKind): { w: number; d: number } {
       return { w: 2, d: 1 };
     case "park_pavilion":
       return { w: 1, d: 1 };
+    case "baseball_stadium":
+      return { w: 5, d: 4 };
     default:
       return { w: 1, d: 1 };
   }
@@ -179,6 +181,25 @@ export function defaultStats(kind: BuildingKind, rand: () => number): BuildingSt
         propertyValue: 420000,
         status: "open",
       };
+    case "baseball_stadium":
+      return {
+        residents: 0,
+        capacity: 12_000,
+        employees: 180,
+        jobs: 220,
+        revenue: 15_000,
+        happiness: 96,
+        propertyValue: 750_000,
+        status: "open",
+        extra: {
+          team: "Riverside Ravens",
+          seats: "12,000",
+          tourism: "Regional draw",
+          traffic: "Game-day surge",
+          "daily gate": "$15,000",
+          "city happiness": "+1,000",
+        },
+      };
   }
 }
 
@@ -269,6 +290,12 @@ export function createBuilding(
       accentColor = "#3f5d4c";
       floors = 1;
       break;
+    case "baseball_stadium":
+      wallColor = "#8a5340";
+      roofColor = "#2c5a34";
+      accentColor = "#1e3f28";
+      floors = 3;
+      break;
   }
 
   return {
@@ -313,6 +340,8 @@ export function kindLabel(kind: BuildingKind) {
       return "Government";
     case "park_pavilion":
       return "Park";
+    case "baseball_stadium":
+      return "Baseball Stadium";
   }
 }
 

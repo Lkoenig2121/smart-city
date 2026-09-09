@@ -96,6 +96,12 @@ export class StreetControls {
     return Math.sin(t * Math.PI);
   }
 
+  /** Start and end of the current hop, if one is in flight. */
+  get hopEnds() {
+    if (!this.hop) return null;
+    return { from: this.hop.from, to: this.hop.to };
+  }
+
   get moving() {
     if (this.mode === "hop") return this.hop !== null;
     return Math.hypot(this.velocity.x, this.velocity.z) > 0.2;

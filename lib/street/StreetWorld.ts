@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
+import { findStadium, stadiumIsOpen } from "@/lib/city/stadium";
 import { lightingFor, type Lighting } from "@/lib/renderer/palette";
 import { AgentLayer } from "./agents";
 import { buildCity, TILE, type CityMeshes } from "./buildCity";
@@ -101,6 +102,38 @@ export class StreetWorld {
       else if (tile.road.west) yaw = Math.PI / 2;
     }
     this.controls.spawnAt(spot.x, spot.y, yaw);
+  }
+
+  /** True when the walker is close enough to step into the ballpark. */
+  nearStadiumGate() {
+    const stadium = findStadium(this.state);
+    if (!stadium || !stadiumIsOpen(stadium)) return false;
+    const range = TILE * 3.5;
+    if (this.distanceToStadium(stadium, this.controls.position.x, this.controls.position.z) < range) {
+      return true;
+    }
+    // Hop landings are junctions; keep the prompt up for a hop that starts
+    // or ends beside the park so E can be pressed mid-move.
+    const hop = this.controls.hopEnds;
+    if (!hop) return false;
+    return (
+      this.distanceToStadium(stadium, hop.from.x, hop.from.z) < range ||
+      this.distanceToStadium(stadium, hop.to.x, hop.to.z) < range
+    );
+  }
+
+  private distanceToStadium(
+    stadium: NonNullable<ReturnType<typeof findStadium>>,
+    x: number,
+    z: number,
+  ) {
+    const minX = stadium.origin.x * TILE;
+    const maxX = (stadium.origin.x + stadium.width) * TILE;
+    const minZ = stadium.origin.y * TILE;
+    const maxZ = (stadium.origin.y + stadium.depth) * TILE;
+    const dx = x < minX ? minX - x : x > maxX ? x - maxX : 0;
+    const dz = z < minZ ? minZ - z : z > maxZ ? z - maxZ : 0;
+    return Math.hypot(dx, dz);
   }
 
   private nearestJunction(tileX: number, tileY: number) {

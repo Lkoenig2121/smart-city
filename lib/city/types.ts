@@ -19,7 +19,8 @@ export type BuildingKind =
   | "police"
   | "fire"
   | "city_hall"
-  | "park_pavilion";
+  | "park_pavilion"
+  | "baseball_stadium";
 
 export type VehicleKind = "car" | "bus" | "truck" | "taxi" | "ambulance" | "firetruck";
 
@@ -31,7 +32,9 @@ export type Tool =
   | "shop"
   | "office"
   | "park"
+  | "parking"
   | "tree"
+  | "stadium"
   | "bulldoze";
 
 export interface Vec2 {
@@ -106,6 +109,8 @@ export interface Building {
   accentColor: string;
   roofColor: string;
   stats: BuildingStats;
+  /** Seconds remaining before the building opens. Zero means finished. */
+  constructionLeft?: number;
 }
 
 export interface Citizen {
@@ -125,7 +130,7 @@ export interface Citizen {
   pathIndex: number;
   speed: number;
   color: string;
-  activity: "home" | "commute" | "work" | "shop" | "park" | "sleep";
+  activity: "home" | "commute" | "work" | "shop" | "park" | "game" | "sleep";
 }
 
 export interface Vehicle {

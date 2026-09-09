@@ -1,5 +1,6 @@
 import { mulberry32 } from "@/lib/city/rng";
 import type { CityState } from "@/lib/city/types";
+import { STADIUM_DAILY_REVENUE, stadiumIsOpen } from "@/lib/city/stadium";
 import { randomParkWander, stepCitizens, syncCitizenSchedules } from "../citizens/citizenBehavior";
 import { seedVehicle, stepVehicles } from "../traffic/vehicleMovement";
 
@@ -35,6 +36,20 @@ export function tickCity(state: CityState, dtSeconds: number, seeded = true) {
   if (state.clock.minuteOfDay >= 24 * 60) {
     state.clock.minuteOfDay -= 24 * 60;
     state.clock.dayIndex = (state.clock.dayIndex + 1) % 7;
+    for (const building of state.buildings.values()) {
+      if (stadiumIsOpen(building)) state.budget.treasury += STADIUM_DAILY_REVENUE;
+    }
+  }
+
+  for (const building of state.buildings.values()) {
+    if (!building.constructionLeft || building.constructionLeft <= 0) continue;
+    building.constructionLeft = Math.max(0, building.constructionLeft - dtSeconds);
+    if (building.constructionLeft === 0) {
+      building.stats.status = "open";
+      for (const citizen of state.citizens) {
+        citizen.happiness = Math.min(100, citizen.happiness + 12);
+      }
+    }
   }
 
   if (state.vehicles.some((v) => v.path.length === 0)) {

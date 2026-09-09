@@ -32,7 +32,10 @@ export function syncCitizenSchedules(state: CityState) {
     if (hour >= 22 || hour < 6) next = "sleep";
     else if (!weekend && hour >= 8 && hour < 17) next = "work";
     else if (hour >= 17 && hour < 19) next = "shop";
-    else if (hour >= 19 && hour < 21) next = "park";
+    else if (hour >= 18 && hour < 22) {
+      const stadium = [...state.buildings.values()].find((b) => b.kind === "baseball_stadium");
+      next = stadium && !(stadium.constructionLeft && stadium.constructionLeft > 0) ? "game" : "park";
+    }
     else next = "home";
 
     if (next === citizen.activity && citizen.path.length) continue;
@@ -47,6 +50,9 @@ export function syncCitizenSchedules(state: CityState) {
       setPath(state, citizen, shop ? buildingDoor(state, shop.id) : null);
     } else if (next === "park") {
       setPath(state, citizen, nearestRoad(state, 20, 26));
+    } else if (next === "game") {
+      const stadium = [...state.buildings.values()].find((b) => b.kind === "baseball_stadium");
+      setPath(state, citizen, stadium ? buildingDoor(state, stadium.id) : nearestRoad(state, 20, 26));
     }
   }
 }
