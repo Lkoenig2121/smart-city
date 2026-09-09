@@ -3,7 +3,7 @@ import type { CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
 import { isGameNight } from "@/lib/city/stadium";
 import { InteriorControls } from "./interiorControls";
-import { buildStadiumInterior, type StadiumInterior } from "./stadiumInterior";
+import { buildStadiumInterior, STADIUM_FAN_WALK_START, type StadiumInterior } from "./stadiumInterior";
 
 /**
  * First-person walk through Ravens Ballpark. Lighting and the scoreboard
@@ -62,12 +62,15 @@ export class StadiumWorld {
     this.scene.add(this.sun);
     this.hemi.intensity = 1.25;
     this.scene.add(this.hemi);
-    this.fill.position.set(0, 6, 30);
+    this.fill.position.set(0, 6, 36);
     this.fill.intensity = 24;
     this.scene.add(this.fill);
     const bowlLight = new THREE.PointLight(0xfff0d2, 32, 55, 1.4);
     bowlLight.position.set(0, 12, 8);
     this.scene.add(bowlLight);
+    const underLight = new THREE.PointLight(0xffd9a0, 28, 22, 1.8);
+    underLight.position.set(0, 2.2, 23.5);
+    this.scene.add(underLight);
     this.scene.background = new THREE.Color("#7eb3e0");
     this.scene.fog = new THREE.Fog(0x7eb3e0, 70, 180);
 
@@ -155,12 +158,12 @@ export class StadiumWorld {
     const scale = new THREE.Vector3(1, 1, 1);
     const walking = 24;
     for (let i = 0; i < walking; i++) {
-      const id = 36 + i;
+      const id = STADIUM_FAN_WALK_START + i;
       mesh.getMatrixAt(id, matrix);
       matrix.decompose(pos, quat, scale);
       const t = this.time * 0.55 + i * 1.15;
       pos.x = -16 + ((t * 5.5 + i * 3.2) % 32);
-      pos.z = 32.8 + Math.sin(t * 1.3 + i) * 0.7;
+      pos.z = 41.6 + Math.sin(t * 1.3 + i) * 0.7;
       pos.y = 0.97;
       quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
       matrix.compose(pos, quat, scale);

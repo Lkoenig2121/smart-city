@@ -20,12 +20,22 @@ const SEAT_Z0 = 16.5;
 const SEAT_THICK = 0.4;
 const AISLE_HALF = 1.15;
 const AISLES = [0, -13.35, 13.35];
-const STAIR_STEPS = 16;
-const STAIR_Z1 = 31.1;
+const STAND_CLEAR = 2.88;
+const STAIR_STEPS = 20;
+const STAIR_Z1 = 38.2;
 const STAIR_Z0 = SEAT_Z0 + (SEAT_ROWS - 1) * ROW_RUN + 0.55;
+const FIELD_STAIR_Z0 = SEAT_Z0 - 4.4;
+const FIELD_HALF = 18;
+const FIELD_Z_FAR = -19;
+const CF_GAP = 7.2;
+const SEATED_FANS = 52;
+const WALKING_FANS = 24;
+const PLAYER_FANS = 4;
+
+export const STADIUM_FAN_WALK_START = SEATED_FANS;
 
 function rowWalkY(row: number) {
-  return SEAT_THICK + row * ROW_RISE;
+  return STAND_CLEAR + SEAT_THICK + row * ROW_RISE;
 }
 
 function topSeatY() {
@@ -41,7 +51,7 @@ function seatRowAtZ(z: number) {
   return Math.max(0, Math.min(SEAT_ROWS - 1, Math.floor(t + 0.001)));
 }
 
-/** Walkable height: concourse, stairs, then the rake of the home-plate seats. */
+/** Walkable height: concourse, stairs onto the deck, then the rake of the seats. */
 export function stadiumGroundAt(x: number, z: number) {
   const top = topSeatY();
   if (inAisle(x) && z >= STAIR_Z0 && z <= STAIR_Z1) {
@@ -49,8 +59,14 @@ export function stadiumGroundAt(x: number, z: number) {
     const step = Math.min(STAIR_STEPS, Math.max(1, Math.ceil(t * STAIR_STEPS)));
     return (top * step) / STAIR_STEPS;
   }
+  if (inAisle(x) && z >= FIELD_STAIR_Z0 && z < SEAT_Z0) {
+    const t = (z - FIELD_STAIR_Z0) / (SEAT_Z0 - FIELD_STAIR_Z0);
+    return rowWalkY(0) * Math.max(0, Math.min(1, t));
+  }
   const seatEnd = SEAT_Z0 + SEAT_ROWS * ROW_RUN;
-  if (z >= SEAT_Z0 && z <= seatEnd) return rowWalkY(seatRowAtZ(z));
+  if (z >= SEAT_Z0 && z <= seatEnd && Math.abs(x) <= FIELD_HALF + SEAT_ROWS * ROW_RUN) {
+    return rowWalkY(seatRowAtZ(z));
+  }
   return 0;
 }
 
@@ -59,11 +75,12 @@ const DIRT = "#c4a56a";
 const CONCRETE = "#b9b3a8";
 const NAVY = "#1f4d8c";
 const SEAT = "#c0392b";
-const GOLD = "#e8c36a";
+const BRICK = "#8a5340";
+const IVY = "#1f4a28";
 
 /**
  * A walkable ballpark: concourse behind home plate, seating bowl, field,
- * dugouts, scoreboard, and service rooms under the stands.
+ * dugouts, scoreboard, and concession stands around the bowl.
  */
 export function buildStadiumInterior(): StadiumInterior {
   const group = new THREE.Group();
@@ -78,62 +95,119 @@ export function buildStadiumInterior(): StadiumInterior {
 
   const minX = -36;
   const maxX = 36;
-  const minZ = -32;
-  const maxZ = 44;
+  const minZ = -38;
+  const maxZ = 48;
 
-  // ─── Concourse (behind home plate, +z) ─────────────────────────────────────
+  const concrete = new THREE.Color(CONCRETE);
+  const brick = new THREE.Color(BRICK);
+  const ivy = new THREE.Color(IVY);
+  const navy = new THREE.Color(NAVY);
+  const fieldWall = new THREE.Color("#2c5a34");
+  const outerPad = SEAT_ROWS * ROW_RUN;
+  const ox = FIELD_HALF + outerPad;
+  const ozNear = SEAT_Z0 + outerPad;
+  const ozFar = FIELD_Z_FAR - outerPad;
+
+  // One slab under the whole park so concourse, tunnels, and foul ground never drop to void.
   scratch.set(CONCRETE);
-  floorB.ground(minX, 26, maxX, maxZ, 0, scratch);
-  wallB.box(minX, 26, minX + 0.7, maxZ, 0, 6.5, scratch);
-  wallB.box(maxX - 0.7, 26, maxX, maxZ, 0, 6.5, scratch);
-  wallB.box(minX, maxZ - 0.7, maxX, maxZ, 0, 6.5, scratch);
-  blockers.push({ minX, maxX: minX + 0.7, minZ: 26, maxZ });
-  blockers.push({ minX: maxX - 0.7, maxX, minZ: 26, maxZ });
-  blockers.push({ minX, maxX, minZ: maxZ - 0.7, maxZ });
+  floorB.ground(minX, minZ, maxX, maxZ, 0, scratch);
 
-  addConcession(wallB, trimB, blockers, -22, 34);
-  addConcession(wallB, trimB, blockers, -8, 34);
-  addBathroom(wallB, trimB, blockers, 10, 33);
-  addLockerRoom(wallB, trimB, blockers, 22, 32);
-
-  // ─── Field ─────────────────────────────────────────────────────────────────
-  scratch.set(GREEN);
-  floorB.ground(-22, -22, 22, 20, 0, scratch);
-  scratch.set(DIRT);
-  // Infield diamond, home plate toward +z.
-  floorB.ground(-9, 2, 9, 16, 0.03, scratch);
-  floorB.ground(-2.2, 14.5, 2.2, 18.2, 0.04, scratch);
-  // Mound.
+  // Playing surface fills the entire bowl opening, then dirt sits on top.
+  const track = 1.45;
   scratch.set("#b7925c");
-  floorB.ground(-1.3, 7.2, 1.3, 10.2, 0.18, scratch);
-  // Bases.
+  floorB.ground(-FIELD_HALF, FIELD_Z_FAR, FIELD_HALF, SEAT_Z0, 0.02, scratch);
+  scratch.set(GREEN);
+  floorB.ground(-FIELD_HALF + track, FIELD_Z_FAR + track, FIELD_HALF - track, SEAT_Z0 - track, 0.04, scratch);
+  scratch.set(DIRT);
+  floorB.ground(-9, 2, 9, 15.6, 0.05, scratch);
+  floorB.ground(-2.2, 13.8, 2.2, 16.1, 0.06, scratch);
+  scratch.set("#b7925c");
+  floorB.ground(-1.3, 7.2, 1.3, 10.2, 0.2, scratch);
   scratch.set("#f4f1ea");
-  floorB.ground(-0.45, 16.6, 0.45, 17.5, 0.06, scratch);
-  floorB.ground(7.4, 8.6, 8.3, 9.5, 0.06, scratch);
-  floorB.ground(-8.3, 8.6, -7.4, 9.5, 0.06, scratch);
-  floorB.ground(-0.45, 1.6, 0.45, 2.5, 0.06, scratch);
-  // Foul lines.
+  floorB.ground(-0.45, 15.4, 0.45, 16.05, 0.08, scratch);
+  floorB.ground(7.4, 8.6, 8.3, 9.5, 0.08, scratch);
+  floorB.ground(-8.3, 8.6, -7.4, 9.5, 0.08, scratch);
+  floorB.ground(-0.45, 1.6, 0.45, 2.5, 0.08, scratch);
   scratch.set("#f2eee6");
-  floorB.ground(-0.12, -18, 0.12, 17, 0.05, scratch);
+  floorB.ground(-0.12, FIELD_Z_FAR + track, 0.12, 15.8, 0.07, scratch);
 
-  // Dugouts.
   addDugout(wallB, seatB, blockers, -16.5, 6, 1);
   addDugout(wallB, seatB, blockers, 12.5, 6, -1);
 
-  // Warning track.
-  scratch.set("#b7925c");
-  floorB.ground(-22, -22, 22, -20.2, 0.02, scratch);
+  // ─── Outer bowl walls ──────────────────────────────────────────────────────
+  const wallH = 11.5;
+  wallB.box(minX, minZ, minX + 0.8, maxZ, 0, wallH, brick);
+  wallB.box(maxX - 0.8, minZ, maxX, maxZ, 0, wallH, brick);
+  wallB.box(minX, minZ, maxX, minZ + 0.8, 0, wallH, brick);
+  wallB.box(minX, maxZ - 0.8, maxX, maxZ, 0, wallH, brick);
+  blockers.push({ minX, maxX: minX + 0.8, minZ, maxZ });
+  blockers.push({ minX: maxX - 0.8, maxX, minZ, maxZ });
+  blockers.push({ minX, maxX, minZ, maxZ: minZ + 0.8 });
+  blockers.push({ minX, maxX, minZ: maxZ - 0.8, maxZ });
 
-  // ─── Seating bowl ──────────────────────────────────────────────────────────
+  wallB.box(minX + 0.8, 25.6, minX + 1.3, maxZ - 0.8, 0, 6.5, concrete);
+  wallB.box(maxX - 1.3, 25.6, maxX - 0.8, maxZ - 0.8, 0, 6.5, concrete);
+
+  addBathroom(wallB, trimB, blockers, 10, 40.6);
+  addLockerRoom(wallB, trimB, blockers, 20.5, 38.8);
+
+  // ─── Seating bowl wrapping the field ───────────────────────────────────────
   for (let row = 0; row < SEAT_ROWS; row++) {
-    const y = rowWalkY(row) - SEAT_THICK;
-    const zNear = SEAT_Z0 + row * ROW_RUN;
-    const zFar = zNear + ROW_RUN - 0.06;
+    const y0 = rowWalkY(row) - SEAT_THICK;
+    const y1 = y0 + SEAT_THICK;
+    const prevY = row === 0 ? STAND_CLEAR : rowWalkY(row - 1);
+    const pad = row * ROW_RUN;
+    const xInner = FIELD_HALF + pad;
+    const zNear = SEAT_Z0 + pad;
+    const zFar = FIELD_Z_FAR - pad;
+    const run = ROW_RUN - 0.07;
     scratch.set(row % 2 === 0 ? SEAT : "#9b2e24");
-    addSeatBand(seatB, -21 + row * 0.12, 21 - row * 0.12, zNear, zFar, y, y + SEAT_THICK, scratch);
-    seatB.box(16.1 + row * 0.7, -18, 16.8 + row * 0.7, 16, y, y + SEAT_THICK, scratch);
-    seatB.box(-16.8 - row * 0.7, -18, -16.1 - row * 0.7, 16, y, y + SEAT_THICK, scratch);
-    seatB.box(-21 + row * 0.12, -23 - row * 0.5, 21 - row * 0.12, -22.3 - row * 0.5, y, y + SEAT_THICK, scratch);
+
+    addSeatBand(seatB, -xInner, xInner, zNear, zNear + run, y0, y1, scratch);
+    seatB.box(-xInner, zNear, xInner, zNear + 0.14, prevY, y1, scratch);
+
+    seatB.box(xInner, zFar, xInner + run, zNear, y0, y1, scratch);
+    seatB.box(xInner, zFar, xInner + 0.14, zNear, prevY, y1, scratch);
+
+    seatB.box(-xInner - run, zFar, -xInner, zNear, y0, y1, scratch);
+    seatB.box(-xInner - 0.14, zFar, -xInner, zNear, prevY, y1, scratch);
+
+    seatB.box(-xInner, zFar - run, -CF_GAP, zFar, y0, y1, scratch);
+    seatB.box(CF_GAP, zFar - run, xInner, zFar, y0, y1, scratch);
+    seatB.box(-xInner, zFar - 0.14, -CF_GAP, zFar, prevY, y1, scratch);
+    seatB.box(CF_GAP, zFar - 0.14, xInner, zFar, prevY, y1, scratch);
+  }
+
+  const fasciaH = topSeatY() + 2.4;
+  wallB.box(-ox - 0.55, ozFar - 0.55, -CF_GAP, ozFar, 0, fasciaH, ivy);
+  wallB.box(CF_GAP, ozFar - 0.55, ox + 0.55, ozFar, 0, fasciaH, ivy);
+  wallB.box(-ox - 0.55, ozFar, -ox, ozNear, 0, fasciaH, navy);
+  wallB.box(ox, ozFar, ox + 0.55, ozNear, 0, fasciaH, navy);
+
+  // Inner field walls so the bowl meets the grass instead of open sky.
+  const lip = STAND_CLEAR + 0.35;
+  addSeatBand(wallB, -FIELD_HALF, FIELD_HALF, SEAT_Z0 - 0.5, SEAT_Z0 + 0.22, 0, lip, fieldWall);
+  wallB.box(FIELD_HALF - 0.22, FIELD_Z_FAR, FIELD_HALF + 0.42, SEAT_Z0, 0, lip, ivy);
+  wallB.box(-FIELD_HALF - 0.42, FIELD_Z_FAR, -FIELD_HALF + 0.22, SEAT_Z0, 0, lip, ivy);
+  wallB.box(-FIELD_HALF, FIELD_Z_FAR - 0.42, -CF_GAP, FIELD_Z_FAR + 0.22, 0, lip, ivy);
+  wallB.box(CF_GAP, FIELD_Z_FAR - 0.42, FIELD_HALF, FIELD_Z_FAR + 0.22, 0, lip, ivy);
+  wallB.box(-CF_GAP, FIELD_Z_FAR - 0.42, CF_GAP, FIELD_Z_FAR + 0.22, 0, 1.45, ivy);
+
+  // Soffits and extra columns close the under-stand tunnels.
+  addSeatBand(floorB, -ox, ox, SEAT_Z0, ozNear, STAND_CLEAR - 0.16, STAND_CLEAR, concrete);
+  floorB.box(FIELD_HALF, FIELD_Z_FAR, ox, SEAT_Z0, STAND_CLEAR - 0.16, STAND_CLEAR, concrete);
+  floorB.box(-ox, FIELD_Z_FAR, -FIELD_HALF, SEAT_Z0, STAND_CLEAR - 0.16, STAND_CLEAR, concrete);
+  floorB.box(-ox, ozFar, -CF_GAP, FIELD_Z_FAR, STAND_CLEAR - 0.16, STAND_CLEAR, concrete);
+  floorB.box(CF_GAP, ozFar, ox, FIELD_Z_FAR, STAND_CLEAR - 0.16, STAND_CLEAR, concrete);
+  for (const ax of AISLES) {
+    for (const side of [-1, 1]) {
+      const px = ax + side * (AISLE_HALF + 0.18);
+      wallB.box(px - 0.22, SEAT_Z0 + 0.35, px + 0.22, ozNear - 0.2, 0, STAND_CLEAR, concrete);
+    }
+  }
+  for (const z of [-12, -2, 8]) {
+    wallB.box(FIELD_HALF + 0.5, z - 0.22, FIELD_HALF + 0.94, z + 0.22, 0, STAND_CLEAR, concrete);
+    wallB.box(-FIELD_HALF - 0.94, z - 0.22, -FIELD_HALF - 0.5, z + 0.22, 0, STAND_CLEAR, concrete);
   }
 
   for (const ax of AISLES) {
@@ -141,9 +215,10 @@ export function buildStadiumInterior(): StadiumInterior {
   }
 
   // ─── Scoreboard in center field ────────────────────────────────────────────
+  const boardZ = ozFar - 2.4;
   scratch.set("#12171c");
-  wallB.box(-10, -28, 10, -25.4, 0, 14, scratch);
-  blockers.push({ minX: -10, maxX: 10, minZ: -28, maxZ: -25.4 });
+  wallB.box(-10, boardZ, 10, boardZ + 2.4, 0, 14, scratch);
+  blockers.push({ minX: -10, maxX: 10, minZ: boardZ, maxZ: boardZ + 2.4 });
   const boardGeo = new THREE.PlaneGeometry(18, 8);
   const boardMat = new THREE.MeshStandardMaterial({
     color: "#111",
@@ -152,9 +227,24 @@ export function buildStadiumInterior(): StadiumInterior {
     roughness: 0.4,
   });
   const board = new THREE.Mesh(boardGeo, boardMat);
-  board.position.set(0, 9.2, -25.38);
+  board.position.set(0, 9.2, boardZ + 2.42);
   group.add(board);
   disposables.push(boardGeo);
+
+  // ─── Concession stands under the bleachers ─────────────────────────────────
+  const shops: ShopSpec[] = [
+    { name: "NACHOS", menu: "Cheese · Salsa · Jalapeños", face: "z+", x: -21.6, z: 21.4, color: "#e67e22", width: 5.8 },
+    { name: "HOT DOGS", menu: "Mustard · Relish · Chili", face: "z+", x: -12.0, z: 21.4, color: "#c0392b", width: 5.3 },
+    { name: "PRETZELS", menu: "Salted · Cheese dip", face: "z+", x: -6.45, z: 21.4, color: "#c47a2c", width: 5.1 },
+    { name: "BURGERS", menu: "Cheeseburgers · Fries", face: "z+", x: 1.35, z: 21.4, color: "#8b5a2b", width: 5.1 },
+    { name: "DRINKS", menu: "Soda · Lemonade · Water", face: "z+", x: 6.6, z: 21.4, color: "#1f4d8c", width: 5.3 },
+    { name: "ICE CREAM", menu: "Soft serve · Sundaes", face: "z+", x: 15.0, z: 21.4, color: "#d48aa8", width: 5.8 },
+    { name: "PIZZA", menu: "Pepperoni · Extra cheese", face: "x+", x: -24.8, z: 2.2, color: "#b83218", width: 5.6 },
+    { name: "SWEETS", menu: "Cotton candy · Popcorn", face: "x-", x: 21.3, z: 2.2, color: "#7b2d8b", width: 5.6 },
+  ];
+  for (const shop of shops) {
+    addShop(wallB, trimB, blockers, group, disposables, shop);
+  }
 
   // ─── Assemble ──────────────────────────────────────────────────────────────
   const add = (builder: MeshBuilder, material: THREE.MeshStandardMaterial) => {
@@ -193,7 +283,7 @@ export function buildStadiumInterior(): StadiumInterior {
   return {
     group,
     blockers,
-    spawn: { x: 0, z: 33.2, yaw: 0, pitch: -0.22 },
+    spawn: { x: 0, z: 40.4, yaw: 0, pitch: -0.18 },
     bounds: { minX, maxX, minZ, maxZ },
     scoreboard: boardMat,
     fans,
@@ -203,6 +293,159 @@ export function buildStadiumInterior(): StadiumInterior {
       boardMat.dispose();
     },
   };
+}
+
+type ShopFace = "x+" | "x-" | "z+" | "z-";
+
+interface ShopSpec {
+  name: string;
+  menu: string;
+  face: ShopFace;
+  x: number;
+  z: number;
+  color: string;
+  width?: number;
+  depth?: number;
+}
+
+function addShop(
+  walls: MeshBuilder,
+  trim: MeshBuilder,
+  blockers: Blocker[],
+  group: THREE.Group,
+  disposables: Array<{ dispose: () => void }>,
+  spec: ShopSpec,
+) {
+  const depth = spec.depth ?? 3.35;
+  const width = spec.width ?? 5.6;
+  const h = 2.52;
+  const concrete = new THREE.Color(CONCRETE);
+  const accent = new THREE.Color(spec.color);
+  const counter = new THREE.Color("#3d342c");
+
+  let x0 = spec.x;
+  let z0 = spec.z;
+  let x1: number;
+  let z1: number;
+  if (spec.face === "x+" || spec.face === "x-") {
+    x1 = x0 + depth;
+    z1 = z0 + width;
+  } else {
+    x1 = x0 + width;
+    z1 = z0 + depth;
+  }
+
+  walls.box(x0, z0, x1, z1, 0, h, concrete);
+  walls.box(x0 - 0.06, z0 - 0.06, x1 + 0.06, z1 + 0.06, h, h + 0.12, accent);
+  blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1 });
+
+  const awning = 0.7;
+  const cx = (x0 + x1) / 2;
+  const cz = (z0 + z1) / 2;
+  let signX = cx;
+  let signZ = cz;
+  let rotY = 0;
+  if (spec.face === "x+") {
+    trim.box(x1, z0 + 0.12, x1 + awning, z1 - 0.12, 1.95, 2.22, accent);
+    trim.box(x1 - 0.08, z0 + 0.3, x1 + 0.12, z1 - 0.3, 1.02, 1.16, counter);
+    addFoodProps(trim, spec.name, x1 - 0.45, z0 + 0.6, z1 - 0.6);
+    signX = x1 + 0.1;
+    signZ = cz;
+    rotY = -Math.PI / 2;
+  } else if (spec.face === "x-") {
+    trim.box(x0 - awning, z0 + 0.12, x0, z1 - 0.12, 1.95, 2.22, accent);
+    trim.box(x0 - 0.12, z0 + 0.3, x0 + 0.08, z1 - 0.3, 1.02, 1.16, counter);
+    addFoodProps(trim, spec.name, x0 + 0.2, z0 + 0.6, z1 - 0.6);
+    signX = x0 - 0.1;
+    signZ = cz;
+    rotY = Math.PI / 2;
+  } else if (spec.face === "z+") {
+    trim.box(x0 + 0.12, z1, x1 - 0.12, z1 + awning, 1.95, 2.22, accent);
+    trim.box(x0 + 0.3, z1 - 0.08, x1 - 0.3, z1 + 0.12, 1.02, 1.16, counter);
+    addFoodProps(trim, spec.name, x0 + 0.6, z1 - 0.45, x1 - 0.6, true);
+    signX = cx;
+    signZ = z1 + 0.1;
+    rotY = 0;
+  } else {
+    trim.box(x0 + 0.12, z0 - awning, x1 - 0.12, z0, 1.95, 2.22, accent);
+    trim.box(x0 + 0.3, z0 - 0.12, x1 - 0.3, z0 + 0.08, 1.02, 1.16, counter);
+    signX = cx;
+    signZ = z0 - 0.1;
+    rotY = Math.PI;
+  }
+
+  addShopSign(group, disposables, spec.name, spec.menu, spec.color, signX, 2.38, signZ, rotY, width * 0.82);
+}
+
+function addFoodProps(trim: MeshBuilder, name: string, a: number, b: number, c: number, alongX = false) {
+  const colors: Record<string, string[]> = {
+    NACHOS: ["#e8c36a", "#e67e22", "#c0392b"],
+    "HOT DOGS": ["#c0392b", "#f4f1ea", "#6b8f3a"],
+    BURGERS: ["#8b5a2b", "#e8c36a", "#3d7a3a"],
+    DRINKS: ["#c0392b", "#1f4d8c", "#f4f1ea"],
+    PRETZELS: ["#c47a2c", "#e8c36a", "#8b5a2b"],
+    "ICE CREAM": ["#f4f1ea", "#d48aa8", "#7ec8e3"],
+    PIZZA: ["#c0392b", "#e8c36a", "#3d7a3a"],
+    SWEETS: ["#e8a0d0", "#f4f1ea", "#e67e22"],
+  };
+  const palette = colors[name] ?? ["#e8c36a", "#c0392b", "#1f4d8c"];
+  for (let i = 0; i < 3; i++) {
+    const color = new THREE.Color(palette[i]);
+    if (alongX) {
+      const x = a + i * ((c - a) / 3);
+      trim.box(x, b, x + 0.55, b + 0.45, 1.18, 1.42, color);
+    } else {
+      const z = b + i * ((c - b) / 3);
+      trim.box(a, z, a + 0.45, z + 0.55, 1.18, 1.42, color);
+    }
+  }
+}
+
+function addShopSign(
+  group: THREE.Group,
+  disposables: Array<{ dispose: () => void }>,
+  title: string,
+  subtitle: string,
+  bg: string,
+  x: number,
+  y: number,
+  z: number,
+  rotY: number,
+  width = 4.4,
+) {
+  const el = document.createElement("canvas");
+  el.width = 512;
+  el.height = 160;
+  const ctx = el.getContext("2d");
+  if (!ctx) return;
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 512, 160);
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.fillRect(0, 0, 512, 14);
+  ctx.fillRect(0, 146, 512, 14);
+  ctx.fillStyle = "#fff8e8";
+  ctx.font = "bold 54px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(title, 256, 62);
+  ctx.font = "22px sans-serif";
+  ctx.fillStyle = "#ffe9b8";
+  ctx.fillText(subtitle, 256, 118);
+  const tex = new THREE.CanvasTexture(el);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshStandardMaterial({
+    map: tex,
+    emissiveMap: tex,
+    emissive: new THREE.Color("#ffffff"),
+    emissiveIntensity: 0.4,
+    roughness: 0.5,
+  });
+  const geo = new THREE.PlaneGeometry(width, 0.95);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+  mesh.rotation.y = rotY;
+  group.add(mesh);
+  disposables.push(geo, tex, mat);
 }
 
 function addSeatBand(
@@ -233,7 +476,6 @@ function addStairFlight(floorB: MeshBuilder, trimB: MeshBuilder, x0: number, x1:
   const rail = new THREE.Color("#dfe6ee");
   const top = topSeatY();
 
-  // Climb from the concourse up to the back row.
   for (let i = 1; i <= STAIR_STEPS; i++) {
     const t = i / STAIR_STEPS;
     const zFar = STAIR_Z1 - (STAIR_Z1 - STAIR_Z0) * ((i - 1) / STAIR_STEPS);
@@ -243,13 +485,23 @@ function addStairFlight(floorB: MeshBuilder, trimB: MeshBuilder, x0: number, x1:
     floorB.box(x0, Math.min(zNear, zFar), x1, Math.max(zNear, zFar), y - 0.05, y, nosing);
   }
 
-  // Then step down through each seating row toward the field.
   for (let row = SEAT_ROWS - 1; row >= 0; row--) {
     const z0 = SEAT_Z0 + row * ROW_RUN;
     const z1 = z0 + ROW_RUN;
     const y = rowWalkY(row);
     floorB.box(x0, z0, x1, z1, 0, y, concrete);
     floorB.box(x0, z0, x1, z1, y - 0.05, y, nosing);
+  }
+
+  const fieldTop = rowWalkY(0);
+  const fieldSteps = 8;
+  for (let i = 1; i <= fieldSteps; i++) {
+    const t = i / fieldSteps;
+    const zFar = SEAT_Z0 - (SEAT_Z0 - FIELD_STAIR_Z0) * ((i - 1) / fieldSteps);
+    const zNear = SEAT_Z0 - (SEAT_Z0 - FIELD_STAIR_Z0) * t;
+    const y = fieldTop * (1 - (i - 1) / fieldSteps);
+    floorB.box(x0, Math.min(zNear, zFar), x1, Math.max(zNear, zFar), 0, Math.max(0.08, y), concrete);
+    floorB.box(x0, Math.min(zNear, zFar), x1, Math.max(zNear, zFar), Math.max(0.08, y) - 0.05, Math.max(0.08, y), nosing);
   }
 
   const railH = 0.92;
@@ -267,26 +519,6 @@ function addStairFlight(floorB: MeshBuilder, trimB: MeshBuilder, x0: number, x1:
       trimB.box(x - 0.04, z - 0.04, x + 0.04, z + 0.04, y, y + railH, rail);
     }
   }
-}
-
-function addConcession(
-  walls: MeshBuilder,
-  trim: MeshBuilder,
-  blockers: Blocker[],
-  x: number,
-  z: number,
-) {
-  const w = 8;
-  const d = 4.2;
-  const concrete = new THREE.Color(CONCRETE);
-  const navy = new THREE.Color(NAVY);
-  const gold = new THREE.Color(GOLD);
-  walls.box(x, z, x + w, z + 0.45, 0, 3.2, concrete);
-  walls.box(x, z, x + 0.45, z + d, 0, 3.2, concrete);
-  walls.box(x + w - 0.45, z, x + w, z + d, 0, 3.2, concrete);
-  trim.box(x + 0.5, z + 0.5, x + w - 0.5, z + 1.6, 1.1, 2.2, navy);
-  trim.box(x + 1, z + 0.2, x + w - 1, z + 0.55, 3.2, 3.55, gold);
-  blockers.push({ minX: x, maxX: x + w, minZ: z, maxZ: z + d * 0.55 });
 }
 
 function addBathroom(
@@ -359,7 +591,7 @@ function addDugout(
 function buildFans() {
   const geo = new THREE.CapsuleGeometry(0.24, 0.78, 3, 6);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78 });
-  const count = 64;
+  const count = SEATED_FANS + WALKING_FANS + PLAYER_FANS;
   const mesh = new THREE.InstancedMesh(geo, mat, count);
   mesh.frustumCulled = false;
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -376,25 +608,44 @@ function buildFans() {
     let x: number;
     let z: number;
     let y: number;
-    if (i < 36) {
+    if (i < SEATED_FANS) {
       const row = i % SEAT_ROWS;
-      x = -18 + (i % 9) * 4.1 + (i % 2) * 0.45;
-      if (inAisle(x)) x += 2.2;
-      z = SEAT_Z0 + row * ROW_RUN + 0.3;
+      const section = Math.floor(i / SEAT_ROWS) % 4;
+      const along = Math.floor(i / 4) % 12;
+      const pad = row * ROW_RUN;
+      const xInner = FIELD_HALF + pad + 0.4;
+      const zNear = SEAT_Z0 + pad + 0.28;
+      const zFar = FIELD_Z_FAR - pad - 0.28;
       y = rowWalkY(row) + 0.55;
-    } else if (i < 60) {
-      x = -18 + (i - 36) * 1.55;
-      z = 32.6 + ((i * 2) % 4) * 0.28;
+      if (section === 0) {
+        x = -15 + along * 2.7 + (i % 2) * 0.35;
+        if (inAisle(x)) x += 2.1;
+        z = zNear;
+      } else if (section === 1) {
+        x = xInner;
+        z = -15 + along * 2.5;
+      } else if (section === 2) {
+        x = -xInner;
+        z = -15 + along * 2.5;
+      } else {
+        x = -16 + along * 2.6;
+        if (Math.abs(x) < CF_GAP) x = x < 0 ? -CF_GAP - 1.2 : CF_GAP + 1.2;
+        z = zFar;
+      }
+    } else if (i < SEATED_FANS + WALKING_FANS) {
+      const n = i - SEATED_FANS;
+      x = -18 + n * 1.55;
+      z = 41.4 + ((n * 2) % 4) * 0.28;
       y = 0.97;
     } else {
-      const spot = fieldSpots[i - 60];
+      const spot = fieldSpots[i - SEATED_FANS - WALKING_FANS];
       x = spot[0];
       z = spot[1];
       y = 0.95;
     }
     matrix.makeTranslation(x, y, z);
     mesh.setMatrixAt(i, matrix);
-    mesh.setColorAt(i, color.set(i >= 60 ? "#1f4d8c" : palettes[i % palettes.length]));
+    mesh.setColorAt(i, color.set(i >= SEATED_FANS + WALKING_FANS ? "#1f4d8c" : palettes[i % palettes.length]));
   }
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
