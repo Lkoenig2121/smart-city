@@ -28,8 +28,14 @@ export function RoomComputer({ minuteOfDay, onClose }: Props) {
   const [tab, setTab] = useState<Tab>("web");
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-20 grid place-items-center bg-black/55 p-3">
-      <div className="flex h-[min(40rem,calc(100vh-2rem))] w-[min(52rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-500/40 bg-[#0d1117] shadow-2xl">
+    <div
+      className="pointer-events-auto absolute inset-0 z-20 grid place-items-center bg-black/55 p-3"
+      onClick={onClose}
+    >
+      <div
+        className="flex h-[min(40rem,calc(100vh-2rem))] w-[min(52rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-500/40 bg-[#0d1117] shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-white/10 bg-[#161b22] px-4 py-2.5">
           <p className="text-[0.65rem] uppercase tracking-[0.22em] text-sky-300">Riverside OS</p>
           <div className="flex gap-1 rounded-lg bg-black/40 p-0.5">
