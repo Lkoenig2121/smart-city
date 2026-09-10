@@ -1,4 +1,4 @@
-export type TransitKind = "bus" | "rail";
+export type TransitKind = "bus" | "tram" | "subway" | "train";
 
 export interface TransitStop {
   x: number;

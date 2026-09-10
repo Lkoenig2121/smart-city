@@ -20,7 +20,8 @@ export type BuildingKind =
   | "fire"
   | "city_hall"
   | "park_pavilion"
-  | "baseball_stadium";
+  | "baseball_stadium"
+  | "subway_station";
 
 export type VehicleKind = "car" | "bus" | "truck" | "taxi" | "ambulance" | "firetruck";
 

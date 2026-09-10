@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { Building, CityState } from "@/lib/city/types";
 import { findStadium, stadiumIsOpen } from "@/lib/city/stadium";
 import { lodgingBuildings } from "@/lib/city/lodging";
+import { subwayStations } from "@/lib/city/subway";
 import { lightingFor, type Lighting } from "@/lib/renderer/palette";
 import { AgentLayer } from "./agents";
 import { buildCity, TILE, type CityMeshes } from "./buildCity";
@@ -126,6 +127,28 @@ export class StreetWorld {
     let best: Building | null = null;
     let bestDist = range;
     for (const building of lodgingBuildings(this.state)) {
+      const here = this.distanceToBuilding(building, this.controls.position.x, this.controls.position.z);
+      const hop = this.controls.hopEnds;
+      const hopDist = hop
+        ? Math.min(
+            this.distanceToBuilding(building, hop.from.x, hop.from.z),
+            this.distanceToBuilding(building, hop.to.x, hop.to.z),
+          )
+        : Infinity;
+      const dist = Math.min(here, hopDist);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = building;
+      }
+    }
+    return best;
+  }
+
+  nearSubwayEntrance() {
+    const range = TILE * 3.5;
+    let best: Building | null = null;
+    let bestDist = range;
+    for (const building of subwayStations(this.state)) {
       const here = this.distanceToBuilding(building, this.controls.position.x, this.controls.position.z);
       const hop = this.controls.hopEnds;
       const hopDist = hop

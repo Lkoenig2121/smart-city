@@ -1,13 +1,15 @@
 "use client";
 
 import type { CityState } from "@/lib/city/types";
+import { BUS_STOPS, isTramTile } from "@/lib/city/transit";
+import { POI_LEGEND, drawPoiMark, poiKind } from "@/lib/city/minimapPois";
 import { useEffect, useRef } from "react";
 
-const SIZE = 168;
+const SIZE = 176;
 
 /**
- * Top-down plan of the city with the walker's position and facing. The static
- * plan is painted once to an offscreen canvas; only the marker redraws.
+ * Top-down plan of the city with the walker's position, facing, and landmark
+ * marks — subway, hotels, civic buildings, and transit.
  */
 export function StreetMinimap({
   state,
@@ -19,7 +21,6 @@ export function StreetMinimap({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const baseRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Paint the unchanging plan: water, parks, roads, building footprints.
   useEffect(() => {
     const base = document.createElement("canvas");
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -50,6 +51,10 @@ export function StreetMinimap({
           ctx.fillStyle = tile.bridge ? "#8d8a80" : "#6a6c72";
           ctx.fillRect(x * cell, y * cell, cell + 0.5, cell + 0.5);
         }
+        if (isTramTile(x, y)) {
+          ctx.fillStyle = "#c5ccd3";
+          ctx.fillRect(x * cell + cell * 0.38, y * cell, cell * 0.24, cell + 0.5);
+        }
       }
     }
 
@@ -63,10 +68,21 @@ export function StreetMinimap({
       );
     }
 
+    for (const stop of BUS_STOPS) {
+      drawPoiMark(ctx, (stop.x + 0.5) * cell, (stop.y + 0.5) * cell, "bus", 3.6);
+    }
+
+    for (const building of state.buildings.values()) {
+      const kind = poiKind(building);
+      if (!kind) continue;
+      const cx = (building.origin.x + building.width / 2) * cell;
+      const cy = (building.origin.y + building.depth / 2) * cell;
+      drawPoiMark(ctx, cx, cy, kind, kind === "stadium" ? 5.2 : 4.3);
+    }
+
     baseRef.current = base;
   }, [state]);
 
-  // Redraw the marker every frame.
   useEffect(() => {
     let frame = 0;
 
@@ -91,7 +107,6 @@ export function StreetMinimap({
             const px = position.x * cell;
             const py = position.y * cell;
 
-            // View cone. Yaw 0 faces -z, which is up on the plan.
             const heading = position.yaw + Math.PI / 2;
             const spread = 0.5;
             ctx.beginPath();
@@ -128,6 +143,27 @@ export function StreetMinimap({
       <div className="border-t border-white/10 px-2 py-1 text-center text-[0.58rem] uppercase tracking-wider text-slate-300">
         {state.name}
       </div>
+      <div className="grid grid-cols-5 gap-x-1 gap-y-0.5 border-t border-white/10 px-2 py-1.5">
+        {POI_LEGEND.map((item) => (
+          <div key={item.kind} className="flex items-center gap-0.5 text-[0.52rem] text-slate-300">
+            <LegendDot kind={item.kind} />
+            <span>{item.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
+}
+
+function LegendDot({ kind }: { kind: (typeof POI_LEGEND)[number]["kind"] }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, 12, 12);
+    drawPoiMark(ctx, 6, 6, kind, 5);
+  }, [kind]);
+  return <canvas ref={canvasRef} width={12} height={12} className="h-3 w-3 shrink-0" />;
 }

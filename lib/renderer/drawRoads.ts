@@ -1,4 +1,5 @@
 import { TILE_H, TILE_W, diamondPoints } from "@/lib/city/iso";
+import { isTramTile } from "@/lib/city/transit";
 import type { RoadCell } from "@/lib/city/types";
 import { drawDiamond } from "./drawIso";
 import { alpha, lit, shade, type Lighting } from "./palette";
@@ -44,6 +45,14 @@ export function drawRoadTile(
       ctx.arc((d.top.x + d.bottom.x) / 2, (d.top.y + d.bottom.y) / 2, 3.2, 0, Math.PI * 2);
       ctx.fillStyle = shade(asphalt, 0.8);
       ctx.fill();
+    }
+  }
+
+  if (isTramTile(x, y)) {
+    const rail = alpha(lit("#c5ccd3", light, "top"), 0.85);
+    if (road.north || road.south) {
+      strokeSeg(ctx, mid(d.top, d.left), mid(d.bottom, d.right), rail, 1.4);
+      strokeSeg(ctx, mid(d.top, d.right), mid(d.bottom, d.left), rail, 1.4);
     }
   }
 

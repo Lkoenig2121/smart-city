@@ -61,6 +61,9 @@ export function drawBuilding(
     case "baseball_stadium":
       drawStadium(ctx, building, light);
       break;
+    case "subway_station":
+      drawSubwayStation(ctx, building, light);
+      break;
   }
 
   if (selected) {
@@ -375,6 +378,21 @@ function drawSchool(ctx: CanvasRenderingContext2D, b: Building, light: Lighting)
   drawWindowGrid(ctx, box.L.x, box.L.y, box.B.x, box.B.y, box.Be.x, box.Be.y, box.Le.x, box.Le.y, 5, 2, glassColor(light, 0.3), "#8a6a4a");
   drawWindowGrid(ctx, box.B.x, box.B.y, box.R.x, box.R.y, box.Re.x, box.Re.y, box.Be.x, box.Be.y, 6, 2, glassColor(light, 0.28), "#9a7854");
   drawSlopedRoof(ctx, box, lit(shade(b.roofColor, 0.75), light, "left"), lit(b.roofColor, light, "right"));
+}
+
+function drawSubwayStation(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
+  const h = 22;
+  const glass = glassColor(light, 0.55);
+  const left = lit("#b7c4cc", light, "left");
+  const right = lit("#9aabb6", light, "right");
+  const box = drawIsoBox(ctx, b.origin.x, b.origin.y, 1, 1, h, left, right, lit("#1a1c20", light, "top"), 8);
+  drawWindowGrid(ctx, box.B.x, box.B.y, box.R.x, box.R.y, box.Re.x, box.Re.y, box.Be.x, box.Be.y, 2, 1, glass, "#6a7882");
+  ctx.fillStyle = lit(b.accentColor, light, "top");
+  ctx.fillRect(box.Be.x - 10, box.Be.y - 28, 20, 8);
+  ctx.fillStyle = "#f4f1ea";
+  ctx.font = "bold 8px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("M", box.Be.x, box.Be.y - 22);
 }
 
 function drawCivic(ctx: CanvasRenderingContext2D, b: Building, light: Lighting, accent: string) {

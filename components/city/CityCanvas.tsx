@@ -4,6 +4,7 @@ import { CityEngine } from "@/lib/simulation/city/cityEngine";
 import { formatClock, dayPhase } from "@/lib/simulation/city/cityTick";
 import { CityRenderer } from "@/lib/renderer/CityRenderer";
 import { getBuildingAt } from "@/lib/simulation/city/cityState";
+import { subwayGateTile, subwayStationId } from "@/lib/city/subway";
 import type { Building, CityState, Tool } from "@/lib/city/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CityHud } from "./CityHud";
@@ -43,9 +44,11 @@ export function CityCanvas() {
   const rendererRef = useRef<CityRenderer | null>(null);
   const [ready, setReady] = useState(false);
   const [hud, setHud] = useState<HudSnap | null>(null);
-  const [street, setStreet] = useState<{ state: CityState; entry: { x: number; y: number } } | null>(
-    null,
-  );
+  const [street, setStreet] = useState<{
+    state: CityState;
+    entry: { x: number; y: number };
+    startInterior?: { kind: "subway"; stationId: string };
+  } | null>(null);
   /** While the street view is open it owns the simulation clock. */
   const streetActive = useRef(false);
   streetActive.current = street !== null;
@@ -210,6 +213,20 @@ export function CityCanvas() {
     setStreet({ state: engine.state, entry: clamped });
   }, []);
 
+  const enterSelectedStation = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const selected = engine.selectedId ? engine.state.buildings.get(engine.selectedId) : null;
+    if (!selected || selected.kind !== "subway_station") return;
+    const id = subwayStationId(selected);
+    if (!id) return;
+    setStreet({
+      state: engine.state,
+      entry: subwayGateTile(selected),
+      startInterior: { kind: "subway", stationId: id },
+    });
+  }, []);
+
   const tickFromStreet = useCallback((dt: number) => {
     engineRef.current?.tick(dt);
   }, []);
@@ -282,6 +299,7 @@ export function CityCanvas() {
             if (engineRef.current) engineRef.current.selectedId = null;
           }}
           onEnterStreet={enterStreet}
+          onEnterStation={enterSelectedStation}
         />
       ) : null}
 
@@ -289,6 +307,7 @@ export function CityCanvas() {
         <StreetView
           state={street.state}
           entry={street.entry}
+          startInterior={street.startInterior}
           onTick={tickFromStreet}
           onExit={() => setStreet(null)}
         />

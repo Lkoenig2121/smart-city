@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Building, BuildingKind, CityState, Terrain, Tile } from "@/lib/city/types";
 import { lodgingUse } from "@/lib/city/lodging";
+import { BUS_STOPS, isTramTile } from "@/lib/city/transit";
 import { MeshBuilder } from "./meshBuilder";
 import { BAY_W, FLOOR_H, asphaltTexture, facade, rippleNormal, type FacadeStyle } from "./textures";
 
@@ -43,6 +44,7 @@ const STYLE_OF: Record<BuildingKind, FacadeStyle> = {
   city_hall: "civic",
   park_pavilion: "residential",
   baseball_stadium: "civic",
+  subway_station: "glass",
 };
 
 /** Axis-aligned box a walker cannot pass through. */
@@ -147,6 +149,12 @@ export function buildCity(state: CityState): CityMeshes {
         const straightEW = east && west && !north && !south;
         const cx = (x0 + x1) / 2;
         const cz = (z0 + z1) / 2;
+        if (isTramTile(x, y)) {
+          scratch.set("#9aa3ab");
+          trimB.box(cx - 1.15, az0, cx - 0.95, az1, 0.02, 0.05, scratch);
+          trimB.box(cx + 0.95, az0, cx + 1.15, az1, 0.02, 0.05, scratch);
+        }
+
         if (straightNS) {
           for (let i = 0; i < 2; i++) {
             const zs = z0 + i * (TILE / 2) + TILE * 0.12;
@@ -176,6 +184,10 @@ export function buildCity(state: CityState): CityMeshes {
   // ─── Buildings ─────────────────────────────────────────────────────────────
   for (const building of state.buildings.values()) {
     addBuilding(building, wallsFor, roofB, trimB, blockers);
+  }
+
+  for (const stop of BUS_STOPS) {
+    addBusShelter(stop.x, stop.y, state.tiles, trimB, roofB);
   }
 
   // ─── Bridges ───────────────────────────────────────────────────────────────
@@ -297,6 +309,28 @@ export function buildCity(state: CityState): CityMeshes {
 }
 
 /** A raised pavement slab with a curb face along its street edge. */
+function addBusShelter(
+  tx: number,
+  ty: number,
+  tiles: Tile[][],
+  trimB: MeshBuilder,
+  roofB: MeshBuilder,
+) {
+  const tile = tiles[ty]?.[tx];
+  if (!tile?.road) return;
+  const x0 = tx * TILE;
+  const z0 = ty * TILE;
+  const steel = new THREE.Color("#6a727a");
+  const glass = new THREE.Color("#9bb8c6");
+  const roof = new THREE.Color("#2a3138");
+  const sx = x0 + TILE - SIDEWALK_W + 0.25;
+  const sz = z0 + 2.2;
+  trimB.box(sx, sz, sx + 0.12, sz + 3.4, 0, 2.6, steel);
+  trimB.box(sx + 1.5, sz, sx + 1.62, sz + 3.4, 0, 2.6, steel);
+  trimB.box(sx + 0.12, sz + 3.28, sx + 1.5, sz + 3.4, 0.4, 2.4, glass);
+  roofB.ground(sx - 0.1, sz - 0.1, sx + 1.7, sz + 3.55, 2.65, roof);
+}
+
 function addSidewalk(
   builder: MeshBuilder,
   x0: number,
@@ -487,6 +521,16 @@ function addBuilding(
 
     case "baseball_stadium": {
       addStadiumMesh(building, walls, roofB, trimB, blockers, wall, roof, accent);
+      break;
+    }
+
+    case "subway_station": {
+      const glass = wallsFor("glass");
+      glass.walls(x0 + 0.8, z0 + 0.6, x1 - 0.8, z1 - 0.4, 0.08, 3.1, new THREE.Color("#8fa6b4"));
+      trimB.box(x0 + 0.5, z1 - 0.15, x1 - 0.5, z1 + 1.5, 3.05, 3.28, accent);
+      trimB.box(x0 + 1.6, z0 + 1.4, x1 - 1.6, z1 - 1.1, 0, 0.08, new THREE.Color("#14161a"));
+      trimB.box((x0 + x1) / 2 - 0.55, z1 + 0.15, (x0 + x1) / 2 + 0.55, z1 + 0.45, 3.28, 4.55, accent);
+      roofB.ground(x0 + 0.7, z0 + 0.5, x1 - 0.7, z1 - 0.3, 3.3, roof);
       break;
     }
   }

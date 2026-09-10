@@ -1,5 +1,6 @@
 import { createBuilding, footprintFor } from "@/lib/simulation/buildings/buildings";
 import { markLodging } from "./lodging";
+import { SUBWAY_STATIONS, markSubwayStation } from "./subway";
 import { citizenName } from "./names";
 import { mulberry32, pick, randInt, randRange } from "./rng";
 import type {
@@ -252,6 +253,11 @@ export function generateCity(seed = 20260903): CityState {
   place("baseball_stadium", 35, 35);
   fillRect(tiles, 32, 32, 39, 34, "lot");
   fillRect(tiles, 32, 35, 34, 39, "lot");
+
+  for (const def of SUBWAY_STATIONS) {
+    const station = place("subway_station", def.x, def.y);
+    if (station) markSubwayStation(station, def);
+  }
 
   for (let y = 6; y <= 18; y++) {
     for (let x = 13; x <= 26; x++) {

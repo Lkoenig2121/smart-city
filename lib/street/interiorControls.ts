@@ -23,6 +23,7 @@ export class InteriorControls {
   readonly position = new THREE.Vector3();
   yaw = 0;
   pitch = 0;
+  enabled = true;
 
   private velocity = new THREE.Vector3();
   private keys = new InputKeys();
@@ -64,6 +65,7 @@ export class InteriorControls {
   }
 
   update(dt: number) {
+    if (!this.enabled) return;
     let f = 0;
     let r = 0;
     if (this.has("KeyW", "ArrowUp")) f += 1;

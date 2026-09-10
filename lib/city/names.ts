@@ -126,6 +126,8 @@ export function buildingName(kind: BuildingKind, rand: Rand, index: number) {
       return "Willow Park Pavilion";
     case "baseball_stadium":
       return "Ravens Ballpark";
+    case "subway_station":
+      return "Subway Station";
     default:
       return `Building ${index}`;
   }

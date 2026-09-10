@@ -37,6 +37,8 @@ export function footprintFor(kind: BuildingKind): { w: number; d: number } {
       return { w: 1, d: 1 };
     case "baseball_stadium":
       return { w: 5, d: 4 };
+    case "subway_station":
+      return { w: 1, d: 1 };
     default:
       return { w: 1, d: 1 };
   }
@@ -200,6 +202,20 @@ export function defaultStats(kind: BuildingKind, rand: () => number): BuildingSt
           "city happiness": "+1,000",
         },
       };
+    case "subway_station":
+      return {
+        residents: 0,
+        capacity: 0,
+        employees: 14,
+        jobs: 18,
+        revenue: 0,
+        happiness: 88,
+        propertyValue: 9_400_000,
+        status: "open",
+        extra: {
+          line: "Riverside Line",
+        },
+      };
   }
 }
 
@@ -296,6 +312,12 @@ export function createBuilding(
       accentColor = "#1e3f28";
       floors = 3;
       break;
+    case "subway_station":
+      wallColor = "#d5dde4";
+      roofColor = "#1a1c20";
+      accentColor = "#e8c36a";
+      floors = 1;
+      break;
   }
 
   return {
@@ -348,6 +370,8 @@ export function kindLabel(target: Building | BuildingKind) {
       return "Park";
     case "baseball_stadium":
       return "Baseball Stadium";
+    case "subway_station":
+      return "Subway";
   }
 }
 

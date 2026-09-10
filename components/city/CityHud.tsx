@@ -28,6 +28,7 @@ interface HudProps {
   onTool: (tool: Tool) => void;
   onClose: () => void;
   onEnterStreet: () => void;
+  onEnterStation?: () => void;
 }
 
 export function CityHud({
@@ -43,6 +44,7 @@ export function CityHud({
   onTool,
   onClose,
   onEnterStreet,
+  onEnterStation,
 }: HudProps) {
   return (
     <>
@@ -170,13 +172,24 @@ export function CityHud({
           </div>
           {selected.stats.extra ? (
             <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-sm text-white/70">
-              {Object.entries(selected.stats.extra).map(([key, value]) => (
-                <p key={key} className="flex justify-between capitalize">
-                  <span>{key}</span>
-                  <span className="text-white">{value}</span>
-                </p>
-              ))}
+              {Object.entries(selected.stats.extra)
+                .filter(([key]) => key !== "station")
+                .map(([key, value]) => (
+                  <p key={key} className="flex justify-between capitalize">
+                    <span>{key}</span>
+                    <span className="text-white">{value}</span>
+                  </p>
+                ))}
             </div>
+          ) : null}
+          {selected.kind === "subway_station" ? (
+            <button
+              type="button"
+              onClick={onEnterStation}
+              className="mt-3 w-full rounded-xl bg-amber-400 px-3 py-2.5 text-sm font-semibold text-[#1a1206]"
+            >
+              Enter station
+            </button>
           ) : null}
         </aside>
       ) : null}
