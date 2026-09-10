@@ -3,11 +3,13 @@
 import type { Building, CityState } from "@/lib/city/types";
 import { findStadium, isGameNight, stadiumGateTile } from "@/lib/city/stadium";
 import {
+  canEnterLodgingRoom,
   findLodging,
   grantLodgingKey,
   hasLodgingKey,
   lodgingGateTile,
   lodgingUse,
+  type LodgingRoom,
   type LodgingZone,
 } from "@/lib/city/lodging";
 import type { MoveMode } from "@/lib/street/controls";
@@ -17,6 +19,7 @@ import { LodgingWorld } from "@/lib/street/LodgingWorld";
 import { attachPointerInput } from "@/lib/street/keys";
 import { formatClock } from "@/lib/simulation/city/cityTick";
 import { useEffect, useRef, useState } from "react";
+import { LodgingDesk } from "./LodgingDesk";
 import { StreetMinimap } from "./StreetMinimap";
 
 type Interior =
@@ -298,14 +301,15 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
     setInterior({ kind: "lodging", buildingId: interior.buildingId, zone });
   };
 
-  const rentOrVisit = () => {
+  const enterLodgingRoom = (room: LodgingRoom) => {
     if (!lodgingBuilding) return;
-    grantLodgingKey(lodgingBuilding.id);
+    const hotelStay = lodgingUse(lodgingBuilding) === "hotel";
+    if (!canEnterLodgingRoom(lodgingBuilding.id, room, hotelStay, hasKey)) return;
+    grantLodgingKey(lodgingBuilding.id, room.id);
     setHasKey(true);
     goLodgingZone("room");
   };
 
-  const hotel = lodgingBuilding ? lodgingUse(lodgingBuilding) === "hotel" : false;
   const placeName = interior?.kind === "stadium"
     ? "Ravens Ballpark"
     : lodgingBuilding?.name ?? "Street level";
@@ -477,36 +481,12 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
       ) : null}
 
       {atDesk && lodgingBuilding && interior?.kind === "lodging" && interior.zone === "lobby" ? (
-        <div className="pointer-events-auto absolute left-1/2 top-1/2 z-20 w-[min(26rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2">
-          <div className="rounded-2xl border border-amber-300/35 bg-[#14110c]/92 p-5 text-center shadow-2xl backdrop-blur">
-            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Front desk</p>
-            <p className="mt-1 text-lg font-semibold text-white">{lodgingBuilding.name}</p>
-            <p className="mt-2 text-sm text-slate-300">
-              {hotel
-                ? hasKey
-                  ? "Your room is ready. Elevators are to the left."
-                  : "A night in a city-view suite is $189."
-                : "Welcome home. The roof deck is open to residents."}
-            </p>
-            <div className="mt-4 flex flex-col gap-2">
-              <button
-                onClick={rentOrVisit}
-                className="rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-semibold text-[#1a1206]"
-              >
-                {hotel ? (hasKey ? "Go to your room" : "Rent a room") : "Visit your apartment"}
-              </button>
-              {(hasKey || !hotel) && (
-                <button
-                  onClick={() => goLodgingZone("pool")}
-                  className="rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/20"
-                >
-                  Roof deck pool
-                </button>
-              )}
-            </div>
-            <p className="mt-3 text-[0.65rem] text-slate-500">Walk back to the doors and press E to leave</p>
-          </div>
-        </div>
+        <LodgingDesk
+          building={lodgingBuilding}
+          hasKey={hasKey}
+          onEnterRoom={enterLodgingRoom}
+          onPool={() => goLodgingZone("pool")}
+        />
       ) : null}
 
       {interior?.kind === "lodging" && interior.zone !== "lobby" ? (

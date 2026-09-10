@@ -157,11 +157,7 @@ export class LodgingWorld {
     ctx.fillText(hotel ? "Front desk  ·  Welcome" : "Concierge  ·  Residents welcome", w / 2, 150);
     ctx.font = "22px sans-serif";
     ctx.fillStyle = "#c9a44c";
-    ctx.fillText(
-      hotel ? "Rent a room or visit the roof deck" : "Visit your apartment or the roof deck",
-      w / 2,
-      210,
-    );
+    ctx.fillText("Choose a level  ·  Roof deck open", w / 2, 210);
     ctx.fillStyle = "#9aa4ae";
     ctx.fillText(`${clock.day}  ·  ${clock.time}`, w / 2, 262);
     tex.needsUpdate = true;
