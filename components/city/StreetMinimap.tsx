@@ -5,8 +5,6 @@ import { BUS_STOPS, isTramTile } from "@/lib/city/transit";
 import { POI_LEGEND, drawPoiMark, poiKind } from "@/lib/city/minimapPois";
 import { useEffect, useRef } from "react";
 
-const SIZE = 176;
-
 /**
  * Top-down plan of the city with the walker's position, facing, and landmark
  * marks — subway, hotels, civic buildings, and transit.
@@ -18,22 +16,23 @@ export function StreetMinimap({
   state: CityState;
   positionRef: React.RefObject<{ x: number; y: number; yaw: number } | null>;
 }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const baseRef = useRef<HTMLCanvasElement | null>(null);
+  const sizeRef = useRef(240);
 
-  useEffect(() => {
-    const base = document.createElement("canvas");
+  const paintBase = (size: number) => {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    base.width = SIZE * dpr;
-    base.height = SIZE * dpr;
+    const base = document.createElement("canvas");
+    base.width = size * dpr;
+    base.height = size * dpr;
     const ctx = base.getContext("2d");
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    const cell = SIZE / state.size;
-
+    const cell = size / state.size;
     ctx.fillStyle = "#25301f";
-    ctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.fillRect(0, 0, size, size);
 
     for (let y = 0; y < state.size; y++) {
       for (let x = 0; x < state.size; x++) {
@@ -68,19 +67,37 @@ export function StreetMinimap({
       );
     }
 
+    const mark = Math.max(4.2, cell * 1.15);
     for (const stop of BUS_STOPS) {
-      drawPoiMark(ctx, (stop.x + 0.5) * cell, (stop.y + 0.5) * cell, "bus", 3.6);
+      drawPoiMark(ctx, (stop.x + 0.5) * cell, (stop.y + 0.5) * cell, "bus", mark * 0.85);
     }
-
     for (const building of state.buildings.values()) {
       const kind = poiKind(building);
       if (!kind) continue;
-      const cx = (building.origin.x + building.width / 2) * cell;
-      const cy = (building.origin.y + building.depth / 2) * cell;
-      drawPoiMark(ctx, cx, cy, kind, kind === "stadium" ? 5.2 : 4.3);
+      drawPoiMark(
+        ctx,
+        (building.origin.x + building.width / 2) * cell,
+        (building.origin.y + building.depth / 2) * cell,
+        kind,
+        kind === "stadium" ? mark * 1.2 : mark,
+      );
     }
 
     baseRef.current = base;
+    sizeRef.current = size;
+  };
+
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const resize = () => {
+      const width = Math.max(160, Math.round(wrap.clientWidth));
+      paintBase(width);
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(wrap);
+    return () => ro.disconnect();
   }, [state]);
 
   useEffect(() => {
@@ -90,34 +107,36 @@ export function StreetMinimap({
       const canvas = canvasRef.current;
       const base = baseRef.current;
       const position = positionRef.current;
+      const size = sizeRef.current;
       if (canvas && base) {
         const ctx = canvas.getContext("2d");
         if (ctx) {
           const dpr = Math.min(window.devicePixelRatio || 1, 2);
-          if (canvas.width !== SIZE * dpr) {
-            canvas.width = SIZE * dpr;
-            canvas.height = SIZE * dpr;
+          const height = Math.round(size * 0.8);
+          const offsetY = (height - size) / 2;
+          if (canvas.width !== size * dpr || canvas.height !== height * dpr) {
+            canvas.width = size * dpr;
+            canvas.height = height * dpr;
           }
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          ctx.clearRect(0, 0, SIZE, SIZE);
-          ctx.drawImage(base, 0, 0, SIZE, SIZE);
+          ctx.clearRect(0, 0, size, height);
+          ctx.drawImage(base, 0, offsetY, size, size);
 
           if (position) {
-            const cell = SIZE / state.size;
+            const cell = size / state.size;
             const px = position.x * cell;
-            const py = position.y * cell;
-
+            const py = position.y * cell + offsetY;
             const heading = position.yaw + Math.PI / 2;
             const spread = 0.5;
             ctx.beginPath();
             ctx.moveTo(px, py);
-            ctx.arc(px, py, 26, -heading - spread, -heading + spread);
+            ctx.arc(px, py, Math.max(22, cell * 6), -heading - spread, -heading + spread);
             ctx.closePath();
             ctx.fillStyle = "rgba(244, 208, 63, 0.28)";
             ctx.fill();
 
             ctx.beginPath();
-            ctx.arc(px, py, 3.4, 0, Math.PI * 2);
+            ctx.arc(px, py, 3.6, 0, Math.PI * 2);
             ctx.fillStyle = "#f4d03f";
             ctx.fill();
             ctx.strokeStyle = "rgba(0,0,0,0.6)";
@@ -134,12 +153,11 @@ export function StreetMinimap({
   }, [positionRef, state.size]);
 
   return (
-    <div className="pointer-events-none absolute bottom-4 right-4 overflow-hidden rounded-xl border border-white/15 bg-black/40 shadow-2xl backdrop-blur">
-      <canvas
-        ref={canvasRef}
-        style={{ width: SIZE, height: SIZE }}
-        className="block"
-      />
+    <div
+      ref={wrapRef}
+      className="pointer-events-none absolute bottom-4 right-4 flex w-64 flex-col overflow-hidden rounded-xl border border-white/15 bg-black/40 shadow-2xl backdrop-blur"
+    >
+      <canvas ref={canvasRef} className="block w-full aspect-[5/4]" />
       <div className="border-t border-white/10 px-2 py-1 text-center text-[0.58rem] uppercase tracking-wider text-slate-300">
         {state.name}
       </div>
