@@ -18,8 +18,9 @@ import { StadiumWorld } from "@/lib/street/StadiumWorld";
 import { LodgingWorld } from "@/lib/street/LodgingWorld";
 import { attachPointerInput } from "@/lib/street/keys";
 import { formatClock } from "@/lib/simulation/city/cityTick";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { LodgingDesk } from "./LodgingDesk";
+import { RoomComputer } from "./RoomComputer";
 import { StreetMinimap } from "./StreetMinimap";
 
 type Interior =
@@ -43,6 +44,7 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
   const atGateRef = useRef(false);
   const lodgingDoorRef = useRef<Building | null>(null);
   const atDeskRef = useRef(false);
+  const atComputerRef = useRef(false);
   const tickRef = useRef(onTick);
   tickRef.current = onTick;
 
@@ -54,6 +56,8 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
   const [atGate, setAtGate] = useState(false);
   const [lodgingDoor, setLodgingDoor] = useState<Building | null>(null);
   const [atDesk, setAtDesk] = useState(false);
+  const [atComputer, setAtComputer] = useState(false);
+  const [aimComputer, setAimComputer] = useState(false);
   const [hasKey, setHasKey] = useState(false);
   const [spawn, setSpawn] = useState(entry);
 
@@ -225,6 +229,9 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
     lodgingRef.current = world;
     setHasKey(hasLodgingKey(building.id) || lodgingUse(building) === "residences");
     setAtDesk(false);
+    setAtComputer(false);
+    setAimComputer(false);
+    atComputerRef.current = false;
 
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
@@ -244,6 +251,10 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
       consumeKey: (event) => {
         if (event.code !== "KeyE") return false;
         event.preventDefault();
+        if (atComputerRef.current) {
+          setAtComputer(false);
+          return true;
+        }
         if (interior.zone !== "lobby") {
           setInterior({ kind: "lodging", buildingId: building.id, zone: "lobby" });
           return true;
@@ -265,6 +276,8 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
       atDeskRef.current = desk;
       setAtDesk((prev) => (prev === desk ? prev : desk));
       if (desk && document.pointerLockElement === canvas) document.exitPointerLock();
+      const aiming = interior.zone === "room" && !atComputerRef.current && world.aimedAtComputer();
+      setAimComputer((prev) => (prev === aiming ? prev : aiming));
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
@@ -285,10 +298,29 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
   }, [interior, state]);
 
   const requestLock = () => {
-    if (atDesk) return;
+    if (atDesk || atComputer) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     void canvas.requestPointerLock();
+  };
+
+  const onCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (atDesk || atComputer) return;
+    const canvas = canvasRef.current;
+    const world = lodgingRef.current;
+    if (canvas && world && interior?.kind === "lodging" && interior.zone === "room") {
+      const rect = canvas.getBoundingClientRect();
+      const lockedNow = document.pointerLockElement === canvas;
+      const ndcX = lockedNow ? 0 : ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = lockedNow ? 0 : -(((event.clientY - rect.top) / rect.height) * 2 - 1);
+      if (world.aimedAtComputer(ndcX, ndcY)) {
+        atComputerRef.current = true;
+        setAtComputer(true);
+        if (lockedNow) document.exitPointerLock();
+        return;
+      }
+    }
+    requestLock();
   };
 
   const chooseMode = (next: MoveMode) => {
@@ -316,7 +348,7 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
 
   return (
     <div ref={wrapRef} className="absolute inset-0 z-30 bg-[#0b1420]">
-      <canvas ref={canvasRef} className="block h-full w-full" onClick={requestLock} />
+      <canvas ref={canvasRef} className="block h-full w-full" onClick={onCanvasClick} />
 
       {failed ? (
         <div className="absolute inset-0 grid place-items-center bg-[#0b1420] p-6 text-center">
@@ -391,7 +423,7 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
         </div>
       ) : null}
 
-      {!locked && !failed && !atDesk ? (
+      {!locked && !failed && !atDesk && !atComputer ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
           <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
             <p className="text-xs font-semibold text-white">Click to look around</p>
@@ -489,7 +521,27 @@ export function StreetView({ state, entry, onTick, onExit }: Props) {
         />
       ) : null}
 
-      {interior?.kind === "lodging" && interior.zone !== "lobby" ? (
+      {atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
+        <RoomComputer
+          minuteOfDay={state.clock.minuteOfDay}
+          onClose={() => {
+            atComputerRef.current = false;
+            setAtComputer(false);
+          }}
+        />
+      ) : null}
+
+      {aimComputer && !atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-xl border border-sky-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
+            <p className="text-xs text-slate-200">
+              <span className="font-semibold text-white">Click</span> to use the computer
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">

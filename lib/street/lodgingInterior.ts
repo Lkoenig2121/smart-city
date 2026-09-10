@@ -12,7 +12,9 @@ export interface LodgingInterior {
   deskMat: THREE.MeshStandardMaterial | null;
   groundAt: (x: number, z: number) => number;
   nearDesk: (x: number, z: number) => boolean;
+  nearComputer: (x: number, z: number) => boolean;
   nearExit: (x: number, z: number) => boolean;
+  computerHit: THREE.Object3D | null;
   dispose: () => void;
 }
 
@@ -170,7 +172,9 @@ function buildLobby(building: Building): LodgingInterior {
     deskMat,
     groundAt: () => 0,
     nearDesk: (x, z) => Math.abs(x) < 8 && z > -4.4 && z < 1.6,
+    nearComputer: () => false,
     nearExit: (x, z) => z > 12.4 && Math.abs(x) < 8,
+    computerHit: null,
     dispose: () => {
       for (const item of disposables) item.dispose();
       deskMat.dispose();
@@ -269,9 +273,46 @@ function buildRoom(building: Building, state: CityState): LodgingInterior {
   wallB.box(3.4, 1.4, 5.6, 3.8, 0, 0.45, navy);
   wallB.box(3.4, 1.4, 5.6, 1.75, 0.45, 1.05, navy);
   blockers.push({ minX: 3.4, maxX: 5.6, minZ: 1.4, maxZ: 3.8 });
+
+  // Writing desk + computer, door-side of the room.
+  const pcX0 = 3.25;
+  const pcX1 = 6.8;
+  const pcZ0 = 4.65;
+  const pcZ1 = 6.6;
+  trimB.box(pcX0, pcZ0, pcX1, pcZ1, 0, 0.76, wood);
+  trimB.box(pcX0 + 0.08, pcZ0 + 0.08, pcX1 - 0.08, pcZ1 - 0.08, 0.76, 0.82, new THREE.Color("#3a2a1c"));
+  wallB.box(2.15, 4.95, 3.12, 6.25, 0, 0.48, charcoal);
+  wallB.box(2.15, 6.0, 3.12, 6.25, 0.48, 0.95, charcoal);
+  blockers.push({ minX: pcX0, maxX: pcX1, minZ: pcZ0, maxZ: pcZ1 });
+  blockers.push({ minX: 2.15, maxX: 3.12, minZ: 4.95, maxZ: 6.25 });
+  trimB.box(5.55, 5.15, 6.55, 6.15, 0.82, 1.58, charcoal);
+  trimB.box(4.05, 5.2, 5.45, 6.05, 0.82, 0.9, charcoal);
+  trimB.box(5.95, 5.35, 6.25, 5.95, 0.82, 1.08, white);
   void hotel;
 
   assemble(group, floorB, wallB, trimB, disposables);
+
+  const screenGeo = new THREE.PlaneGeometry(0.92, 0.58);
+  const screenMat = new THREE.MeshStandardMaterial({
+    color: "#0b1c2c",
+    emissive: new THREE.Color("#1a6ea8"),
+    emissiveIntensity: 0.85,
+    roughness: 0.22,
+  });
+  const screen = new THREE.Mesh(screenGeo, screenMat);
+  screen.position.set(5.52, 1.22, 5.65);
+  screen.rotation.y = Math.PI / 2;
+  const glow = new THREE.PointLight(0x4aa8e8, 4.5, 5.5, 2);
+  glow.position.set(4.6, 1.25, 5.65);
+  const hitGeo = new THREE.BoxGeometry(3.7, 1.9, 2.2);
+  const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+  const hit = new THREE.Mesh(hitGeo, hitMat);
+  hit.position.set(4.7, 0.95, 5.6);
+  const computer = new THREE.Group();
+  computer.name = "computer";
+  computer.add(screen, hit);
+  group.add(computer, glow);
+  disposables.push(screenGeo, screenMat, hitGeo, hitMat);
 
   return {
     group,
@@ -281,7 +322,9 @@ function buildRoom(building: Building, state: CityState): LodgingInterior {
     deskMat: null,
     groundAt: () => 0,
     nearDesk: () => false,
+    nearComputer: (x, z) => x > 1.05 && x < 5.4 && z > 4.2 && z < 6.55,
     nearExit: (_x, z) => z > 6.6,
+    computerHit: computer,
     dispose: () => {
       for (const item of disposables) item.dispose();
     },
@@ -423,7 +466,9 @@ function buildPool(building: Building): LodgingInterior {
       return 0;
     },
     nearDesk: () => false,
+    nearComputer: () => false,
     nearExit: (_x, z) => z > 12.8,
+    computerHit: null,
     dispose: () => {
       for (const item of disposables) item.dispose();
     },

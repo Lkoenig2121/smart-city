@@ -104,6 +104,19 @@ export class LodgingWorld {
     return this.interior.nearDesk(this.controls.position.x, this.controls.position.z);
   }
 
+  nearComputer() {
+    return this.interior.nearComputer(this.controls.position.x, this.controls.position.z);
+  }
+
+  aimedAtComputer(ndcX = 0, ndcY = 0) {
+    const target = this.interior.computerHit;
+    if (!target || this.zone !== "room") return false;
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
+    const hits = raycaster.intersectObject(target, true);
+    return Boolean(hits[0] && hits[0].distance < 5.8);
+  }
+
   nearExit() {
     return this.interior.nearExit(this.controls.position.x, this.controls.position.z);
   }
