@@ -26,41 +26,76 @@ interface SearchHit {
 
 export function RoomComputer({ minuteOfDay, onClose }: Props) {
   const [tab, setTab] = useState<Tab>("web");
+  const clock = formatMinutes(minuteOfDay);
 
   return (
     <div
-      className="pointer-events-auto absolute inset-0 z-20 grid place-items-center bg-black/55 p-3"
+      className="pointer-events-auto absolute inset-0 z-20 grid place-items-center bg-[#071018]/70 p-4 backdrop-blur-[2px]"
       onClick={onClose}
     >
       <div
-        className="flex h-[min(40rem,calc(100vh-2rem))] w-[min(52rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-500/40 bg-[#0d1117] shadow-2xl"
+        className="flex h-[min(42rem,calc(100vh-2rem))] w-[min(54rem,calc(100%-1.5rem))] flex-col"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-white/10 bg-[#161b22] px-4 py-2.5">
-          <p className="text-[0.65rem] uppercase tracking-[0.22em] text-sky-300">Riverside OS</p>
-          <div className="flex gap-1 rounded-lg bg-black/40 p-0.5">
-            <TabButton active={tab === "web"} onClick={() => setTab("web")} label="Web" />
-            <TabButton active={tab === "stocks"} onClick={() => setTab("stocks")} label="Stocks" />
+        <div className="flex min-h-0 flex-1 flex-col rounded-[1.85rem] bg-gradient-to-b from-[#4a4e55] via-[#2a2d32] to-[#141618] p-[13px] pb-4 pt-3 shadow-[0_28px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/20">
+          <div className="mb-2 flex items-center justify-center">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#6b7078] shadow-[inset_0_1px_1px_rgba(255,255,255,0.35)]" />
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10"
-          >
-            Sleep
-          </button>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.05rem] bg-[#101826] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+            <div className="flex items-center justify-between border-b border-white/10 bg-[#0b1422] px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="flex gap-1.5 pl-1">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+                </span>
+                <p className="ml-2 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-sky-200/80">
+                  Riverside OS
+                </p>
+              </div>
+              <div className="flex gap-1 rounded-full bg-white/5 p-0.5 ring-1 ring-white/10">
+                <TabButton active={tab === "web"} onClick={() => setTab("web")} label="Web" />
+                <TabButton active={tab === "stocks"} onClick={() => setTab("stocks")} label="Stocks" />
+              </div>
+              <div className="flex items-center gap-3">
+                <p className="text-[0.65rem] tabular-nums text-amber-200/90">{clock}</p>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-md px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wider text-slate-400 hover:bg-white/10 hover:text-white"
+                >
+                  Sleep
+                </button>
+              </div>
+            </div>
+            {tab === "web" ? <WebApp minuteOfDay={minuteOfDay} /> : <StockApp minuteOfDay={minuteOfDay} />}
+          </div>
+          <p className="mt-2.5 text-center text-[0.58rem] font-semibold tracking-[0.42em] text-zinc-400">
+            RIVERSIDE
+          </p>
         </div>
-        {tab === "web" ? <WebApp minuteOfDay={minuteOfDay} /> : <StockApp minuteOfDay={minuteOfDay} />}
       </div>
     </div>
   );
 }
 
+function formatMinutes(minuteOfDay: number) {
+  const hour24 = Math.floor(minuteOfDay / 60);
+  const minute = Math.floor(minuteOfDay % 60);
+  const suffix = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour12}:${minute.toString().padStart(2, "0")} ${suffix}`;
+}
+
 function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`rounded-md px-3 py-1 text-xs font-semibold ${
-        active ? "bg-sky-400 text-[#082032]" : "text-slate-300 hover:bg-white/10"
+      className={`rounded-full px-3.5 py-1 text-xs font-semibold transition ${
+        active
+          ? "bg-gradient-to-br from-sky-300 to-emerald-400 text-[#0a1a22] shadow"
+          : "text-slate-300 hover:bg-white/10"
       }`}
     >
       {label}
@@ -194,17 +229,17 @@ function WebApp({ minuteOfDay }: { minuteOfDay: number }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <form onSubmit={search} className="flex gap-2 border-b border-white/10 px-4 py-3">
+      <form onSubmit={search} className="flex gap-2 border-b border-white/10 bg-[#0d1828] px-4 py-3">
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search the web"
-          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2 text-sm text-white outline-none focus:border-sky-400"
+          className="min-w-0 flex-1 rounded-full border border-white/10 bg-[#071018] px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-sky-300"
         />
         <button
           type="submit"
           disabled={loading}
-          className="rounded-lg bg-sky-400 px-3.5 py-2 text-sm font-semibold text-[#082032] disabled:opacity-60"
+          className="rounded-full bg-gradient-to-br from-sky-300 to-emerald-400 px-4 py-2 text-sm font-semibold text-[#0a1a22] disabled:opacity-60"
         >
           {loading ? "…" : "Search"}
         </button>
@@ -302,7 +337,7 @@ function NewsPage({
 }) {
   return (
     <div>
-      <p className="text-[0.65rem] uppercase tracking-[0.18em] text-slate-500">Today’s news</p>
+      <p className="text-[0.65rem] uppercase tracking-[0.18em] text-sky-200/70">Today’s news</p>
       <p className="mt-1 text-sm text-slate-300">Riverside Gazette and the wider web.</p>
       {loading && stories.length === 0 ? <p className="mt-3 text-sm text-slate-500">Loading headlines…</p> : null}
       <ul className="mt-3 space-y-2">

@@ -285,34 +285,11 @@ function buildRoom(building: Building, state: CityState): LodgingInterior {
   wallB.box(2.15, 6.0, 3.12, 6.25, 0.48, 0.95, charcoal);
   blockers.push({ minX: pcX0, maxX: pcX1, minZ: pcZ0, maxZ: pcZ1 });
   blockers.push({ minX: 2.15, maxX: 3.12, minZ: 4.95, maxZ: 6.25 });
-  trimB.box(5.55, 5.15, 6.55, 6.15, 0.82, 1.58, charcoal);
-  trimB.box(4.05, 5.2, 5.45, 6.05, 0.82, 0.9, charcoal);
-  trimB.box(5.95, 5.35, 6.25, 5.95, 0.82, 1.08, white);
   void hotel;
 
   assemble(group, floorB, wallB, trimB, disposables);
 
-  const screenGeo = new THREE.PlaneGeometry(0.92, 0.58);
-  const screenMat = new THREE.MeshStandardMaterial({
-    color: "#0b1c2c",
-    emissive: new THREE.Color("#1a6ea8"),
-    emissiveIntensity: 0.85,
-    roughness: 0.22,
-  });
-  const screen = new THREE.Mesh(screenGeo, screenMat);
-  screen.position.set(5.52, 1.22, 5.65);
-  screen.rotation.y = Math.PI / 2;
-  const glow = new THREE.PointLight(0x4aa8e8, 4.5, 5.5, 2);
-  glow.position.set(4.6, 1.25, 5.65);
-  const hitGeo = new THREE.BoxGeometry(3.7, 1.9, 2.2);
-  const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
-  const hit = new THREE.Mesh(hitGeo, hitMat);
-  hit.position.set(4.7, 0.95, 5.6);
-  const computer = new THREE.Group();
-  computer.name = "computer";
-  computer.add(screen, hit);
-  group.add(computer, glow);
-  disposables.push(screenGeo, screenMat, hitGeo, hitMat);
+  const computer = addDeskComputer(group, disposables);
 
   return {
     group,
@@ -329,6 +306,181 @@ function buildRoom(building: Building, state: CityState): LodgingInterior {
       for (const item of disposables) item.dispose();
     },
   };
+}
+
+function addDeskComputer(group: THREE.Group, disposables: Array<{ dispose: () => void }>) {
+  const computer = new THREE.Group();
+  computer.name = "computer";
+
+  const silverMat = new THREE.MeshStandardMaterial({
+    color: "#c8ccd1",
+    roughness: 0.28,
+    metalness: 0.62,
+  });
+  const inkMat = new THREE.MeshStandardMaterial({
+    color: "#1a1c20",
+    roughness: 0.4,
+    metalness: 0.2,
+  });
+  const keyMat = new THREE.MeshStandardMaterial({
+    color: "#ece8e1",
+    roughness: 0.55,
+    metalness: 0.08,
+  });
+  disposables.push(silverMat, inkMat, keyMat);
+
+  const addBox = (
+    mat: THREE.MeshStandardMaterial,
+    w: number,
+    h: number,
+    d: number,
+    x: number,
+    y: number,
+    z: number,
+  ) => {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    computer.add(mesh);
+    disposables.push(geo);
+    return mesh;
+  };
+
+  const cx = 6.22;
+  const cz = 5.62;
+  const deskY = 0.82;
+  const screenW = 1.72;
+  const screenH = 1.08;
+
+  // Stand foot and neck.
+  addBox(silverMat, 0.55, 0.05, 0.42, cx, deskY + 0.04, cz);
+  addBox(silverMat, 0.08, 0.42, 0.08, cx, deskY + 0.28, cz);
+
+  // Bezel + chin.
+  addBox(inkMat, 0.07, screenH + 0.18, screenW + 0.16, cx, deskY + 0.92, cz);
+  addBox(silverMat, 0.08, 0.1, screenW + 0.18, cx, deskY + 0.32, cz);
+
+  const wallpaper = makeComputerWallpaper();
+  const screenMat = new THREE.MeshStandardMaterial({
+    color: "#ffffff",
+    map: wallpaper ?? undefined,
+    emissive: new THREE.Color("#ffffff"),
+    emissiveMap: wallpaper ?? undefined,
+    emissiveIntensity: 0.55,
+    roughness: 0.18,
+    metalness: 0.05,
+  });
+  const screenGeo = new THREE.PlaneGeometry(screenW, screenH);
+  const screen = new THREE.Mesh(screenGeo, screenMat);
+  screen.position.set(cx - 0.045, deskY + 0.96, cz);
+  screen.rotation.y = -Math.PI / 2;
+  computer.add(screen);
+  disposables.push(screenGeo, screenMat);
+  if (wallpaper) disposables.push(wallpaper);
+
+  // Camera jewel on the bezel.
+  addBox(silverMat, 0.03, 0.03, 0.03, cx - 0.05, deskY + 1.48, cz);
+
+  // Keyboard and mouse.
+  addBox(silverMat, 0.42, 0.03, 1.12, 4.55, deskY + 0.03, cz);
+  addBox(keyMat, 0.34, 0.025, 1.0, 4.55, deskY + 0.055, cz);
+  addBox(inkMat, 0.18, 0.035, 0.12, 5.28, deskY + 0.04, 6.12);
+
+  const glow = new THREE.PointLight(0x9ecfff, 3.2, 5.2, 2);
+  glow.position.set(4.7, 1.35, cz);
+  computer.add(glow);
+
+  const hitGeo = new THREE.BoxGeometry(3.7, 1.9, 2.2);
+  const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+  const hit = new THREE.Mesh(hitGeo, hitMat);
+  hit.position.set(4.7, 0.95, 5.6);
+  computer.add(hit);
+  disposables.push(hitGeo, hitMat);
+
+  group.add(computer);
+  return computer;
+}
+
+function makeComputerWallpaper() {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 768;
+  canvas.height = 480;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  const sky = ctx.createLinearGradient(0, 0, 0, 480);
+  sky.addColorStop(0, "#3d6aa8");
+  sky.addColorStop(0.42, "#f0b27a");
+  sky.addColorStop(0.62, "#c26b4a");
+  sky.addColorStop(1, "#16324a");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, 768, 480);
+
+  ctx.fillStyle = "#ffd19a";
+  ctx.beginPath();
+  ctx.arc(560, 168, 44, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#1d4f70";
+  ctx.fillRect(0, 290, 768, 190);
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.fillRect(0, 318, 768, 10);
+
+  ctx.fillStyle = "#2a3138";
+  for (let i = 0; i < 9; i++) {
+    const x = 40 + i * 82;
+    const h = 70 + ((i * 37) % 90);
+    ctx.fillRect(x, 290 - h, 54, h);
+  }
+
+  ctx.fillStyle = "rgba(10,14,22,0.55)";
+  roundRect(ctx, 180, 400, 408, 54, 18);
+  ctx.fill();
+  const icons = ["#7dd3fc", "#fbbf24", "#86efac", "#f9a8d4", "#c4b5fd"];
+  icons.forEach((color, i) => {
+    ctx.fillStyle = color;
+    roundRect(ctx, 214 + i * 72, 412, 30, 30, 8);
+    ctx.fill();
+  });
+
+  ctx.fillStyle = "rgba(12,18,28,0.45)";
+  roundRect(ctx, 24, 16, 720, 36, 10);
+  ctx.fill();
+  ctx.fillStyle = "#f4efe4";
+  ctx.font = "600 18px system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("Riverside OS", 40, 40);
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#e8c36a";
+  ctx.fillText("Harborview", 728, 40);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 function addCityView(
