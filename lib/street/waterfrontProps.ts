@@ -70,6 +70,11 @@ export function addWaterfrontDecor(
   };
 }
 
+/** True when the boardwalk meets an east–west bridge — leave that opening clear. */
+function isBridgeCrossing(state: CityState, x: number, y: number) {
+  return Boolean(state.tiles[y]?.[x]?.bridge || state.tiles[y]?.[x + 1]?.bridge);
+}
+
 function addPromenadeTrim(
   state: CityState,
   trimB: MeshBuilder,
@@ -87,8 +92,9 @@ function addPromenadeTrim(
     const railX = state.tiles[y]?.[sandX]?.road ? sandX : boardwalk;
     const z0 = y * TILE;
     const z1 = z0 + TILE;
+    const bridgeOpening = isBridgeCrossing(state, railX, y);
 
-    if (state.tiles[y]?.[railX]?.road) {
+    if (state.tiles[y]?.[railX]?.road && !bridgeOpening) {
       const x1 = (railX + 1) * TILE;
       const waterEdge = x1 - 0.22;
       for (let i = 0; i < 4; i++) {
