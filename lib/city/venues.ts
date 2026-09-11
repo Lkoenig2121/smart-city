@@ -138,7 +138,7 @@ export function markNotableVenues(buildings: Map<string, Building>) {
   const list = [...buildings.values()].sort(
     (a, b) => a.origin.y - b.origin.y || a.origin.x - b.origin.x,
   );
-  const shops = list.filter((b) => b.kind === "shop");
+  const shops = list.filter((b) => b.kind === "shop" && !b.stats.extra?.waterfront);
   if (shops[0]) markVenue(shops[0], "shop");
   if (shops[1]) markVenue(shops[1], "restaurant");
   if (shops[2]) markVenue(shops[2], "bank");
@@ -153,9 +153,9 @@ export function markNotableVenues(buildings: Map<string, Building>) {
   );
   for (const building of towers.slice(0, 2)) markVenue(building, "office");
 
-  const houses = list.filter((b) => b.kind === "house");
+  const houses = list.filter((b) => b.kind === "house" && !b.stats.extra?.waterfront);
   for (const building of houses.slice(0, 3)) markVenue(building, "house");
 
-  const apartments = list.filter((b) => b.kind === "apartment");
+  const apartments = list.filter((b) => b.kind === "apartment" && !b.stats.extra?.waterfront);
   for (const building of apartments.slice(0, 2)) markVenue(building, "apartment");
 }

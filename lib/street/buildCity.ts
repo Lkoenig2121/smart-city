@@ -4,6 +4,8 @@ import { lodgingUse } from "@/lib/city/lodging";
 import { BUS_STOPS, isTramTile } from "@/lib/city/transit";
 import { MeshBuilder } from "./meshBuilder";
 import { BAY_W, FLOOR_H, asphaltTexture, facade, rippleNormal, type FacadeStyle } from "./textures";
+import { addWaterfrontDecor } from "./waterfrontProps";
+import { isPromenadeTile } from "@/lib/city/waterfront";
 
 /** World units per city tile. One tile is roughly a ten metre plot. */
 export const TILE = 10;
@@ -27,6 +29,7 @@ const TERRAIN_COLOR: Record<Terrain, string> = {
 };
 
 const ROAD_COLOR = "#3b3d43";
+const BOARDWALK_COLOR = "#6a5640";
 const SIDEWALK_COLOR = "#a8a49b";
 const MARKING_COLOR = "#cfc7ab";
 
@@ -65,6 +68,10 @@ export interface CityMeshes {
   emissiveMaterials: THREE.MeshStandardMaterial[];
   /** Street-lamp globes; brighter at night than window glass. */
   lampGlow: THREE.MeshStandardMaterial | null;
+  /** Moored boats; bobbed each frame. */
+  boats: THREE.Group | null;
+  /** Ferris wheel; spun each frame. */
+  ferrisWheel: THREE.Group | null;
   dispose: () => void;
 }
 
@@ -123,6 +130,7 @@ export function buildCity(state: CityState): CityMeshes {
       }
 
       if (tile.road) {
+        const boardwalk = isPromenadeTile(x, y);
         // Pavements hug the edges that face something other than road.
         const north = isRoad(state.tiles, x, y - 1);
         const south = isRoad(state.tiles, x, y + 1);
@@ -134,10 +142,10 @@ export function buildCity(state: CityState): CityMeshes {
         const az0 = north ? z0 : z0 + SIDEWALK_W;
         const az1 = south ? z1 : z1 - SIDEWALK_W;
 
-        scratch.set(ROAD_COLOR);
+        scratch.set(boardwalk ? BOARDWALK_COLOR : ROAD_COLOR);
         roadB.ground(ax0, az0, ax1, az1, 0, scratch, TILE / 4, TILE / 4);
 
-        scratch.set(SIDEWALK_COLOR);
+        scratch.set(boardwalk ? "#c4b49a" : SIDEWALK_COLOR);
         if (!west) addSidewalk(concreteB, x0, z0, x0 + SIDEWALK_W, z1, scratch);
         if (!east) addSidewalk(concreteB, x1 - SIDEWALK_W, z0, x1, z1, scratch);
         if (!north) addSidewalk(concreteB, ax0, z0, ax1, z0 + SIDEWALK_W, scratch);
@@ -155,12 +163,12 @@ export function buildCity(state: CityState): CityMeshes {
           trimB.box(cx + 0.95, az0, cx + 1.15, az1, 0.02, 0.05, scratch);
         }
 
-        if (straightNS) {
+        if (!boardwalk && straightNS) {
           for (let i = 0; i < 2; i++) {
             const zs = z0 + i * (TILE / 2) + TILE * 0.12;
             roadB.ground(cx - 0.14, zs, cx + 0.14, zs + TILE * 0.26, 0.012, scratch);
           }
-        } else if (straightEW) {
+        } else if (!boardwalk && straightEW) {
           for (let i = 0; i < 2; i++) {
             const xs = x0 + i * (TILE / 2) + TILE * 0.12;
             roadB.ground(xs, cz - 0.14, xs + TILE * 0.26, cz + 0.14, 0.012, scratch);
@@ -189,6 +197,8 @@ export function buildCity(state: CityState): CityMeshes {
   for (const stop of BUS_STOPS) {
     addBusShelter(stop.x, stop.y, state.tiles, trimB, roofB);
   }
+
+  const waterfront = addWaterfrontDecor(state, group, trimB, lampHeadB, lamps, blockers);
 
   // ─── Bridges ───────────────────────────────────────────────────────────────
   for (let y = 0; y < size; y++) {
@@ -302,7 +312,10 @@ export function buildCity(state: CityState): CityMeshes {
     lamps,
     emissiveMaterials,
     lampGlow,
+    boats: waterfront.boats,
+    ferrisWheel: waterfront.ferrisWheel,
     dispose: () => {
+      waterfront.dispose();
       for (const item of disposables) item.dispose();
     },
   };

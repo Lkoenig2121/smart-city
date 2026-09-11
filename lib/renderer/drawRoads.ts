@@ -1,4 +1,5 @@
 import { TILE_H, TILE_W, diamondPoints } from "@/lib/city/iso";
+import { isPromenadeTile } from "@/lib/city/waterfront";
 import { isTramTile } from "@/lib/city/transit";
 import type { RoadCell } from "@/lib/city/types";
 import { drawDiamond } from "./drawIso";
@@ -15,9 +16,10 @@ export function drawRoadTile(
   drawDiamond(ctx, x, y, lit("#3c3d44", light, "ground"));
 
   const d = diamondPoints(x, y);
-  const asphalt = lit("#3c3d44", light, "ground");
+  const boardwalk = isPromenadeTile(x, y);
+  const asphalt = lit(boardwalk ? "#6a5640" : "#3c3d44", light, "ground");
   const mark = alpha(lit("#d9d4c4", light, "top"), light.phase === "night" ? 0.35 : 0.7);
-  const walk = lit("#c4bfb4", light, "ground");
+  const walk = lit(boardwalk ? "#c4b49a" : "#c4bfb4", light, "ground");
 
   ctx.lineJoin = "round";
 
@@ -34,7 +36,12 @@ export function drawRoadTile(
 
   const straightNS = road.north && road.south && !road.east && !road.west;
   const straightEW = road.east && road.west && !road.north && !road.south;
-  if (straightNS) {
+  if (boardwalk) {
+    // Plank grain instead of lane paint.
+    ctx.strokeStyle = alpha(lit("#4a3b2c", light, "ground"), 0.35);
+    ctx.lineWidth = 0.8;
+    dashed(ctx, d.top.x, d.top.y + 8, d.bottom.x, d.bottom.y - 8, ctx.strokeStyle);
+  } else if (straightNS) {
     dashed(ctx, d.top.x, d.top.y + 6, d.bottom.x, d.bottom.y - 6, mark);
   } else if (straightEW) {
     dashed(ctx, d.left.x + 8, d.left.y, d.right.x - 8, d.right.y, mark);

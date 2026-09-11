@@ -344,6 +344,24 @@ export class StreetWorld {
       }
     }
 
+    const boats = this.city.boats;
+    if (boats) {
+      for (const child of boats.children) {
+        const phase = typeof child.userData.bob === "number" ? child.userData.bob : 0;
+        child.position.y = Math.sin(this.time * 1.35 + phase) * 0.14;
+      }
+    }
+    const wheel = this.city.ferrisWheel;
+    if (wheel) {
+      wheel.rotation.x = this.time * 0.18;
+      const gondolas = wheel.userData.gondolas as THREE.Mesh[] | undefined;
+      if (gondolas) {
+        for (const gondola of gondolas) {
+          gondola.rotation.x = -wheel.rotation.x;
+        }
+      }
+    }
+
     this.renderer.render(this.scene, this.camera);
   }
 

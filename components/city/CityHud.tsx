@@ -10,6 +10,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: "office", label: "Offices", hint: "Place an office" },
   { id: "stadium", label: "Stadium", hint: "Ravens Ballpark · $750K · 5,000 people, road, parking" },
   { id: "park", label: "Parks", hint: "Grow a park tile" },
+  { id: "sand", label: "Sand", hint: "Paint a beach" },
   { id: "parking", label: "Parking", hint: "Paint a parking lot" },
   { id: "tree", label: "Trees", hint: "Plant a tree" },
   { id: "bulldoze", label: "Clear", hint: "Remove a tile" },
@@ -173,7 +174,7 @@ export function CityHud({
           {selected.stats.extra ? (
             <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-sm text-white/70">
               {Object.entries(selected.stats.extra)
-                .filter(([key]) => key !== "station")
+                .filter(([key]) => key !== "station" && key !== "venue")
                 .map(([key, value]) => (
                   <p key={key} className="flex justify-between capitalize">
                     <span>{key}</span>

@@ -1,6 +1,7 @@
 import { diamondPoints, tileCenter } from "@/lib/city/iso";
 import { hash2 } from "@/lib/city/rng";
 import type { Graffiti, Terrain } from "@/lib/city/types";
+import { isWestBank, isWestShoreWater } from "@/lib/city/waterfront";
 import { paintGraffiti } from "./drawBridges";
 import { drawDiamond } from "./drawIso";
 import { alpha, lit, mix, shade, type Lighting } from "./palette";
@@ -32,10 +33,14 @@ export function drawTerrainTile(
   if (terrain === "park") base = mix("#348646", n > 0.55 ? "#4ca05a" : "#2d7340", 0.4);
   if (terrain === "plaza") base = mix("#c9c0b2", "#b7afa0", n);
   if (terrain === "lot") base = mix("#8d8a84", "#7a7771", n);
-  if (terrain === "sand") base = mix("#d6c38a", "#c4af74", n);
+  if (terrain === "sand") {
+    const beach = isWestBank(x, y) || y <= 8;
+    base = mix(beach ? "#e2d09a" : "#d6c38a", beach ? "#d4bc7c" : "#c4af74", n);
+  }
 
   if (terrain === "water") {
     drawWaterTile(ctx, x, y, light, time, n, n2);
+    if (isWestShoreWater(x, y)) drawWestSurf(ctx, x, y, light, time);
     return;
   }
 
@@ -220,4 +225,66 @@ function drawWaterTile(
       ctx.fill();
     }
   }
+}
+
+/** Breaking foam on the HUD-side (west) river edge. */
+function drawWestSurf(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  light: Lighting,
+  time: number,
+) {
+  const d = diamondPoints(x, y);
+  const c = tileCenter(x, y);
+  const crest = 0.5 + 0.5 * Math.sin(time * 2.1 + y * 0.55);
+  const foam = alpha(lit("#f4fbff", light, "top"), 0.22 + crest * 0.35);
+  const wash = alpha(lit("#c5e8f4", light, "ground"), 0.18 + crest * 0.2);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(d.top.x, d.top.y);
+  ctx.lineTo(d.left.x, d.left.y);
+  ctx.lineTo(d.bottom.x, d.bottom.y);
+  ctx.closePath();
+  ctx.clip();
+
+  ctx.fillStyle = wash;
+  ctx.beginPath();
+  ctx.moveTo(d.top.x, d.top.y);
+  ctx.quadraticCurveTo(
+    d.left.x + 6,
+    d.left.y - 2 + crest * 3,
+    d.bottom.x,
+    d.bottom.y,
+  );
+  ctx.lineTo(d.left.x, d.left.y);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = foam;
+  ctx.lineWidth = 2.2 + crest * 1.4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(d.top.x + 4, d.top.y + 6);
+  ctx.quadraticCurveTo(
+    c.x - 18,
+    c.y + Math.sin(time * 2.4 + y) * 3,
+    d.bottom.x + 4,
+    d.bottom.y - 6,
+  );
+  ctx.stroke();
+
+  ctx.strokeStyle = alpha(lit("#ffffff", light, "top"), 0.15 + crest * 0.25);
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(d.top.x + 10, d.top.y + 10);
+  ctx.quadraticCurveTo(
+    c.x - 10,
+    c.y + 2 + Math.cos(time * 1.7 + y * 0.4) * 2,
+    d.bottom.x + 8,
+    d.bottom.y - 8,
+  );
+  ctx.stroke();
+  ctx.restore();
 }

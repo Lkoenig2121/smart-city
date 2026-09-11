@@ -107,6 +107,13 @@ export class CityEngine {
       return true;
     }
 
+    if (this.tool === "sand") {
+      if (tile.road || tile.buildingId || tile.terrain === "water") return false;
+      tile.terrain = "sand";
+      tile.tree = null;
+      return true;
+    }
+
     const kind = toolToKind(this.tool);
     if (!kind) return false;
     if (kind === "baseball_stadium") {

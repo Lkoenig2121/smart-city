@@ -343,6 +343,7 @@ export function kindLabel(target: Building | BuildingKind) {
     case "house":
       return "Residence";
     case "apartment":
+      if (lodging === "hotel") return "Hotel";
       return "Apartment";
     case "shop":
       return "Business";

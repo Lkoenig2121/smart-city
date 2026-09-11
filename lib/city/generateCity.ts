@@ -1,6 +1,11 @@
 import { createBuilding, footprintFor } from "@/lib/simulation/buildings/buildings";
 import { markLodging } from "./lodging";
 import { SUBWAY_STATIONS, markSubwayStation } from "./subway";
+import { markNotableVenues } from "./venues";
+import {
+  RIVER_W,
+  riverXAt,
+} from "./waterfront";
 import { citizenName } from "./names";
 import { mulberry32, pick, randInt, randRange } from "./rng";
 import type {
@@ -19,14 +24,7 @@ import type {
 const SIZE = 40;
 const ARTERIALS = [5, 12, 20, 27, 34];
 
-/** Water spans `riverXAt(y)` through `riverXAt(y) + RIVER_W - 1`. */
-const RIVER_W = 4;
-
 export const BRIDGE_DECK = 22;
-
-function riverXAt(y: number) {
-  return 7 + Math.round(Math.sin(y * 0.18) * 1.2);
-}
 
 function emptyTile(x: number, y: number): Tile {
   return {
@@ -108,6 +106,21 @@ function fillRect(
       tile.terrain = terrain;
     }
   }
+}
+
+/** Overwrites grass (and optionally sand) so the beach and park can claim the bank. */
+function paintOpen(
+  tiles: Tile[][],
+  x: number,
+  y: number,
+  terrain: Terrain,
+) {
+  if (!inBounds(x, y)) return;
+  const tile = tiles[y][x];
+  if (tile.road || tile.buildingId) return;
+  if (tile.terrain === "water") return;
+  tile.terrain = terrain;
+  if (terrain === "sand" || terrain === "park") tile.tree = null;
 }
 
 function makeGraffiti(rand: () => number): Graffiti {
@@ -241,6 +254,8 @@ export function generateCity(seed = 20260903): CityState {
     for (let x = 1; x <= 4; x++) addRoad(tiles, x, y);
   }
   for (let y = 6; y <= 34; y++) addRoad(tiles, 2, y);
+  // Boardwalk rides the existing west sand bank so it does not take house lots.
+  for (let y = 9; y <= 38; y++) addRoad(tiles, riverXAt(y) - 1, y);
 
   for (const y of [12, 20, 27]) {
     buildBridge(tiles, y, rand, y === 20);
@@ -317,15 +332,28 @@ export function generateCity(seed = 20260903): CityState {
     }
   }
 
+  // Beach fills empty ground on the west bank (the screen-left shore by the HUD).
+  // Buildings and roads stay put — sand only claims leftover grass.
+  for (let y = 0; y < SIZE; y++) {
+    const river = riverXAt(y);
+    const inland = y <= 8 ? 0 : river - 3;
+    for (let x = inland; x < river; x++) {
+      paintOpen(tiles, x, y, "sand");
+    }
+  }
+
   // Tags accumulate on the retaining walls along both riverbanks.
   for (let y = 0; y < SIZE; y++) {
     for (let x = 0; x < SIZE; x++) {
       const tile = tiles[y][x];
       if (tile.terrain !== "sand" || tile.graffiti) continue;
       if (tile.buildingId) continue;
+      if (y <= 8) continue;
       if (rand() < 0.22) tile.graffiti = makeGraffiti(rand);
     }
   }
+
+  markNotableVenues(buildings);
 
   const homes = [...buildings.values()].filter(
     (b) => b.kind === "house" || b.kind === "apartment",

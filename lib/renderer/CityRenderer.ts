@@ -7,6 +7,7 @@ import { drawCitizen } from "./drawCitizens";
 import { drawFountain, drawTree } from "./drawVegetation";
 import { drawRoadTile } from "./drawRoads";
 import { drawTerrainTile } from "./drawTerrain";
+import { drawWaterfrontDecor } from "./drawWaterfront";
 import { drawVehicle } from "./drawVehicles";
 import { CityCamera, tileVisible } from "./camera";
 import { alpha, lightingFor, lit } from "./palette";
@@ -104,6 +105,7 @@ export class CityRenderer {
         if (x === 20 && y === 26 && tile.terrain === "park") {
           drawFountain(ctx, x, y, light, this.time);
         }
+        drawWaterfrontDecor(ctx, x, y, tile, light, this.time);
       }
 
       // Draw vehicles and citizens at this depth row (after buildings at

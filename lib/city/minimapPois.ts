@@ -13,7 +13,10 @@ export type PoiKind =
   | "city_hall"
   | "stadium"
   | "bank"
-  | "bus";
+  | "bus"
+  | "marina"
+  | "beach"
+  | "ferris";
 
 export const POI_LEGEND: { kind: PoiKind; label: string }[] = [
   { kind: "subway", label: "Subway" },
@@ -26,6 +29,9 @@ export const POI_LEGEND: { kind: PoiKind; label: string }[] = [
   { kind: "stadium", label: "Stadium" },
   { kind: "bank", label: "Bank" },
   { kind: "bus", label: "Bus" },
+  { kind: "marina", label: "Marina" },
+  { kind: "beach", label: "Beach" },
+  { kind: "ferris", label: "Pier" },
 ];
 
 export function poiKind(building: Building): PoiKind | null {
@@ -55,6 +61,9 @@ const FILL: Record<PoiKind, string> = {
   stadium: "#1f4d8c",
   bank: "#2f5d4a",
   bus: "#5d7384",
+  marina: "#1d6a8a",
+  beach: "#d6c38a",
+  ferris: "#c45c4a",
 };
 
 export function drawPoiMark(
@@ -159,6 +168,37 @@ function drawGlyph(
       ctx.fillStyle = FILL.bus;
       ctx.fillRect(cx - r * 0.28, cy - r * 0.12, r * 0.22, r * 0.16);
       ctx.fillRect(cx + r * 0.02, cy - r * 0.12, r * 0.22, r * 0.16);
+      break;
+    case "marina":
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r * 0.48);
+      ctx.lineTo(cx, cy + r * 0.42);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r * 0.18);
+      ctx.lineTo(cx + r * 0.42, cy + r * 0.08);
+      ctx.lineTo(cx, cy + r * 0.22);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case "beach":
+      ctx.beginPath();
+      ctx.arc(cx, cy + r * 0.12, r * 0.38, Math.PI, 0);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + r * 0.12);
+      ctx.lineTo(cx, cy - r * 0.42);
+      ctx.stroke();
+      break;
+    case "ferris":
+      ctx.beginPath();
+      ctx.arc(cx, cy - r * 0.06, r * 0.38, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.22, cy + r * 0.42);
+      ctx.lineTo(cx, cy - r * 0.06);
+      ctx.lineTo(cx + r * 0.22, cy + r * 0.42);
+      ctx.stroke();
       break;
   }
 }

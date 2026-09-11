@@ -3,6 +3,7 @@
 import type { CityState } from "@/lib/city/types";
 import { BUS_STOPS, isTramTile } from "@/lib/city/transit";
 import { POI_LEGEND, drawPoiMark, poiKind } from "@/lib/city/minimapPois";
+import { isPromenadeTile, waterfrontPois } from "@/lib/city/waterfront";
 import { useEffect, useRef } from "react";
 
 /**
@@ -47,7 +48,7 @@ export function StreetMinimap({
           ctx.fillRect(x * cell, y * cell, cell + 0.5, cell + 0.5);
         }
         if (tile.road) {
-          ctx.fillStyle = tile.bridge ? "#8d8a80" : "#6a6c72";
+          ctx.fillStyle = tile.bridge ? "#8d8a80" : isPromenadeTile(x, y) ? "#8a7354" : "#6a6c72";
           ctx.fillRect(x * cell, y * cell, cell + 0.5, cell + 0.5);
         }
         if (isTramTile(x, y)) {
@@ -81,6 +82,9 @@ export function StreetMinimap({
         kind,
         kind === "stadium" ? mark * 1.2 : mark,
       );
+    }
+    for (const poi of waterfrontPois()) {
+      drawPoiMark(ctx, poi.x * cell, poi.y * cell, poi.kind, mark);
     }
 
     baseRef.current = base;

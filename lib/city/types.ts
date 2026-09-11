@@ -34,6 +34,7 @@ export type Tool =
   | "office"
   | "park"
   | "parking"
+  | "sand"
   | "tree"
   | "stadium"
   | "bulldoze";
