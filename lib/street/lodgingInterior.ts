@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { Building, CityState } from "@/lib/city/types";
-import { lodgingUse, type LodgingZone } from "@/lib/city/lodging";
+import { lodgingUse, type LodgingRoom, type LodgingZone } from "@/lib/city/lodging";
 import type { Blocker } from "./buildCity";
 import { MeshBuilder } from "./meshBuilder";
 
@@ -24,8 +24,13 @@ const INK = "#1a1a1a";
 const WATER = "#2aa8c4";
 const WATER_SHALLOW = "#5ec8d6";
 
-export function buildLodgingInterior(building: Building, zone: LodgingZone, state: CityState): LodgingInterior {
-  if (zone === "room") return buildRoom(building, state);
+export function buildLodgingInterior(
+  building: Building,
+  zone: LodgingZone,
+  state: CityState,
+  room: LodgingRoom | null = null,
+): LodgingInterior {
+  if (zone === "room") return buildRoom(building, state, room);
   if (zone === "pool") return buildPool(building);
   return buildLobby(building);
 }
@@ -182,7 +187,7 @@ function buildLobby(building: Building): LodgingInterior {
   };
 }
 
-function buildRoom(building: Building, state: CityState): LodgingInterior {
+function buildRoom(building: Building, state: CityState, room: LodgingRoom | null): LodgingInterior {
   const group = new THREE.Group();
   const blockers: Blocker[] = [];
   const disposables: Array<{ dispose: () => void }> = [];
@@ -190,6 +195,7 @@ function buildRoom(building: Building, state: CityState): LodgingInterior {
   const wallB = new MeshBuilder();
   const trimB = new MeshBuilder();
   const hotel = lodgingUse(building) === "hotel";
+  const club = Boolean(room && hotel && room.floor >= Math.max(2, building.floors - 2));
 
   const minX = -7.5;
   const maxX = 7.5;
@@ -200,13 +206,13 @@ function buildRoom(building: Building, state: CityState): LodgingInterior {
   const winX1 = 3.25;
   const winY0 = 1.05;
   const winY1 = 3.55;
-  const carpet = new THREE.Color("#d8d0c4");
-  const goldWall = new THREE.Color("#c9b17a");
-  const wood = new THREE.Color("#5a3d28");
-  const white = new THREE.Color("#f4f1ea");
-  const navy = new THREE.Color("#1e3a6b");
+  const carpet = new THREE.Color(club ? "#3d3a48" : hotel ? "#d8d0c4" : "#cfc4b4");
+  const goldWall = new THREE.Color(club ? "#2c3344" : hotel ? "#c9b17a" : "#d4c4a8");
+  const wood = new THREE.Color(club ? "#2a2420" : "#5a3d28");
+  const white = new THREE.Color(club ? "#e8e2d4" : "#f4f1ea");
+  const navy = new THREE.Color(club ? "#c9a44c" : "#1e3a6b");
   const charcoal = new THREE.Color("#2c2c2c");
-  const ceiling = new THREE.Color("#efe8dc");
+  const ceiling = new THREE.Color(club ? "#1c1a22" : "#efe8dc");
 
   floorB.ground(minX, minZ, maxX, maxZ, 0, carpet);
   addCeiling(floorB, minX, minZ, maxX, maxZ, ceilY, ceiling);
@@ -251,7 +257,7 @@ function buildRoom(building: Building, state: CityState): LodgingInterior {
   group.add(glass);
   disposables.push(glassGeo, glassMat);
 
-  addCityView(floorB, wallB, trimB, building, state, minZ);
+  addCityView(floorB, wallB, trimB, building, state, minZ, room?.floor ?? 8);
 
   // Bed.
   trimB.box(-6.6, -1.4, -1.1, 5.2, 0, 0.55, wood);
@@ -285,7 +291,8 @@ function buildRoom(building: Building, state: CityState): LodgingInterior {
   wallB.box(2.15, 6.0, 3.12, 6.25, 0.48, 0.95, charcoal);
   blockers.push({ minX: pcX0, maxX: pcX1, minZ: pcZ0, maxZ: pcZ1 });
   blockers.push({ minX: 2.15, maxX: 3.12, minZ: 4.95, maxZ: 6.25 });
-  void hotel;
+
+  addRoomPlaque(group, disposables, room, hotel, maxZ);
 
   assemble(group, floorB, wallB, trimB, disposables);
 
@@ -306,6 +313,51 @@ function buildRoom(building: Building, state: CityState): LodgingInterior {
       for (const item of disposables) item.dispose();
     },
   };
+}
+
+function addRoomPlaque(
+  group: THREE.Group,
+  disposables: Array<{ dispose: () => void }>,
+  room: LodgingRoom | null,
+  hotel: boolean,
+  doorZ: number,
+) {
+  const canvas = typeof document === "undefined" ? null : document.createElement("canvas");
+  if (canvas) {
+    canvas.width = 512;
+    canvas.height = 192;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.fillStyle = "#1a1612";
+      ctx.fillRect(0, 0, 512, 192);
+      ctx.fillStyle = "#c9a44c";
+      ctx.fillRect(0, 0, 512, 10);
+      ctx.fillRect(0, 182, 512, 10);
+      ctx.fillStyle = "#f4e6c0";
+      ctx.font = "600 28px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(hotel ? "GUEST ROOM" : "RESIDENCE", 256, 58);
+      ctx.font = "700 72px system-ui, sans-serif";
+      ctx.fillText(room?.label ?? "—", 256, 140);
+    }
+  }
+
+  const tex = canvas ? new THREE.CanvasTexture(canvas) : null;
+  if (tex) tex.colorSpace = THREE.SRGBColorSpace;
+  const plate = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.35, 0.5),
+    new THREE.MeshStandardMaterial({
+      color: "#c9a44c",
+      map: tex ?? undefined,
+      roughness: 0.35,
+      metalness: 0.25,
+    }),
+  );
+  plate.position.set(0, 1.55, doorZ - 0.42);
+  plate.rotation.y = Math.PI;
+  group.add(plate);
+  disposables.push(plate.geometry, plate.material);
+  if (tex) disposables.push(tex);
 }
 
 function addDeskComputer(group: THREE.Group, disposables: Array<{ dispose: () => void }>) {
@@ -490,8 +542,9 @@ function addCityView(
   here: Building,
   state: CityState,
   windowZ: number,
+  floor = 8,
 ) {
-  const groundY = -22;
+  const groundY = -10 - floor * 1.35;
   const grass = new THREE.Color("#4a8a44");
   const pavement = new THREE.Color("#8a8680");
   const water = new THREE.Color("#2f6f96");

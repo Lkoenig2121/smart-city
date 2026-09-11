@@ -5,6 +5,7 @@ import { findStadium, isGameNight, stadiumGateTile } from "@/lib/city/stadium";
 import {
   canEnterLodgingRoom,
   findLodging,
+  findLodgingRoom,
   grantLodgingKey,
   hasLodgingKey,
   lodgingGateTile,
@@ -33,7 +34,7 @@ import { SubwayBoard } from "./SubwayBoard";
 
 type Interior =
   | { kind: "stadium" }
-  | { kind: "lodging"; buildingId: string; zone: LodgingZone }
+  | { kind: "lodging"; buildingId: string; zone: LodgingZone; roomId?: string }
   | { kind: "subway"; stationId: string; arrived?: boolean };
 
 interface Props {
@@ -76,6 +77,7 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
   const [atComputer, setAtComputer] = useState(false);
   const [aimComputer, setAimComputer] = useState(false);
   const [hasKey, setHasKey] = useState(false);
+  const [pickingRoom, setPickingRoom] = useState(false);
   const [spawn, setSpawn] = useState(entry);
 
   const inside = interior !== null;
@@ -248,7 +250,7 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
 
     let world: LodgingWorld;
     try {
-      world = new LodgingWorld(canvas, state, building, interior.zone);
+      world = new LodgingWorld(canvas, state, building, interior.zone, interior.roomId);
     } catch (error) {
       setFailed(error instanceof Error ? error.message : "WebGL is unavailable in this browser.");
       setInterior(null);
@@ -259,6 +261,7 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
     setAtDesk(false);
     setAtComputer(false);
     setAimComputer(false);
+    setPickingRoom(false);
     atComputerRef.current = false;
 
     const resize = () => {
@@ -417,14 +420,14 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
   }, [interior, state]);
 
   const requestLock = () => {
-    if (atDesk || atComputer || pickingStop || riding) return;
+    if (atDesk || atComputer || pickingStop || riding || pickingRoom) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     void canvas.requestPointerLock();
   };
 
   const onCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (atDesk || atComputer || pickingStop || riding) return;
+    if (atDesk || atComputer || pickingStop || riding || pickingRoom) return;
     const canvas = canvasRef.current;
     const world = lodgingRef.current;
     if (canvas && world && interior?.kind === "lodging" && interior.zone === "room") {
@@ -449,22 +452,41 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
 
   const goLodgingZone = (zone: LodgingZone) => {
     if (interior?.kind !== "lodging") return;
-    setInterior({ kind: "lodging", buildingId: interior.buildingId, zone });
+    setPickingRoom(false);
+    setInterior({
+      kind: "lodging",
+      buildingId: interior.buildingId,
+      zone,
+      roomId: zone === "room" ? interior.roomId : undefined,
+    });
   };
 
   const enterLodgingRoom = (room: LodgingRoom) => {
     if (!lodgingBuilding) return;
     const hotelStay = lodgingUse(lodgingBuilding) === "hotel";
     if (!canEnterLodgingRoom(lodgingBuilding.id, room, hotelStay, hasKey)) return;
+    if (interior?.kind === "lodging" && interior.zone === "room" && interior.roomId === room.id) {
+      setPickingRoom(false);
+      return;
+    }
     grantLodgingKey(lodgingBuilding.id, room.id);
     setHasKey(true);
-    goLodgingZone("room");
+    setPickingRoom(false);
+    setInterior({ kind: "lodging", buildingId: lodgingBuilding.id, zone: "room", roomId: room.id });
   };
+
+  const currentRoom =
+    lodgingBuilding && interior?.kind === "lodging" && interior.zone === "room"
+      ? findLodgingRoom(lodgingBuilding, interior.roomId)
+      : null;
 
   const placeName = interior?.kind === "stadium"
     ? "Ravens Ballpark"
-    : lodgingBuilding?.name
-      ?? subwayBuilding?.name
+    : lodgingBuilding
+      ? currentRoom
+        ? `${lodgingBuilding.name} · ${lodgingUse(lodgingBuilding) === "hotel" ? "Room" : "Apt"} ${currentRoom.label}`
+        : lodgingBuilding.name
+    : subwayBuilding?.name
       ?? (interior?.kind === "subway" ? stationDef(interior.stationId).name : "Street level");
 
   return (
@@ -513,6 +535,7 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
               />
             </div>
           ) : (
+            <>
             <button
               onClick={() => {
                 if (interior?.kind === "stadium") {
@@ -526,12 +549,25 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
                 }
                 setRiding(false);
                 setPickingStop(false);
+                setPickingRoom(false);
                 setInterior(null);
               }}
               className="rounded-xl bg-amber-400 px-3.5 py-2 text-xs font-semibold text-[#1a1206] backdrop-blur"
             >
               {interior?.kind === "stadium" ? "Leave stadium" : "Leave building"}
             </button>
+            {interior?.kind === "lodging" && interior.zone === "room" ? (
+              <button
+                onClick={() => {
+                  setPickingRoom(true);
+                  if (document.pointerLockElement) document.exitPointerLock();
+                }}
+                className="rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20"
+              >
+                Switch rooms
+              </button>
+            ) : null}
+            </>
           )}
 
           <button
@@ -549,7 +585,7 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
         </div>
       ) : null}
 
-      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding ? (
+      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
           <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
             <p className="text-xs font-semibold text-white">Click to look around</p>
@@ -701,12 +737,18 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
         />
       ) : null}
 
-      {atDesk && lodgingBuilding && interior?.kind === "lodging" && interior.zone === "lobby" ? (
+      {(atDesk || pickingRoom) && lodgingBuilding && interior?.kind === "lodging" ? (
         <LodgingDesk
           building={lodgingBuilding}
           hasKey={hasKey}
+          currentRoomId={
+            interior.zone === "room"
+              ? (interior.roomId ?? currentRoom?.id)
+              : findLodgingRoom(lodgingBuilding)?.id
+          }
           onEnterRoom={enterLodgingRoom}
           onPool={() => goLodgingZone("pool")}
+          onClose={pickingRoom ? () => setPickingRoom(false) : undefined}
         />
       ) : null}
 
@@ -730,7 +772,7 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
         </div>
       ) : null}
 
-      {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer ? (
+      {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer && !pickingRoom ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { Building, CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
-import { lodgingUse, type LodgingZone } from "@/lib/city/lodging";
+import { findLodgingRoom, lodgingUse, type LodgingZone } from "@/lib/city/lodging";
 import { InteriorControls } from "./interiorControls";
 import { buildLodgingInterior, type LodgingInterior } from "./lodgingInterior";
 
@@ -30,9 +30,11 @@ export class LodgingWorld {
     private state: CityState,
     building: Building,
     zone: LodgingZone,
+    roomId?: string | null,
   ) {
     this.building = building;
     this.zone = zone;
+    const room = zone === "room" ? findLodgingRoom(building, roomId) : null;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -45,7 +47,7 @@ export class LodgingWorld {
     this.renderer.shadowMap.enabled = true;
 
     this.camera = new THREE.PerspectiveCamera(74, 1, 0.1, zone === "room" ? 280 : 220);
-    this.interior = buildLodgingInterior(building, zone, state);
+    this.interior = buildLodgingInterior(building, zone, state, room);
     this.scene.add(this.interior.group);
 
     this.controls = new InteriorControls(
@@ -170,7 +172,7 @@ export class LodgingWorld {
     ctx.fillText(hotel ? "Front desk  ·  Welcome" : "Concierge  ·  Residents welcome", w / 2, 150);
     ctx.font = "22px sans-serif";
     ctx.fillStyle = "#c9a44c";
-    ctx.fillText("Choose a level  ·  Roof deck open", w / 2, 210);
+    ctx.fillText(hotel ? "Choose a room  ·  Switch anytime" : "Choose a home  ·  Roof deck open", w / 2, 210);
     ctx.fillStyle = "#9aa4ae";
     ctx.fillText(`${clock.day}  ·  ${clock.time}`, w / 2, 262);
     tex.needsUpdate = true;

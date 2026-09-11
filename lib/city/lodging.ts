@@ -23,6 +23,13 @@ export interface LodgingLevel {
 const KEYS_STORAGE = "smartcity-lodging-keys";
 const ROOM_STORAGE = "smartcity-lodging-rooms";
 
+/** Hotel room that is never occupied and always unlocks. */
+export const ALWAYS_OPEN_ROOM = "1110";
+
+export function isAlwaysOpenLodgingRoom(room: Pick<LodgingRoom, "id" | "label">) {
+  return room.label === ALWAYS_OPEN_ROOM || room.id.endsWith(`-${ALWAYS_OPEN_ROOM}`);
+}
+
 export function lodgingUse(building: Building): LodgingUse | null {
   const value = building.stats.extra?.lodging;
   if (value === "hotel" || value === "residences") return value;
@@ -98,12 +105,21 @@ export function grantLodgingKey(buildingId: string, roomId?: string) {
   if (roomId) rememberLodgingRoom(buildingId, roomId);
 }
 
-/** One rented room per building — a second claim is ignored. */
-export function canEnterLodgingRoom(buildingId: string, room: LodgingRoom, hotel: boolean, hasKey: boolean) {
-  const claimed = lodgingRoomChoice(buildingId);
-  if (claimed) return claimed === room.id;
-  if (hasKey) return room.status === "yours";
-  return hotel && room.status === "open";
+/** Unoccupied rooms can be entered; taken rooms stay locked. Room 1110 always opens. */
+export function canEnterLodgingRoom(
+  _buildingId: string,
+  room: LodgingRoom,
+  _hotel = true,
+  _hasKey = false,
+) {
+  if (isAlwaysOpenLodgingRoom(room)) return true;
+  return room.status !== "taken";
+}
+
+export function findLodgingRoom(building: Building, roomId?: string | null) {
+  const rooms = lodgingLevels(building).flatMap((level) => level.rooms);
+  if (roomId) return rooms.find((room) => room.id === roomId) ?? null;
+  return rooms.find((room) => room.status === "yours") ?? null;
 }
 
 export function lodgingRoomChoice(buildingId: string) {
@@ -121,7 +137,6 @@ export function lodgingRoomChoice(buildingId: string) {
 
 export function rememberLodgingRoom(buildingId: string, roomId: string) {
   if (typeof window === "undefined") return;
-  if (lodgingRoomChoice(buildingId)) return;
   let current: Record<string, string> = {};
   try {
     const raw = window.localStorage.getItem(ROOM_STORAGE);
@@ -151,6 +166,10 @@ export function lodgingLevels(building: Building): LodgingLevel[] {
     if (hotel && level === 13) continue;
     floorNumbers.push(level);
   }
+  if (hotel && !floorNumbers.includes(11)) {
+    floorNumbers.push(11);
+    floorNumbers.sort((a, b) => a - b);
+  }
 
   const seed = hashString(building.id);
   const assignedFloor = floorNumbers[seed % floorNumbers.length] ?? 2;
@@ -171,11 +190,12 @@ export function lodgingLevels(building: Building): LodgingLevel[] {
         : `${level}${String.fromCharCode(65 + i)}`;
       const id = `${level}-${label}`;
       const taken = rand() < (hotel ? 0.58 : 0.76);
+      const keepOpen = hotel && label === ALWAYS_OPEN_ROOM;
       rooms.push({
         id,
         floor: level,
         label,
-        status: yoursId === id ? "yours" : taken ? "taken" : "open",
+        status: yoursId === id ? "yours" : keepOpen || !taken ? "open" : "taken",
       });
     }
     return {
