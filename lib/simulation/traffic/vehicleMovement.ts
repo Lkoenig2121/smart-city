@@ -1,5 +1,6 @@
 import { pick } from "@/lib/city/rng";
 import type { CityState, Vehicle } from "@/lib/city/types";
+import { jamScale, weatherTrafficScale } from "../events/cityEvents";
 import { allRoadTiles, findPath } from "./pathfinding";
 
 export function seedVehicle(state: CityState, vehicle: Vehicle, rand: () => number) {
@@ -46,7 +47,7 @@ export function stepVehicles(state: CityState, dt: number, rand: () => number) {
     const dx = target.x - vehicle.x;
     const dy = target.y - vehicle.y;
     const dist = Math.hypot(dx, dy);
-    const step = vehicle.speed * trafficScale * dt;
+    const step = vehicle.speed * trafficScale * weatherTrafficScale(state) * jamScale(state, vehicle.x, vehicle.y) * dt;
     if (dist <= step || dist === 0) {
       vehicle.x = target.x;
       vehicle.y = target.y;

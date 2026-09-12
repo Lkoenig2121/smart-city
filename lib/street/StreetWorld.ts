@@ -8,6 +8,7 @@ import { AgentLayer } from "./agents";
 import { buildCity, TILE, type CityMeshes } from "./buildCity";
 import { StreetControls, type MoveMode } from "./controls";
 import { skyTexture } from "./textures";
+import { StreetWeatherFx } from "./weatherFx";
 
 /** Field of view at rest, and how far it narrows mid-hop. */
 const BASE_FOV = 72;
@@ -39,6 +40,7 @@ export class StreetWorld {
   private sky: THREE.Texture | null = null;
   private skyKey = "";
   private time = 0;
+  private weatherFx = new StreetWeatherFx();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -64,6 +66,7 @@ export class StreetWorld {
     this.controls = new StreetControls(state, this.city.blockers);
     this.agents = new AgentLayer(state, (x, z) => this.controls.groundAt(x, z));
     this.scene.add(this.agents.group);
+    this.scene.add(this.weatherFx.group);
 
     // The sun casts across a moving box centred on the player.
     this.sun.castShadow = true;
@@ -278,9 +281,10 @@ export class StreetWorld {
       this.skyKey = key;
     }
     if (this.scene.fog instanceof THREE.Fog) {
+      const wet = this.state.weather?.wet;
       this.scene.fog.color.set(night ? "#243656" : light.skyBottom);
-      this.scene.fog.near = night ? 90 : 70;
-      this.scene.fog.far = night ? 520 : 640;
+      this.scene.fog.near = wet ? 28 : night ? 90 : 70;
+      this.scene.fog.far = wet ? 220 : night ? 520 : 640;
     }
 
     this.updateLamps(lampsOn);
@@ -362,6 +366,7 @@ export class StreetWorld {
       }
     }
 
+    this.weatherFx.update(dt, this.camera, this.state.weather?.kind ?? "clear");
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -377,6 +382,7 @@ export class StreetWorld {
   dispose() {
     this.agents.dispose();
     this.city.dispose();
+    this.weatherFx.dispose();
     this.sky?.dispose();
     this.renderer.dispose();
   }

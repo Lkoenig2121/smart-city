@@ -1,6 +1,8 @@
 import * as THREE from "three";
-import type { CityState } from "@/lib/city/types";
+import { advanceDay, weekdayOf } from "@/lib/city/calendar";
+import { DAYS, type CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
+import { forecastFor, weatherEmoji } from "@/lib/simulation/weather/weather";
 
 export interface RoomTv {
   update: (dt: number, state: CityState) => void;
@@ -342,6 +344,7 @@ function drawNews(
   ctx.fillText("Downtown waterfront draws record visitors", 18, 300);
 
   const headlines = [
+    ...state.events.map((event) => event.headline),
     `Population ${state.population.toLocaleString()} and still climbing`,
     "Harborview books out the club floor  ·  Room 1110 still open",
     "Rivermen lead the Bears 3–2 in the second period",
@@ -362,9 +365,16 @@ function drawWeather(
   clock: ReturnType<typeof formatClock>,
   state: CityState,
 ) {
+  const kind = state.weather?.kind ?? "clear";
   const night = clock.hour24 < 6 || clock.hour24 >= 20;
   const sky = ctx.createLinearGradient(0, 0, 0, H);
-  if (night) {
+  if (kind === "snow") {
+    sky.addColorStop(0, "#9aafc4");
+    sky.addColorStop(1, "#d8e4f0");
+  } else if (kind === "rain" || kind === "cloudy") {
+    sky.addColorStop(0, "#3d4e62");
+    sky.addColorStop(1, "#6a7c8e");
+  } else if (night) {
     sky.addColorStop(0, "#10182c");
     sky.addColorStop(1, "#1a2748");
   } else {
@@ -374,25 +384,44 @@ function drawWeather(
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
 
-  if (night) {
+  if (kind === "clear" && night) {
     ctx.fillStyle = "#f4efe4";
     for (let i = 0; i < 28; i++) {
       const x = (i * 97 + 20) % W;
       const y = (i * 53 + 18) % 160;
       ctx.fillRect(x, y, 2, 2);
     }
-  } else {
+  } else if (kind === "clear") {
     ctx.fillStyle = "#ffe08a";
     ctx.beginPath();
     ctx.arc(520, 70, 34, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  ctx.fillStyle = night ? "rgba(180,200,220,0.35)" : "rgba(255,255,255,0.55)";
-  for (let i = 0; i < 4; i++) {
-    const x = ((t * 18 + i * 160) % (W + 80)) - 40;
+  ctx.fillStyle =
+    kind === "snow" ? "rgba(255,255,255,0.7)" : night ? "rgba(180,200,220,0.35)" : "rgba(255,255,255,0.55)";
+  for (let i = 0; i < (kind === "rain" ? 7 : 4); i++) {
+    const x = ((t * (kind === "rain" ? 36 : 18) + i * 160) % (W + 80)) - 40;
     const y = 46 + i * 22;
     cloud(ctx, x, y, 70 + i * 8);
+  }
+  if (kind === "rain") {
+    ctx.strokeStyle = "rgba(210,225,235,0.45)";
+    for (let i = 0; i < 40; i++) {
+      const x = (i * 37 + t * 80) % W;
+      const y = (i * 23 + t * 140) % H;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 3, y + 12);
+      ctx.stroke();
+    }
+  } else if (kind === "snow") {
+    ctx.fillStyle = "#ffffff";
+    for (let i = 0; i < 50; i++) {
+      ctx.beginPath();
+      ctx.arc((i * 53 + t * 12) % W, (i * 41 + t * 18) % H, 1.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   ctx.fillStyle = night ? "#2a3138" : "#3d4a58";
@@ -420,17 +449,26 @@ function drawWeather(
   ctx.fillText("WX 4  RIVERSIDE", 32, 42);
   ctx.fillStyle = "#f4f1ea";
   ctx.font = "700 36px system-ui, sans-serif";
-  const temp = night ? 54 : clock.hour24 < 10 ? 61 : 72;
+  const temp = state.weather?.tempF ?? (night ? 54 : 72);
   ctx.fillText(`${temp}°`, 32, 86);
   ctx.font = "600 14px system-ui, sans-serif";
   ctx.fillStyle = "#c9e4ff";
-  ctx.fillText(night ? "Clear  ·  Light wind" : "Mostly sunny  ·  Harbor breeze", 108, 80);
+  ctx.fillText(`${weatherEmoji(kind)} ${state.weather?.label ?? "Clear"}  ·  Harbor`, 108, 80);
 
-  const days = ["MON", "TUE", "WED", "THU", "FRI"].map((d, i) => ({
-    d,
-    hi: 68 + ((i * 3 + state.clock.dayIndex) % 8),
-    icon: i === 2 ? "cloud" : "sun",
-  }));
+  const days = forecastFor(state.clock, 5).map((day, i) => {
+    let year = state.clock.year;
+    let doy = state.clock.dayOfYear;
+    for (let n = 0; n < i; n++) {
+      const next = advanceDay(year, doy);
+      year = next.year;
+      doy = next.dayOfYear;
+    }
+    return {
+      d: i === 0 ? "NOW" : DAYS[weekdayOf(year, doy)].slice(0, 3).toUpperCase(),
+      hi: day.tempF,
+      kind: day.kind,
+    };
+  });
   days.forEach((day, i) => {
     const x = 28 + i * 122;
     ctx.fillStyle = "rgba(10,14,22,0.55)";
@@ -440,7 +478,7 @@ function drawWeather(
     ctx.font = "700 13px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(day.d, x + 55, 302);
-    ctx.fillStyle = day.icon === "sun" ? "#fbbf24" : "#cbd5e1";
+    ctx.fillStyle = day.kind === "snow" || day.kind === "rain" ? "#7dd3fc" : day.kind === "cloudy" ? "#cbd5e1" : "#fbbf24";
     ctx.beginPath();
     ctx.arc(x + 36, 322, 8, 0, Math.PI * 2);
     ctx.fill();

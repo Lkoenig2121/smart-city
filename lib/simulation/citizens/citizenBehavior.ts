@@ -66,7 +66,9 @@ export function stepCitizens(state: CityState, dt: number) {
     const dx = target.x - citizen.x;
     const dy = target.y - citizen.y;
     const dist = Math.hypot(dx, dy);
-    const step = citizen.speed * dt;
+    const weather = state.weather?.kind;
+    const wet = weather === "rain" ? 0.78 : weather === "snow" ? 0.62 : 1;
+    const step = citizen.speed * wet * dt;
     if (dist <= step || dist === 0) {
       citizen.x = target.x;
       citizen.y = target.y;

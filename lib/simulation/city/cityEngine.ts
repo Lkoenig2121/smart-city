@@ -7,6 +7,7 @@ import {
 } from "@/lib/city/stadium";
 import type { BuildingKind, CityState, Tool } from "@/lib/city/types";
 import { pickBuildingAt } from "@/lib/renderer/pickBuilding";
+import { announceConstruction } from "@/lib/simulation/events/cityEvents";
 import { createInitialCity, getBuildingAt, recountPopulation } from "./cityState";
 import { tickCity } from "./cityTick";
 
@@ -159,6 +160,11 @@ export class CityEngine {
       this.state.budget.treasury -= STADIUM_COST;
       building.constructionLeft = STADIUM_BUILD_SECONDS;
       building.stats.status = "closed";
+      announceConstruction(this.state, building);
+    } else if (kind === "skyscraper" || kind === "tower") {
+      building.constructionLeft = 24;
+      building.stats.status = "closed";
+      announceConstruction(this.state, building);
     }
     return true;
   }

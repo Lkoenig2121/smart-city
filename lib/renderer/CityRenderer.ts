@@ -9,6 +9,8 @@ import { drawRoadTile } from "./drawRoads";
 import { drawTerrainTile } from "./drawTerrain";
 import { drawWaterfrontDecor } from "./drawWaterfront";
 import { drawVehicle } from "./drawVehicles";
+import { drawEventMarkers } from "./drawEvents";
+import { drawWeatherOverlay } from "./drawWeather";
 import { CityCamera, tileVisible } from "./camera";
 import { alpha, lightingFor, lit } from "./palette";
 import { drawDiamond } from "./drawIso";
@@ -51,7 +53,7 @@ export class CityRenderer {
       for (let x = 0; x < size; x++) {
         if (!tileVisible(x, y, this.camera, this.width, this.height)) continue;
         const tile = state.tiles[y][x];
-        drawTerrainTile(ctx, x, y, tile.terrain, light, this.time, tile.graffiti);
+        drawTerrainTile(ctx, x, y, tile.terrain, light, this.time, tile.graffiti, state.weather?.kind);
         // Bridge decks are elevated, so they draw with the structures below.
         if (tile.road && !tile.bridge) drawRoadTile(ctx, x, y, tile.road, light);
       }
@@ -125,6 +127,8 @@ export class CityRenderer {
       }
     }
 
+    drawEventMarkers(ctx, state, this.time);
+
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     if (light.phase === "night") {
       ctx.fillStyle = "rgba(8, 12, 28, 0.08)";
@@ -146,6 +150,7 @@ export class CityRenderer {
     vig.addColorStop(1, light.phase === "night" ? "rgba(0,0,0,0.2)" : "rgba(10,20,16,0.16)");
     ctx.fillStyle = vig;
     ctx.fillRect(0, 0, this.width, this.height);
+    drawWeatherOverlay(ctx, state, this.width, this.height, this.time);
   }
 
   private ctx: CanvasRenderingContext2D | null = null;

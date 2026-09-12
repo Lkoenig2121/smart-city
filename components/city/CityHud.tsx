@@ -1,6 +1,7 @@
 import { formatDaily, formatMoney, kindEmoji, kindLabel } from "@/lib/simulation/buildings/buildings";
 import { isResidential } from "@/lib/simulation/buildings/buildingLogic";
-import type { Building, Tool } from "@/lib/city/types";
+import { weatherEmoji } from "@/lib/simulation/weather/weather";
+import type { Building, CityEvent, CityWeather, Tool } from "@/lib/city/types";
 
 const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: "inspect", label: "Inspect", hint: "Select a building" },
@@ -22,8 +23,11 @@ interface HudProps {
   population: number;
   treasury: number;
   day: string;
+  date: string;
   time: string;
   phase: string;
+  weather: CityWeather;
+  events: CityEvent[];
   tool: Tool;
   selected: Building | null;
   hoverLabel: string;
@@ -39,8 +43,11 @@ export function CityHud({
   population,
   treasury,
   day,
+  date,
   time,
   phase,
+  weather,
+  events,
   tool,
   selected,
   hoverLabel,
@@ -75,7 +82,12 @@ export function CityHud({
             <span className="h-8 w-px bg-white/10" />
             <Stat label="Treasury" value={formatMoney(treasury)} />
             <span className="h-8 w-px bg-white/10" />
-            <Stat label={day} value={`${time} · ${phase}`} />
+            <Stat label={`${day} · ${date}`} value={`${time} · ${phase}`} />
+            <span className="h-8 w-px bg-white/10" />
+            <Stat
+              label={weather.label}
+              value={`${weatherEmoji(weather.kind)} ${weather.tempF}°`}
+            />
           </div>
 
           <button
@@ -89,6 +101,23 @@ export function CityHud({
           </button>
         </div>
       </header>
+
+      {events.length ? (
+        <div className="pointer-events-none absolute left-4 top-24 z-20 w-[min(22rem,calc(100vw-2rem))] space-y-1.5">
+          {events.slice(0, 4).map((event) => (
+            <div
+              key={event.id}
+              className="pointer-events-auto rounded-xl border border-white/10 bg-[#101826]/78 px-3 py-2 text-sm text-white shadow-2xl backdrop-blur-md"
+            >
+              <p className="font-medium leading-snug">
+                <span className="mr-1.5">{event.icon}</span>
+                {event.headline}
+              </p>
+              <p className="mt-0.5 text-[11px] text-white/50">{event.detail}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="pointer-events-none absolute bottom-5 left-1/2 z-20 w-[min(920px,94vw)] -translate-x-1/2">
         <div className="pointer-events-auto rounded-2xl border border-white/10 bg-[#101826]/78 p-2 shadow-2xl backdrop-blur-md">

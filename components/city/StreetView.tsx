@@ -26,6 +26,7 @@ import { LodgingWorld } from "@/lib/street/LodgingWorld";
 import { SubwayWorld } from "@/lib/street/SubwayWorld";
 import { attachPointerInput } from "@/lib/street/keys";
 import { formatClock } from "@/lib/simulation/city/cityTick";
+import { weatherEmoji } from "@/lib/simulation/weather/weather";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { LodgingDesk } from "./LodgingDesk";
 import { RoomComputer } from "./RoomComputer";
@@ -514,7 +515,11 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
             {inside ? placeName : "Street level"}
           </p>
           <p className="text-sm font-medium text-white">
-            {clock.day} · {clock.time}
+            {clock.day} · {clock.date} · {clock.time}
+          </p>
+          <p className="text-[0.7rem] text-sky-100/80">
+            {weatherEmoji(state.weather.kind)} {state.weather.tempF}° {state.weather.label}
+            {state.events[0] ? ` · ${state.events[0].icon} ${state.events[0].headline}` : ""}
           </p>
         </div>
 

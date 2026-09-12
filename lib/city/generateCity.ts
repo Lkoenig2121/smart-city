@@ -8,6 +8,8 @@ import {
 } from "./waterfront";
 import { mulberry32, pick, randInt, randRange } from "./rng";
 import { spawnCitizens } from "@/lib/simulation/citizens/spawnCitizens";
+import { bootstrapEvents } from "@/lib/simulation/events/cityEvents";
+import { openingClock, weatherFor } from "@/lib/simulation/weather/weather";
 import type {
   Building,
   BuildingKind,
@@ -390,7 +392,8 @@ export function generateCity(seed = 20260903): CityState {
     });
   }
 
-  return {
+  const clock = openingClock();
+  const state: CityState = {
     id: "riverside",
     name: "Riverside",
     size: SIZE,
@@ -398,7 +401,9 @@ export function generateCity(seed = 20260903): CityState {
     buildings,
     citizens,
     vehicles,
-    clock: { dayIndex: 0, minuteOfDay: 7 * 60 + 18 },
+    clock,
+    weather: weatherFor(clock),
+    events: [],
     budget: {
       treasury: 4_200_000,
       police: 0.72,
@@ -410,6 +415,8 @@ export function generateCity(seed = 20260903): CityState {
     },
     population,
   };
+  bootstrapEvents(state);
+  return state;
 }
 
 export function roadMask(road: RoadCell) {

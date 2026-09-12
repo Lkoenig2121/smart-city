@@ -1,6 +1,6 @@
 import { diamondPoints, tileCenter } from "@/lib/city/iso";
 import { hash2 } from "@/lib/city/rng";
-import type { Graffiti, Terrain } from "@/lib/city/types";
+import type { Graffiti, Terrain, WeatherKind } from "@/lib/city/types";
 import { isWestBank, isWestShoreWater } from "@/lib/city/waterfront";
 import { paintGraffiti } from "./drawBridges";
 import { drawDiamond } from "./drawIso";
@@ -24,6 +24,7 @@ export function drawTerrainTile(
   light: Lighting,
   time: number,
   graffiti: Graffiti | null = null,
+  weather: WeatherKind = "clear",
 ) {
   const n = hash2(x, y, 11);
   const n2 = hash2(x, y, 29);
@@ -45,6 +46,9 @@ export function drawTerrainTile(
   }
 
   drawDiamond(ctx, x, y, lit(base, light, "ground"));
+  if (weather === "snow") {
+    drawDiamond(ctx, x, y, alpha("#f4f7fb", terrain === "lot" || terrain === "plaza" ? 0.28 : 0.42));
+  }
 
   if (terrain === "grass" || terrain === "park") {
     if (n2 > 0.86) {

@@ -1,8 +1,10 @@
+import { advanceDay, formatDate, weekdayOf } from "@/lib/city/calendar";
 import { mulberry32 } from "@/lib/city/rng";
 import type { CityState } from "@/lib/city/types";
 import { STADIUM_DAILY_REVENUE, stadiumIsOpen } from "@/lib/city/stadium";
 import { tickBuildingStats } from "../buildings/buildingLogic";
 import { stepCitizens, syncCitizenSchedules, wanderOutdoors } from "../citizens/citizenBehavior";
+import { tickCityEvents } from "../events/cityEvents";
 import { seedVehicle, stepVehicles } from "../traffic/vehicleMovement";
 
 export function formatClock(state: CityState) {
@@ -13,6 +15,7 @@ export function formatClock(state: CityState) {
   const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
   return {
     day: days[state.clock.dayIndex],
+    date: formatDate(state.clock.year, state.clock.dayOfYear),
     time: `${hour12}:${minute.toString().padStart(2, "0")} ${suffix}`,
     hour24,
     minute,
@@ -34,13 +37,19 @@ export function tickCity(state: CityState, dtSeconds: number, seeded = true) {
     : Math.random;
 
   state.clock.minuteOfDay += dtSeconds * 7.5;
+  let newDay = false;
   if (state.clock.minuteOfDay >= 24 * 60) {
     state.clock.minuteOfDay -= 24 * 60;
-    state.clock.dayIndex = (state.clock.dayIndex + 1) % 7;
+    const next = advanceDay(state.clock.year, state.clock.dayOfYear);
+    state.clock.year = next.year;
+    state.clock.dayOfYear = next.dayOfYear;
+    state.clock.dayIndex = weekdayOf(state.clock.year, state.clock.dayOfYear);
+    newDay = true;
     for (const building of state.buildings.values()) {
       if (stadiumIsOpen(building)) state.budget.treasury += STADIUM_DAILY_REVENUE;
     }
   }
+  tickCityEvents(state, dtSeconds, rand, newDay);
 
   for (const building of state.buildings.values()) {
     if (!building.constructionLeft || building.constructionLeft <= 0) continue;

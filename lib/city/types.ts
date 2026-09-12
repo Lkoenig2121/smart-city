@@ -170,9 +170,41 @@ export interface Vehicle {
   ownerId: string | null;
 }
 
+export type WeatherKind = "clear" | "cloudy" | "rain" | "snow";
+
+export interface CityWeather {
+  kind: WeatherKind;
+  label: string;
+  tempF: number;
+  wet: boolean;
+}
+
+export type CityEventKind =
+  | "accident"
+  | "fire"
+  | "storm"
+  | "concert"
+  | "baseball"
+  | "festival"
+  | "construction";
+
+export interface CityEvent {
+  id: string;
+  kind: CityEventKind;
+  headline: string;
+  detail: string;
+  icon: string;
+  x: number;
+  y: number;
+  buildingId?: string;
+  remaining: number;
+}
+
 export interface CityClock {
   dayIndex: number;
   minuteOfDay: number;
+  dayOfYear: number;
+  year: number;
 }
 
 export interface CityBudget {
@@ -194,6 +226,8 @@ export interface CityState {
   citizens: Citizen[];
   vehicles: Vehicle[];
   clock: CityClock;
+  weather: CityWeather;
+  events: CityEvent[];
   budget: CityBudget;
   population: number;
 }

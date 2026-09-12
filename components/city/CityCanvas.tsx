@@ -7,7 +7,7 @@ import { getBuildingAt } from "@/lib/simulation/city/cityState";
 import { pickBuildingAt } from "@/lib/renderer/pickBuilding";
 import { subwayGateTile, subwayStationId } from "@/lib/city/subway";
 import { citizenIsOutdoors } from "@/lib/simulation/citizens/citizenBehavior";
-import type { Building, CityState, Tool } from "@/lib/city/types";
+import type { Building, CityEvent, CityState, CityWeather, Tool } from "@/lib/city/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CityHud } from "./CityHud";
 import { StreetView } from "./StreetView";
@@ -32,8 +32,11 @@ interface HudSnap {
   population: number;
   treasury: number;
   day: string;
+  date: string;
   time: string;
   phase: string;
+  weather: CityWeather;
+  events: CityEvent[];
   tool: Tool;
   selected: Building | null;
   hoverLabel: string;
@@ -174,8 +177,11 @@ export function CityCanvas() {
           population: engine.state.population,
           treasury: engine.state.budget.treasury,
           day: clock.day,
+          date: clock.date,
           time: clock.time,
           phase: labelPhase(dayPhase(engine.state)),
+          weather: engine.state.weather,
+          events: engine.state.events,
           tool: engine.tool,
           selected: engine.selectedId
             ? (engine.state.buildings.get(engine.selectedId) ?? null)

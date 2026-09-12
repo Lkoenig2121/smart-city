@@ -49,10 +49,12 @@ export interface Lighting {
 export function lightingFor(state: CityState): Lighting {
   const phase = dayPhase(state);
   const t = state.clock.minuteOfDay / 60;
+  const weather = state.weather?.kind ?? "clear";
 
+  let light: Lighting;
   if (phase === "dawn") {
     const k = (t - 5.5) / 1.7;
-    return {
+    light = {
       phase,
       ambient: 0.62 + k * 0.28,
       sun: 0.7 + k * 0.25,
@@ -63,10 +65,9 @@ export function lightingFor(state: CityState): Lighting {
       windowLit: 0.35,
       waterSparkle: 0.45,
     };
-  }
-  if (phase === "dusk") {
+  } else if (phase === "dusk") {
     const k = (t - 17.4) / 2.8;
-    return {
+    light = {
       phase,
       ambient: 0.9 - k * 0.35,
       sun: 0.85 - k * 0.3,
@@ -77,9 +78,8 @@ export function lightingFor(state: CityState): Lighting {
       windowLit: 0.2 + k * 0.7,
       waterSparkle: 0.55,
     };
-  }
-  if (phase === "night") {
-    return {
+  } else if (phase === "night") {
+    light = {
       phase,
       ambient: 0.58,
       sun: 0.52,
@@ -90,18 +90,52 @@ export function lightingFor(state: CityState): Lighting {
       windowLit: 0.92,
       waterSparkle: 0.22,
     };
+  } else {
+    light = {
+      phase,
+      ambient: 1,
+      sun: 1,
+      skyTop: "#79b7ea",
+      skyBottom: "#d7edfb",
+      tint: "#ffffff",
+      tintAmount: 0,
+      windowLit: 0.04,
+      waterSparkle: 0.7,
+    };
   }
-  return {
-    phase,
-    ambient: 1,
-    sun: 1,
-    skyTop: "#79b7ea",
-    skyBottom: "#d7edfb",
-    tint: "#ffffff",
-    tintAmount: 0,
-    windowLit: 0.04,
-    waterSparkle: 0.7,
-  };
+
+  if (weather === "rain") {
+    return {
+      ...light,
+      ambient: light.ambient * 0.78,
+      sun: light.sun * 0.62,
+      skyTop: mix(light.skyTop, "#4a5a6c", 0.45),
+      skyBottom: mix(light.skyBottom, "#7a8694", 0.4),
+      waterSparkle: light.waterSparkle * 0.25,
+      windowLit: Math.min(1, light.windowLit + 0.12),
+    };
+  }
+  if (weather === "snow") {
+    return {
+      ...light,
+      ambient: light.ambient * 0.88,
+      sun: light.sun * 0.7,
+      skyTop: mix(light.skyTop, "#c5d4e4", 0.4),
+      skyBottom: mix(light.skyBottom, "#e8eef4", 0.45),
+      tint: mix(light.tint, "#d8e4f0", 0.35),
+      tintAmount: Math.max(light.tintAmount, 0.12),
+      waterSparkle: light.waterSparkle * 0.15,
+    };
+  }
+  if (weather === "cloudy") {
+    return {
+      ...light,
+      sun: light.sun * 0.82,
+      skyTop: mix(light.skyTop, "#8aa0b4", 0.28),
+      skyBottom: mix(light.skyBottom, "#c5d0da", 0.22),
+    };
+  }
+  return light;
 }
 
 export function lit(hex: string, light: Lighting, face: "left" | "right" | "top" | "ground") {
