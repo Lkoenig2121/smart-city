@@ -1,6 +1,7 @@
-import { TILE_H, diamondPoints } from "@/lib/city/iso";
-import type { CityState } from "@/lib/city/types";
+import { TILE_H, TILE_W, diamondPoints, worldBounds } from "@/lib/city/iso";
+import type { Building, CityState } from "@/lib/city/types";
 import type { CityEngine } from "@/lib/simulation/city/cityEngine";
+import { citizenIsOutdoors } from "@/lib/simulation/citizens/citizenBehavior";
 import { drawBridge } from "./drawBridges";
 import { drawBuilding } from "./drawBuildings";
 import { drawCitizen } from "./drawCitizens";
@@ -11,9 +12,28 @@ import { drawWaterfrontDecor } from "./drawWaterfront";
 import { drawVehicle } from "./drawVehicles";
 import { drawEventMarkers } from "./drawEvents";
 import { drawWeatherOverlay } from "./drawWeather";
-import { CityCamera, tileVisible } from "./camera";
-import { alpha, lightingFor, lit } from "./palette";
+import { CityCamera, tileVisible, visibleTileRange } from "./camera";
+import { alpha, lightingFor, lit, type Lighting } from "./palette";
 import { drawDiamond } from "./drawIso";
+import { buildingDrawHeight, mastHeight } from "./pickBuilding";
+
+interface GroundCache {
+  canvas: HTMLCanvasElement;
+  key: string;
+  minX: number;
+  minY: number;
+  worldW: number;
+  worldH: number;
+}
+
+interface BuildingSprite {
+  canvas: HTMLCanvasElement;
+  ox: number;
+  oy: number;
+  key: string;
+}
+
+const BAKE_PER_FRAME = 10;
 
 export class CityRenderer {
   readonly camera = new CityCamera();
@@ -22,10 +42,27 @@ export class CityRenderer {
   time = 0;
   dpr = 1;
 
+  private ctx: CanvasRenderingContext2D | null = null;
+  private ground: GroundCache | null = null;
+  private sprites = new Map<string, BuildingSprite>();
+  private bakedThisFrame = 0;
+  private skyKey = "";
+  private sky: CanvasGradient | null = null;
+  private vigKey = "";
+  private vig: CanvasGradient | null = null;
+  private vehiclesByRow = new Map<number, CityState["vehicles"]>();
+  private citizensByRow = new Map<number, CityState["citizens"]>();
+
   resize(width: number, height: number, dpr = 1) {
     this.width = width;
     this.height = height;
     this.dpr = dpr;
+    this.sky = null;
+    this.vig = null;
+  }
+
+  attach(ctx: CanvasRenderingContext2D) {
+    this.ctx = ctx;
   }
 
   render(engine: CityEngine, dt: number) {
@@ -33,62 +70,47 @@ export class CityRenderer {
     this.camera.update(dt);
     const state = engine.state;
     const light = lightingFor(state);
-    const canvas = this.ctx;
-    if (!canvas) return;
-    const ctx = canvas;
+    const ctx = this.ctx;
+    if (!ctx) return;
+
+    this.bakedThisFrame = 0;
+    const lightKey = cacheLightKey(light, state.weather?.kind ?? "clear");
+    this.ensureGround(state, light, lightKey, engine.mapRev);
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    const sky = ctx.createLinearGradient(0, 0, 0, this.height);
-    sky.addColorStop(0, light.skyTop);
-    sky.addColorStop(1, light.skyBottom);
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, this.width, this.height);
-
+    this.fillSky(ctx, light);
     this.drawDistantHills(ctx, light.skyBottom);
 
     this.camera.apply(ctx, this.dpr);
-
-    const size = state.size;
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        if (!tileVisible(x, y, this.camera, this.width, this.height)) continue;
-        const tile = state.tiles[y][x];
-        drawTerrainTile(ctx, x, y, tile.terrain, light, this.time, tile.graffiti, state.weather?.kind);
-        // Bridge decks are elevated, so they draw with the structures below.
-        if (tile.road && !tile.bridge) drawRoadTile(ctx, x, y, tile.road, light);
-      }
+    if (this.ground) {
+      ctx.drawImage(
+        this.ground.canvas,
+        0,
+        0,
+        this.ground.canvas.width,
+        this.ground.canvas.height,
+        this.ground.minX,
+        this.ground.minY,
+        this.ground.worldW,
+        this.ground.worldH,
+      );
     }
 
     if (engine.hover && inCity(state, engine.hover.x, engine.hover.y)) {
       drawDiamond(ctx, engine.hover.x, engine.hover.y, alpha("#f4d03f", 0.16), alpha("#f4d03f", 0.7));
     }
 
-    // Bucket vehicles and citizens by their depth row (x+y) for correct
-    // draw ordering — things further north/west draw first, so buildings
-    // in front correctly occlude cars behind them.
-    const vehiclesByRow = new Map<number, typeof state.vehicles>();
-    for (const v of state.vehicles) {
-      if (!tileVisible(v.x, v.y, this.camera, this.width, this.height)) continue;
-      const row = Math.floor(v.x) + Math.floor(v.y);
-      let bucket = vehiclesByRow.get(row);
-      if (!bucket) { bucket = []; vehiclesByRow.set(row, bucket); }
-      bucket.push(v);
-    }
-    const citizensByRow = new Map<number, typeof state.citizens>();
-    for (const c of state.citizens) {
-      if (!tileVisible(c.x, c.y, this.camera, this.width, this.height)) continue;
-      const row = Math.floor(c.x) + Math.floor(c.y);
-      let bucket = citizensByRow.get(row);
-      if (!bucket) { bucket = []; citizensByRow.set(row, bucket); }
-      bucket.push(c);
-    }
+    const view = visibleTileRange(this.camera, this.width, this.height, state.size);
+    const showPeople = this.camera.zoom >= 0.62;
+    this.bucketMovers(state, showPeople);
 
     const drawn = new Set<string>();
-    for (let sum = 0; sum <= size * 2; sum++) {
-      // Draw buildings, bridges and trees at this depth row
-      for (let x = 0; x < size; x++) {
+    const sum0 = view.x0 + view.y0;
+    const sum1 = view.x1 + view.y1;
+    for (let sum = sum0; sum <= sum1; sum++) {
+      for (let x = view.x0; x <= view.x1; x++) {
         const y = sum - x;
-        if (y < 0 || y >= size) continue;
+        if (y < view.y0 || y > view.y1) continue;
         if (!tileVisible(x, y, this.camera, this.width, this.height, 800)) continue;
         const tile = state.tiles[y][x];
         if (tile.bridge) {
@@ -98,7 +120,7 @@ export class CityRenderer {
           const building = state.buildings.get(tile.buildingId);
           if (building && building.origin.x === x && building.origin.y === y) {
             drawn.add(building.id);
-            drawBuilding(ctx, building, light, engine.selectedId === building.id);
+            this.drawCachedBuilding(ctx, building, light, lightKey, engine.selectedId === building.id);
           }
         }
         if (tile.tree && !tile.buildingId) {
@@ -110,16 +132,13 @@ export class CityRenderer {
         drawWaterfrontDecor(ctx, x, y, tile, light, this.time);
       }
 
-      // Draw vehicles and citizens at this depth row (after buildings at
-      // the same row, so they appear on the road surface; but before
-      // buildings at deeper rows, so they go behind them).
-      const rowVehicles = vehiclesByRow.get(sum);
+      const rowVehicles = this.vehiclesByRow.get(sum);
       if (rowVehicles) {
         for (const v of rowVehicles) {
           drawVehicle(ctx, v, light, deckLift(state, v.x, v.y), state);
         }
       }
-      const rowCitizens = citizensByRow.get(sum);
+      const rowCitizens = this.citizensByRow.get(sum);
       if (rowCitizens) {
         for (const c of rowCitizens) {
           drawCitizen(ctx, c, light, deckLift(state, c.x, c.y), state);
@@ -138,25 +157,161 @@ export class CityRenderer {
       ctx.fillRect(0, 0, this.width, this.height);
     }
 
-    const vig = ctx.createRadialGradient(
-      this.width * 0.5,
-      this.height * 0.45,
-      this.width * 0.2,
-      this.width * 0.5,
-      this.height * 0.5,
-      this.width * 0.78,
-    );
-    vig.addColorStop(0, "rgba(0,0,0,0)");
-    vig.addColorStop(1, light.phase === "night" ? "rgba(0,0,0,0.2)" : "rgba(10,20,16,0.16)");
-    ctx.fillStyle = vig;
-    ctx.fillRect(0, 0, this.width, this.height);
+    this.fillVignette(ctx, light);
     drawWeatherOverlay(ctx, state, this.width, this.height, this.time);
   }
 
-  private ctx: CanvasRenderingContext2D | null = null;
+  private bucketMovers(state: CityState, showPeople: boolean) {
+    this.vehiclesByRow.clear();
+    this.citizensByRow.clear();
+    for (const v of state.vehicles) {
+      if (!tileVisible(v.x, v.y, this.camera, this.width, this.height)) continue;
+      const row = Math.floor(v.x) + Math.floor(v.y);
+      let bucket = this.vehiclesByRow.get(row);
+      if (!bucket) {
+        bucket = [];
+        this.vehiclesByRow.set(row, bucket);
+      }
+      bucket.push(v);
+    }
+    if (!showPeople) return;
+    for (const c of state.citizens) {
+      if (!citizenIsOutdoors(c)) continue;
+      if (!tileVisible(c.x, c.y, this.camera, this.width, this.height)) continue;
+      const row = Math.floor(c.x) + Math.floor(c.y);
+      let bucket = this.citizensByRow.get(row);
+      if (!bucket) {
+        bucket = [];
+        this.citizensByRow.set(row, bucket);
+      }
+      bucket.push(c);
+    }
+  }
 
-  attach(ctx: CanvasRenderingContext2D) {
-    this.ctx = ctx;
+  private drawCachedBuilding(
+    ctx: CanvasRenderingContext2D,
+    building: Building,
+    light: Lighting,
+    lightKey: string,
+    selected: boolean,
+  ) {
+    const sprite = this.spriteFor(building, light, lightKey);
+    if (sprite) {
+      ctx.drawImage(sprite.canvas, sprite.ox, sprite.oy);
+    } else {
+      drawBuilding(ctx, building, light, false);
+    }
+    if (selected) {
+      const d = diamondPoints(building.origin.x, building.origin.y);
+      ctx.save();
+      ctx.strokeStyle = alpha("#f4d03f", 0.95);
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(d.top.x, d.top.y - 8);
+      ctx.lineTo(d.right.x + 8, d.right.y);
+      ctx.lineTo(d.bottom.x, d.bottom.y + 8);
+      ctx.lineTo(d.left.x - 8, d.left.y);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  private spriteFor(building: Building, light: Lighting, lightKey: string) {
+    const key = `${lightKey}|${Math.ceil((building.constructionLeft ?? 0) / 2)}`;
+    const hit = this.sprites.get(building.id);
+    if (hit && hit.key === key) return hit;
+    if (this.bakedThisFrame >= BAKE_PER_FRAME) return null;
+
+    const box = spriteBounds(building);
+    const w = Math.max(2, Math.ceil(box.maxX - box.minX));
+    const h = Math.max(2, Math.ceil(box.maxY - box.minY));
+    const canvas = hit?.canvas && hit.canvas.width === w && hit.canvas.height === h
+      ? hit.canvas
+      : document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const spriteCtx = canvas.getContext("2d");
+    if (!spriteCtx) return null;
+    spriteCtx.clearRect(0, 0, w, h);
+    spriteCtx.setTransform(1, 0, 0, 1, -box.minX, -box.minY);
+    drawBuilding(spriteCtx, building, light, false);
+    const sprite: BuildingSprite = { canvas, ox: box.minX, oy: box.minY, key };
+    this.sprites.set(building.id, sprite);
+    this.bakedThisFrame += 1;
+    return sprite;
+  }
+
+  private ensureGround(state: CityState, light: Lighting, lightKey: string, mapRev: number) {
+    const key = `${lightKey}|${mapRev}|${state.size}`;
+    if (this.ground?.key === key) return;
+
+    const bounds = worldBounds(state.size);
+    const worldW = bounds.maxX - bounds.minX;
+    const worldH = bounds.maxY - bounds.minY;
+    const canvas = this.ground?.canvas ?? document.createElement("canvas");
+    canvas.width = Math.max(1, Math.ceil(worldW));
+    canvas.height = Math.max(1, Math.ceil(worldH));
+    const gctx = canvas.getContext("2d");
+    if (!gctx) return;
+    gctx.setTransform(1, 0, 0, 1, -bounds.minX, -bounds.minY);
+    gctx.clearRect(bounds.minX, bounds.minY, worldW, worldH);
+
+    const weather = state.weather?.kind ?? "clear";
+    for (let y = 0; y < state.size; y++) {
+      for (let x = 0; x < state.size; x++) {
+        const tile = state.tiles[y][x];
+        drawTerrainTile(gctx, x, y, tile.terrain, light, 0, tile.graffiti, weather, true);
+        if (tile.road && !tile.bridge) drawRoadTile(gctx, x, y, tile.road, light);
+      }
+    }
+
+    this.ground = {
+      canvas,
+      key,
+      minX: bounds.minX,
+      minY: bounds.minY,
+      worldW,
+      worldH,
+    };
+
+    for (const id of [...this.sprites.keys()]) {
+      if (!state.buildings.has(id)) this.sprites.delete(id);
+    }
+  }
+
+  private fillSky(ctx: CanvasRenderingContext2D, light: Lighting) {
+    const key = `${light.skyTop}|${light.skyBottom}|${this.width}|${this.height}`;
+    if (!this.sky || this.skyKey !== key) {
+      const sky = ctx.createLinearGradient(0, 0, 0, this.height);
+      sky.addColorStop(0, light.skyTop);
+      sky.addColorStop(1, light.skyBottom);
+      this.sky = sky;
+      this.skyKey = key;
+    }
+    ctx.fillStyle = this.sky;
+    ctx.fillRect(0, 0, this.width, this.height);
+  }
+
+  private fillVignette(ctx: CanvasRenderingContext2D, light: Lighting) {
+    const key = `${light.phase}|${this.width}|${this.height}`;
+    if (!this.vig || this.vigKey !== key) {
+      const vig = ctx.createRadialGradient(
+        this.width * 0.5,
+        this.height * 0.45,
+        this.width * 0.2,
+        this.width * 0.5,
+        this.height * 0.5,
+        this.width * 0.78,
+      );
+      vig.addColorStop(0, "rgba(0,0,0,0)");
+      vig.addColorStop(1, light.phase === "night" ? "rgba(0,0,0,0.2)" : "rgba(10,20,16,0.16)");
+      this.vig = vig;
+      this.vigKey = key;
+    }
+    ctx.fillStyle = this.vig;
+    ctx.fillRect(0, 0, this.width, this.height);
   }
 
   private drawDistantHills(ctx: CanvasRenderingContext2D, color: string) {
@@ -169,6 +324,39 @@ export class CityRenderer {
     ctx.lineTo(0, this.height);
     ctx.fill();
   }
+}
+
+function cacheLightKey(light: Lighting, weather: string) {
+  return [
+    light.phase,
+    weather,
+    Math.round(light.ambient * 8),
+    Math.round(light.windowLit * 5),
+    Math.round(light.sun * 8),
+  ].join("|");
+}
+
+function spriteBounds(building: Building) {
+  const h = buildingDrawHeight(building) + mastHeight(building);
+  const { x, y, width, depth } = {
+    x: building.origin.x,
+    y: building.origin.y,
+    width: building.width,
+    depth: building.depth,
+  };
+  const top = { x: (x - y) * (TILE_W / 2), y: (x + y) * (TILE_H / 2) };
+  const right = { x: (x + width - 1 - y) * (TILE_W / 2), y: (x + width - 1 + y) * (TILE_H / 2) };
+  const left = { x: (x - (y + depth - 1)) * (TILE_W / 2), y: (x + y + depth - 1) * (TILE_H / 2) };
+  const bottom = {
+    x: (x + width - 1 - (y + depth - 1)) * (TILE_W / 2),
+    y: (x + width - 1 + y + depth - 1) * (TILE_H / 2),
+  };
+  return {
+    minX: Math.floor(left.x - TILE_W / 2 - 24),
+    maxX: Math.ceil(right.x + TILE_W / 2 + 24),
+    minY: Math.floor(top.y - h - 88),
+    maxY: Math.ceil(bottom.y + TILE_H + 28),
+  };
 }
 
 function lightingForDummy() {
@@ -209,7 +397,6 @@ function deckLift(state: CityState, x: number, y: number) {
   const approach = neighbours.find((tile) => tile?.bridge);
   if (!approach?.bridge) return 0;
 
-  // Blend across the approach tile based on how close we are to the deck.
   const dx = Math.abs(x - approach.x);
   const dy = Math.abs(y - approach.y);
   const distance = Math.min(1, Math.max(dx, dy));

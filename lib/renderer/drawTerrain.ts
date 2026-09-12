@@ -25,6 +25,7 @@ export function drawTerrainTile(
   time: number,
   graffiti: Graffiti | null = null,
   weather: WeatherKind = "clear",
+  staticWater = false,
 ) {
   const n = hash2(x, y, 11);
   const n2 = hash2(x, y, 29);
@@ -40,6 +41,11 @@ export function drawTerrainTile(
   }
 
   if (terrain === "water") {
+    if (staticWater) {
+      const depth = 0.3 + hash2(x, y, 77) * 0.4;
+      drawDiamond(ctx, x, y, lit(mix("#1a4e6e", "#4a9aba", depth), light, "ground"));
+      return;
+    }
     drawWaterTile(ctx, x, y, light, time, n, n2);
     if (isWestShoreWater(x, y)) drawWestSurf(ctx, x, y, light, time);
     return;

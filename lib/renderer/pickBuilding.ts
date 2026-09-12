@@ -4,7 +4,7 @@ import { isoBoxCorners } from "./drawIso";
 
 type Pt = { x: number; y: number };
 
-function buildingDrawHeight(b: Building) {
+export function buildingDrawHeight(b: Building) {
   switch (b.kind) {
     case "house":
       return 26 + (b.variant % 3) * 3 + 16;
@@ -36,7 +36,7 @@ function buildingDrawHeight(b: Building) {
   }
 }
 
-function mastHeight(b: Building) {
+export function mastHeight(b: Building) {
   if (b.kind === "tower") return 54;
   if (b.kind === "skyscraper") return 26;
   return 0;

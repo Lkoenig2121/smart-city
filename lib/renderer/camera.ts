@@ -21,6 +21,9 @@ export class CityCamera {
     this.x += (this.targetX - this.x) * k;
     this.y += (this.targetY - this.y) * k;
     this.zoom += (this.targetZoom - this.zoom) * k;
+    if (Math.abs(this.x - this.targetX) < 0.35) this.x = this.targetX;
+    if (Math.abs(this.y - this.targetY) < 0.35) this.y = this.targetY;
+    if (Math.abs(this.zoom - this.targetZoom) < 0.001) this.zoom = this.targetZoom;
   }
 
   panBy(dx: number, dy: number) {
@@ -75,6 +78,39 @@ export function tileVisible(
   const sx = p.x * cam.zoom + cam.x;
   const sy = p.y * cam.zoom + cam.y;
   return sx > -pad && sy > -pad && sx < width + pad && sy < height + pad + 220;
+}
+
+/** Grid AABB covering the current screen, plus padding for tall facades. */
+export function visibleTileRange(
+  cam: CityCamera,
+  width: number,
+  height: number,
+  size: number,
+  pad = 8,
+) {
+  const corners = [
+    cam.screenToWorld(-80, -80),
+    cam.screenToWorld(width + 80, -80),
+    cam.screenToWorld(-80, height + 280),
+    cam.screenToWorld(width + 80, height + 280),
+  ];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const world of corners) {
+    const g = screenToGrid(world.x, world.y);
+    minX = Math.min(minX, g.x);
+    maxX = Math.max(maxX, g.x);
+    minY = Math.min(minY, g.y);
+    maxY = Math.max(maxY, g.y);
+  }
+  return {
+    x0: Math.max(0, Math.floor(minX) - pad),
+    x1: Math.min(size - 1, Math.ceil(maxX) + pad),
+    y0: Math.max(0, Math.floor(minY) - pad),
+    y1: Math.min(size - 1, Math.ceil(maxY) + pad),
+  };
 }
 
 void TILE_W;

@@ -67,6 +67,7 @@ export function CityCanvas() {
     lastY: 0,
     pointerId: -1,
   });
+  const pickAt = useRef({ t: 0, x: 0, y: 0 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -75,7 +76,7 @@ export function CityCanvas() {
 
     const engine = new CityEngine();
     const renderer = new CityRenderer();
-    const ctx = canvas.getContext("2d", { alpha: false });
+    const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
     if (!ctx) return;
 
     engineRef.current = engine;
@@ -85,7 +86,7 @@ export function CityCanvas() {
 
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       canvas.width = Math.max(1, Math.floor(rect.width * dpr));
       canvas.height = Math.max(1, Math.floor(rect.height * dpr));
       canvas.style.width = `${rect.width}px`;
@@ -278,10 +279,16 @@ export function CityCanvas() {
     const tile = renderer.camera.pickTile(sx, sy);
     const world = renderer.camera.screenToWorld(sx, sy);
     engine.hover = tile;
-    engine.hoverBuildingId =
-      engine.tool === "inspect"
-        ? pickBuildingAt(engine.state, world.x, world.y)?.id ?? null
-        : getBuildingAt(engine.state, tile.x, tile.y)?.id ?? null;
+    if (engine.tool === "inspect") {
+      const now = performance.now();
+      const moved = Math.hypot(sx - pickAt.current.x, sy - pickAt.current.y);
+      if (now - pickAt.current.t > 50 || moved > 8) {
+        pickAt.current = { t: now, x: sx, y: sy };
+        engine.hoverBuildingId = pickBuildingAt(engine.state, world.x, world.y)?.id ?? null;
+      }
+    } else {
+      engine.hoverBuildingId = getBuildingAt(engine.state, tile.x, tile.y)?.id ?? null;
+    }
 
     if (!drag.current.active) return;
     const dx = event.clientX - drag.current.lastX;

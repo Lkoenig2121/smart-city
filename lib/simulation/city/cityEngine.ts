@@ -19,6 +19,8 @@ export class CityEngine {
   hoverBuildingId: string | null = null;
   /** Last reason a tool click did nothing, shown in the HUD. */
   placementHint = "";
+  /** Bumps when tiles or buildings change so the iso renderer can recache. */
+  mapRev = 0;
   private seed: number;
 
   constructor(seed = 20260903) {
@@ -62,6 +64,7 @@ export class CityEngine {
         tile.road = null;
         tile.bridge = null;
         this.reconnectRoads();
+        this.mapRev += 1;
         return true;
       }
       if (tile.buildingId) {
@@ -70,6 +73,7 @@ export class CityEngine {
       }
       if (tile.tree) {
         tile.tree = null;
+        this.mapRev += 1;
         return true;
       }
       return false;
@@ -94,12 +98,14 @@ export class CityEngine {
         };
       }
       this.reconnectRoads();
+      this.mapRev += 1;
       return true;
     }
 
     if (this.tool === "tree") {
       if (tile.road || tile.buildingId || tile.terrain === "water") return false;
       tile.tree = { variant: Math.floor(Math.random() * 6), scale: 0.9 + Math.random() * 0.3 };
+      this.mapRev += 1;
       return true;
     }
 
@@ -107,6 +113,7 @@ export class CityEngine {
       if (tile.road || tile.buildingId || tile.terrain === "water") return false;
       tile.terrain = "park";
       if (!tile.tree) tile.tree = { variant: 2, scale: 1 };
+      this.mapRev += 1;
       return true;
     }
 
@@ -114,6 +121,7 @@ export class CityEngine {
       if (tile.road || tile.buildingId || tile.terrain === "water") return false;
       tile.terrain = "lot";
       tile.tree = null;
+      this.mapRev += 1;
       return true;
     }
 
@@ -121,6 +129,7 @@ export class CityEngine {
       if (tile.road || tile.buildingId || tile.terrain === "water") return false;
       tile.terrain = "sand";
       tile.tree = null;
+      this.mapRev += 1;
       return true;
     }
 
@@ -156,6 +165,7 @@ export class CityEngine {
     }
     recountPopulation(this.state);
     this.selectedId = id;
+    this.mapRev += 1;
     if (kind === "baseball_stadium") {
       this.state.budget.treasury -= STADIUM_COST;
       building.constructionLeft = STADIUM_BUILD_SECONDS;
@@ -181,6 +191,7 @@ export class CityEngine {
     this.state.buildings.delete(id);
     if (this.selectedId === id) this.selectedId = null;
     recountPopulation(this.state);
+    this.mapRev += 1;
   }
 
   /** Guesses which way a hand-built span runs from its neighbouring roads. */
