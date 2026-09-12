@@ -112,6 +112,8 @@ export class InteriorControls {
         this.velocity.y = 0;
         this.grounded = true;
       }
+    } else if (this.position.y > floor + 0.5) {
+      this.grounded = false;
     } else {
       this.position.y = floor;
     }

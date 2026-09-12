@@ -46,7 +46,7 @@ export class LodgingWorld {
     this.renderer.toneMappingExposure = zone === "pool" ? 1.18 : 1.08;
     this.renderer.shadowMap.enabled = true;
 
-    this.camera = new THREE.PerspectiveCamera(74, 1, 0.1, zone === "room" ? 280 : 220);
+    this.camera = new THREE.PerspectiveCamera(74, 1, 0.1, zone === "lobby" ? 80 : 280);
     this.interior = buildLodgingInterior(building, zone, state, room);
     this.scene.add(this.interior.group);
 
@@ -78,10 +78,10 @@ export class LodgingWorld {
 
     if (zone === "pool") {
       this.scene.background = new THREE.Color(night ? "#10182c" : "#7eb3e0");
-      this.scene.fog = new THREE.Fog(night ? 0x10182c : 0x7eb3e0, 28, 70);
+      this.scene.fog = new THREE.Fog(night ? 0x10182c : 0x7eb3e0, 48, 210);
     } else if (zone === "room") {
       this.scene.background = new THREE.Color(night ? "#10182c" : "#7eb3e0");
-      this.scene.fog = new THREE.Fog(night ? 0x10182c : 0x7eb3e0, 55, 160);
+      this.scene.fog = new THREE.Fog(night ? 0x10182c : 0x7eb3e0, 40, 200);
     } else {
       this.scene.background = new THREE.Color("#1c1814");
       this.scene.fog = new THREE.Fog(0x1c1814, 18, 48);

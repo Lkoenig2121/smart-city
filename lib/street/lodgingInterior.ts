@@ -33,7 +33,7 @@ export function buildLodgingInterior(
   room: LodgingRoom | null = null,
 ): LodgingInterior {
   if (zone === "room") return buildRoom(building, state, room);
-  if (zone === "pool") return buildPool(building);
+  if (zone === "pool") return buildPool(building, state);
   return buildLobby(building);
 }
 
@@ -260,7 +260,11 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
   group.add(glass);
   disposables.push(glassGeo, glassMat);
 
-  addCityView(floorB, wallB, trimB, building, state, minZ, room?.floor ?? 8);
+  addCityView(floorB, wallB, trimB, building, state, {
+    edgeZ: minZ,
+    toward: -1,
+    floor: room?.floor ?? 8,
+  });
 
   // Bed.
   trimB.box(-6.6, -1.4, -1.1, 5.2, 0, 0.55, wood);
@@ -545,16 +549,46 @@ function addCityView(
   trimB: MeshBuilder,
   here: Building,
   state: CityState,
-  windowZ: number,
-  floor = 8,
+  view: { edgeZ: number; toward: -1 | 1; floor: number },
 ) {
-  const groundY = -10 - floor * 1.35;
-  const grass = new THREE.Color("#4a8a44");
-  const pavement = new THREE.Color("#8a8680");
-  const water = new THREE.Color("#2f6f96");
-  floorB.ground(-90, -140, 90, windowZ - 1.2, groundY, grass);
-  floorB.ground(-14, -70, 14, windowZ - 8, groundY + 0.08, pavement);
-  floorB.ground(-70, -48, -18, -22, groundY + 0.04, water);
+  const dir = view.toward;
+  // Air gap so the near ground is a distant street, not a wall in the window.
+  const zNear = view.edgeZ + dir * 10;
+  const zFar = view.edgeZ + dir * 240;
+  const z0 = Math.min(zNear, zFar);
+  const z1 = Math.max(zNear, zFar);
+  const drop = 4.4 + Math.min(view.floor, 18) * 0.32;
+  const groundY = -drop;
+  const sill = 1.15;
+  const grass = new THREE.Color("#3d8c42");
+  const park = new THREE.Color("#2a6a32");
+  const pavement = new THREE.Color("#7d7972");
+  const asphalt = new THREE.Color("#3f4148");
+  const water = new THREE.Color("#2a6d94");
+  const sand = new THREE.Color("#cbb67a");
+  const trunk = new THREE.Color("#5a3d28");
+  const leaf = new THREE.Color("#1f6b2c");
+
+  floorB.ground(-150, z0, 150, z1, groundY, grass);
+  for (let i = 0; i < 5; i++) {
+    const x = -72 + i * 34;
+    floorB.ground(x, z0, x + 6.4, z1, groundY + 0.08, asphalt);
+  }
+  for (let i = 0; i < 7; i++) {
+    const mid = zNear + dir * (16 + i * 26);
+    const a = mid - dir * 3;
+    const b = mid + dir * 3;
+    floorB.ground(-150, Math.min(a, b), 150, Math.max(a, b), groundY + 0.1, asphalt);
+  }
+  floorB.ground(-22, z0, 22, z0 + Math.abs(z1 - z0) * 0.08, groundY + 0.06, pavement);
+
+  const riverA = zNear + dir * 78;
+  const riverB = zNear + dir * 104;
+  floorB.ground(-150, Math.min(riverA, riverB), -18, Math.max(riverA, riverB), groundY + 0.04, water);
+  floorB.ground(-18, Math.min(riverA, riverB) + 6, -6, Math.max(riverA, riverB) - 4, groundY + 0.05, sand);
+  const parkA = zNear + dir * 32;
+  const parkB = zNear + dir * 62;
+  floorB.ground(28, Math.min(parkA, parkB), 96, Math.max(parkA, parkB), groundY + 0.03, park);
 
   const neighbors = [...state.buildings.values()]
     .filter((b) => b.id !== here.id)
@@ -563,29 +597,119 @@ function addCityView(
       dist: (b.origin.x - here.origin.x) ** 2 + (b.origin.y - here.origin.y) ** 2,
     }))
     .sort((a, c) => a.dist - c.dist)
-    .slice(0, 22);
+    .slice(0, 40);
 
-  for (const { b } of neighbors) {
-    const x = (b.origin.x - here.origin.x) * 3.4;
-    const z = windowZ - 10 - Math.max(2, b.origin.y - here.origin.y) * 3.1 - (b.origin.x % 3);
-    const w = Math.max(2.2, b.width * 2.1);
-    const d = Math.max(2.0, b.depth * 1.8);
-    const h = Math.max(4.5, b.floors * 0.62);
-    const wall = new THREE.Color(b.wallColor);
-    const roof = new THREE.Color(b.roofColor);
-    wallB.box(x - w / 2, z - d / 2, x + w / 2, z + d / 2, groundY, groundY + h, wall);
-    trimB.box(x - w / 2 - 0.08, z - d / 2 - 0.08, x + w / 2 + 0.08, z + d / 2 + 0.08, groundY + h - 0.35, groundY + h, roof);
+  neighbors.forEach(({ b }, i) => {
+    const col = (i % 8) - 3.5;
+    const row = Math.floor(i / 8);
+    const x = col * 11.4 + ((b.origin.x * 2.1) % 3.2) - 1.6;
+    const z = zNear + dir * (8 + row * 18 + (i % 5) * 2.1);
+    const w = Math.max(3.1, b.width * 2.5);
+    const d = Math.max(2.6, b.depth * 2.1);
+    // Keep the first rows in the window even from a high floor.
+    const natural = 3.2 + b.floors * 1.12;
+    const h = row < 2 ? Math.max(natural, sill + 1.6 - groundY) : natural;
+    const top = groundY + h;
+    wallB.box(x - w / 2, z - d / 2, x + w / 2, z + d / 2, groundY, top, new THREE.Color(b.wallColor));
+    trimB.box(
+      x - w / 2 - 0.08,
+      z - d / 2 - 0.08,
+      x + w / 2 + 0.08,
+      z + d / 2 + 0.08,
+      top - 0.38,
+      top,
+      new THREE.Color(b.roofColor),
+    );
+    const win = new THREE.Color(b.wallColor).offsetHSL(0, -0.08, -0.18);
+    const bands = Math.min(6, Math.max(2, Math.round(h / 3.2)));
+    for (let k = 0; k < bands; k++) {
+      const y = groundY + 0.7 + k * (h / (bands + 0.6));
+      if (y + 0.45 > top - 0.5) continue;
+      trimB.box(x - w / 2 + 0.18, z - d / 2 - 0.04, x + w / 2 - 0.18, z - d / 2 + 0.06, y, y + 0.42, win);
+    }
+  });
+
+  for (let i = 0; i < 34; i++) {
+    const x = -62 + (i % 12) * 11 + ((i * 5) % 4);
+    const z = zNear + dir * (12 + Math.floor(i / 12) * 24 + (i % 4) * 4);
+    const s = 0.8 + (i % 4) * 0.16;
+    wallB.box(x - 0.14, z - 0.14, x + 0.14, z + 0.14, groundY, groundY + 1.6 * s, trunk);
+    trimB.box(
+      x - 1.05 * s,
+      z - 1.05 * s,
+      x + 1.05 * s,
+      z + 1.05 * s,
+      groundY + 1.3 * s,
+      groundY + 3.8 * s,
+      leaf,
+    );
   }
 }
 
-function buildPool(building: Building): LodgingInterior {
+function addCityFlank(
+  floorB: MeshBuilder,
+  wallB: MeshBuilder,
+  trimB: MeshBuilder,
+  here: Building,
+  state: CityState,
+  edgeX: number,
+  toward: -1 | 1,
+  floor: number,
+) {
+  const dir = toward;
+  const xNear = edgeX + dir * 8;
+  const xFar = edgeX + dir * 150;
+  const x0 = Math.min(xNear, xFar);
+  const x1 = Math.max(xNear, xFar);
+  const groundY = -(4.4 + Math.min(floor, 18) * 0.32);
+  const grass = new THREE.Color("#3d8c42");
+  const asphalt = new THREE.Color("#3f4148");
+  const trunk = new THREE.Color("#5a3d28");
+  const leaf = new THREE.Color("#1f6b2c");
+
+  floorB.ground(x0, -80, x1, 80, groundY, grass);
+  floorB.ground(x0, -4, x1, 4, groundY + 0.08, asphalt);
+
+  const neighbors = [...state.buildings.values()]
+    .filter((b) => b.id !== here.id)
+    .slice(0, 18);
+
+  neighbors.forEach((b, i) => {
+    const row = Math.floor(i / 6);
+    const col = (i % 6) - 2.5;
+    const x = xNear + dir * (10 + row * 20 + (i % 3) * 2);
+    const z = col * 10.5 + ((b.origin.y * 1.8) % 2.2);
+    const w = Math.max(3, b.width * 2.3);
+    const d = Math.max(2.4, b.depth * 2);
+    const h = Math.max(3.2 + b.floors * 1.05, 1.4 - groundY);
+    wallB.box(x - w / 2, z - d / 2, x + w / 2, z + d / 2, groundY, groundY + h, new THREE.Color(b.wallColor));
+    trimB.box(
+      x - w / 2 - 0.08,
+      z - d / 2 - 0.08,
+      x + w / 2 + 0.08,
+      z + d / 2 + 0.08,
+      groundY + h - 0.35,
+      groundY + h,
+      new THREE.Color(b.roofColor),
+    );
+  });
+
+  for (let i = 0; i < 14; i++) {
+    const x = xNear + dir * (7 + (i % 5) * 14);
+    const z = -36 + Math.floor(i / 5) * 28 + (i % 4) * 3;
+    const s = 0.82 + (i % 3) * 0.14;
+    wallB.box(x - 0.14, z - 0.14, x + 0.14, z + 0.14, groundY, groundY + 1.55 * s, trunk);
+    trimB.box(x - s, z - s, x + s, z + s, groundY + 1.25 * s, groundY + 3.6 * s, leaf);
+  }
+}
+
+function buildPool(building: Building, state: CityState): LodgingInterior {
   const group = new THREE.Group();
   const blockers: Blocker[] = [];
   const disposables: Array<{ dispose: () => void }> = [];
   const floorB = new MeshBuilder();
   const wallB = new MeshBuilder();
   const trimB = new MeshBuilder();
-  void building;
 
   const minX = -18;
   const maxX = 18;
@@ -613,19 +737,30 @@ function buildPool(building: Building): LodgingInterior {
   }
   blockers.push({ minX, maxX, minZ, maxZ: minZ + 0.7 });
 
-  // Parapet.
-  wallB.box(minX, minZ, minX + 0.45, maxZ, 0, 1.15, cream);
-  wallB.box(maxX - 0.45, minZ, maxX, maxZ, 0, 1.15, cream);
-  wallB.box(minX, maxZ - 0.45, maxX, maxZ, 0, 1.15, cream);
+  // Low parapet — look over it at the city.
+  wallB.box(minX, minZ, minX + 0.45, maxZ, 0, 0.72, cream);
+  wallB.box(maxX - 0.45, minZ, maxX, maxZ, 0, 0.72, cream);
+  wallB.box(minX, maxZ - 0.45, maxX, maxZ, 0, 0.62, cream);
   blockers.push({ minX, maxX: minX + 0.45, minZ, maxZ });
   blockers.push({ minX: maxX - 0.45, maxX, minZ, maxZ });
   blockers.push({ minX, maxX, minZ: maxZ - 0.45, maxZ });
 
-  // Pool + sun shelf.
-  floorB.ground(-8.5, -6.4, 8.5, 8.2, 0.04, dark);
-  floorB.ground(-8.1, -2.2, 8.1, 7.8, 0.08, water);
-  floorB.ground(-8.1, -6.0, 8.1, -2.2, 0.12, shelf);
-  blockers.push({ minX: -7.6, maxX: 7.6, minZ: -1.8, maxZ: 7.4 });
+  // Walk-in pool: basin walls + bottom, water surface, no collision in the water.
+  const px0 = -8.1;
+  const px1 = 8.1;
+  const deepZ0 = -2.2;
+  const deepZ1 = 7.8;
+  const shelfZ0 = -6.0;
+  const shelfZ1 = -2.2;
+  const bottom = -0.9;
+  const lip = 0.06;
+  wallB.box(px0 - 0.35, deepZ0 - 0.2, px0, deepZ1 + 0.2, bottom, 0.1, dark);
+  wallB.box(px1, deepZ0 - 0.2, px1 + 0.35, deepZ1 + 0.2, bottom, 0.1, dark);
+  wallB.box(px0 - 0.35, deepZ1, px1 + 0.35, deepZ1 + 0.28, bottom, 0.1, dark);
+  wallB.box(px0 - 0.35, shelfZ0 - 0.2, px1 + 0.35, shelfZ0, bottom, 0.1, dark);
+  floorB.ground(px0, deepZ0, px1, deepZ1, bottom, dark);
+  floorB.ground(px0, deepZ0, px1, deepZ1, lip, water);
+  floorB.ground(px0, shelfZ0, px1, shelfZ1, 0.12, shelf);
 
   // Submerged loungers on the shelf.
   const white = new THREE.Color("#f4f1ea");
@@ -662,17 +797,27 @@ function buildPool(building: Building): LodgingInterior {
   trimB.box(9.3, -8.1, 10.2, -7.2, 0.04, 1.05, white);
   trimB.box(12.6, -4.8, 13.5, -3.9, 0.04, 1.05, inkColor());
 
+  const roofFloor = Math.max(8, building.floors);
+  addCityView(floorB, wallB, trimB, building, state, {
+    edgeZ: maxZ,
+    toward: 1,
+    floor: roofFloor,
+  });
+  addCityFlank(floorB, wallB, trimB, building, state, maxX, 1, roofFloor);
+  addCityFlank(floorB, wallB, trimB, building, state, minX, -1, roofFloor);
+
   assemble(group, floorB, wallB, trimB, disposables);
 
   return {
     group,
     blockers,
-    spawn: { x: 0, z: 12.4, yaw: 0, pitch: -0.12 },
+    spawn: { x: 0, z: -8.2, yaw: Math.PI, pitch: -0.08 },
     bounds: { minX, maxX, minZ, maxZ },
     deskMat: null,
     tv: null,
     groundAt: (x, z) => {
-      if (x > -8.1 && x < 8.1 && z > -6.0 && z < -2.2) return 0.12;
+      if (x > px0 && x < px1 && z > deepZ0 && z < deepZ1) return -0.62;
+      if (x > px0 && x < px1 && z > shelfZ0 && z < shelfZ1) return 0.12;
       return 0;
     },
     nearDesk: () => false,
