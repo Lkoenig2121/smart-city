@@ -3,6 +3,7 @@ import type { Building, CityState } from "@/lib/city/types";
 import { lodgingUse, type LodgingRoom, type LodgingZone } from "@/lib/city/lodging";
 import type { Blocker } from "./buildCity";
 import { MeshBuilder } from "./meshBuilder";
+import { addRoomTelevision, type RoomTv } from "./roomTv";
 
 export interface LodgingInterior {
   group: THREE.Group;
@@ -10,6 +11,7 @@ export interface LodgingInterior {
   spawn: { x: number; z: number; yaw: number; pitch: number };
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   deskMat: THREE.MeshStandardMaterial | null;
+  tv: RoomTv | null;
   groundAt: (x: number, z: number) => number;
   nearDesk: (x: number, z: number) => boolean;
   nearComputer: (x: number, z: number) => boolean;
@@ -175,6 +177,7 @@ function buildLobby(building: Building): LodgingInterior {
     spawn: { x: 0, z: 14.6, yaw: 0, pitch: -0.08 },
     bounds: { minX, maxX, minZ, maxZ },
     deskMat,
+    tv: null,
     groundAt: () => 0,
     nearDesk: (x, z) => Math.abs(x) < 8 && z > -4.4 && z < 1.6,
     nearComputer: () => false,
@@ -270,9 +273,8 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
   trimB.box(-6.6, 5.3, -5.1, 6.5, 0, 0.7, wood);
   trimB.box(-6.05, 5.7, -5.55, 6.15, 0.7, 1.35, white);
 
-  // Dresser + TV.
+  // Dresser; the television mesh sits on top and faces the armchair.
   trimB.box(2.4, -4.6, 6.8, -3.2, 0, 0.85, new THREE.Color("#c4a882"));
-  wallB.box(3.3, -4.55, 5.9, -3.35, 0.85, 2.15, charcoal);
   blockers.push({ minX: 2.4, maxX: 6.8, minZ: -4.6, maxZ: -3.2 });
 
   // Blue armchair.
@@ -297,6 +299,7 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
   assemble(group, floorB, wallB, trimB, disposables);
 
   const computer = addDeskComputer(group, disposables);
+  const tv = addRoomTelevision(group, disposables);
 
   return {
     group,
@@ -304,6 +307,7 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
     spawn: { x: 0.3, z: 3.4, yaw: 0, pitch: -0.06 },
     bounds: { minX, maxX, minZ, maxZ },
     deskMat: null,
+    tv,
     groundAt: () => 0,
     nearDesk: () => false,
     nearComputer: (x, z) => x > 1.05 && x < 5.4 && z > 4.2 && z < 6.55,
@@ -666,6 +670,7 @@ function buildPool(building: Building): LodgingInterior {
     spawn: { x: 0, z: 12.4, yaw: 0, pitch: -0.12 },
     bounds: { minX, maxX, minZ, maxZ },
     deskMat: null,
+    tv: null,
     groundAt: (x, z) => {
       if (x > -8.1 && x < 8.1 && z > -6.0 && z < -2.2) return 0.12;
       return 0;

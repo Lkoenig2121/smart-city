@@ -141,8 +141,8 @@ export class LodgingWorld {
       if (this.scene.fog instanceof THREE.Fog) this.scene.fog.color.set(sky);
     }
     if (this.deskCtx && this.deskTexture) this.drawDesk();
+    this.interior.tv?.update(dt, this.state);
     this.renderer.render(this.scene, this.camera);
-    void dt;
   }
 
   private isNight() {
