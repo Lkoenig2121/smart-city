@@ -26,6 +26,7 @@ interface HudProps {
   tool: Tool;
   selected: Building | null;
   hoverLabel: string;
+  streetLife: number;
   onTool: (tool: Tool) => void;
   onClose: () => void;
   onEnterStreet: () => void;
@@ -42,6 +43,7 @@ export function CityHud({
   tool,
   selected,
   hoverLabel,
+  streetLife,
   onTool,
   onClose,
   onEnterStreet,
@@ -67,6 +69,8 @@ export function CityHud({
         <div className="pointer-events-auto flex items-center gap-2">
           <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#101826]/72 px-3 py-2 text-sm text-white/90 shadow-2xl backdrop-blur-md">
             <Stat label="Population" value={population.toLocaleString()} />
+            <span className="h-8 w-px bg-white/10" />
+            <Stat label="Out now" value={streetLife.toLocaleString()} />
             <span className="h-8 w-px bg-white/10" />
             <Stat label="Treasury" value={formatMoney(treasury)} />
             <span className="h-8 w-px bg-white/10" />

@@ -5,6 +5,7 @@ import { formatClock, dayPhase } from "@/lib/simulation/city/cityTick";
 import { CityRenderer } from "@/lib/renderer/CityRenderer";
 import { getBuildingAt } from "@/lib/simulation/city/cityState";
 import { subwayGateTile, subwayStationId } from "@/lib/city/subway";
+import { citizenIsOutdoors } from "@/lib/simulation/citizens/citizenBehavior";
 import type { Building, CityState, Tool } from "@/lib/city/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CityHud } from "./CityHud";
@@ -35,6 +36,7 @@ interface HudSnap {
   tool: Tool;
   selected: Building | null;
   hoverLabel: string;
+  streetLife: number;
 }
 
 export function CityCanvas() {
@@ -182,6 +184,7 @@ export function CityCanvas() {
               : engine.hover
                 ? `Tile ${engine.hover.x}, ${engine.hover.y}`
                 : "",
+          streetLife: engine.state.citizens.filter(citizenIsOutdoors).length,
         });
       }
       frame = requestAnimationFrame(loop);

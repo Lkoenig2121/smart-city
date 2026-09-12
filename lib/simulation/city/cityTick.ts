@@ -1,7 +1,7 @@
 import { mulberry32 } from "@/lib/city/rng";
 import type { CityState } from "@/lib/city/types";
 import { STADIUM_DAILY_REVENUE, stadiumIsOpen } from "@/lib/city/stadium";
-import { randomParkWander, stepCitizens, syncCitizenSchedules } from "../citizens/citizenBehavior";
+import { stepCitizens, syncCitizenSchedules, wanderOutdoors } from "../citizens/citizenBehavior";
 import { seedVehicle, stepVehicles } from "../traffic/vehicleMovement";
 
 export function formatClock(state: CityState) {
@@ -59,7 +59,7 @@ export function tickCity(state: CityState, dtSeconds: number, seeded = true) {
   }
 
   syncCitizenSchedules(state);
-  randomParkWander(state, rand);
+  wanderOutdoors(state, rand);
   stepVehicles(state, dtSeconds, rand);
   stepCitizens(state, dtSeconds);
 }

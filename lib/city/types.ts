@@ -115,12 +115,30 @@ export interface Building {
   constructionLeft?: number;
 }
 
+export type CitizenRole = "worker" | "family" | "shopper" | "student" | "tourist";
+
+export type CitizenActivity =
+  | "home"
+  | "work"
+  | "school"
+  | "shop"
+  | "restaurant"
+  | "park"
+  | "library"
+  | "hotel"
+  | "stadium"
+  | "sleep";
+
 export interface Citizen {
   id: string;
   name: string;
   age: number;
+  role: CitizenRole;
   homeId: string | null;
   workplaceId: string | null;
+  schoolId: string | null;
+  shopId: string | null;
+  restaurantId: string | null;
   money: number;
   happiness: number;
   health: number;
@@ -132,7 +150,7 @@ export interface Citizen {
   pathIndex: number;
   speed: number;
   color: string;
-  activity: "home" | "commute" | "work" | "shop" | "park" | "game" | "sleep";
+  activity: CitizenActivity;
 }
 
 export interface Vehicle {

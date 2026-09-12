@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
+import { citizenIsOutdoors } from "@/lib/simulation/citizens/citizenBehavior";
+import { citizenHairColor, citizenHairStyle } from "@/lib/simulation/citizens/citizenLook";
 import { laneOffset, sidewalkOffset } from "@/lib/simulation/traffic/pathfinding";
 import { CURB_H, DECK_H, TILE } from "./buildCity";
 
@@ -13,6 +15,7 @@ export class AgentLayer {
 
   private bodies: THREE.InstancedMesh;
   private heads: THREE.InstancedMesh;
+  private hair: THREE.InstancedMesh;
   private cars: THREE.InstancedMesh;
   private cabins: THREE.InstancedMesh;
 
@@ -48,6 +51,13 @@ export class AgentLayer {
       peopleCount,
     );
 
+    const hairGeo = new THREE.SphereGeometry(0.16, 10, 8);
+    this.hair = new THREE.InstancedMesh(
+      hairGeo,
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.86 }),
+      peopleCount,
+    );
+
     const carGeo = new THREE.BoxGeometry(1.85, 0.72, 4.3);
     this.cars = new THREE.InstancedMesh(
       carGeo,
@@ -70,7 +80,7 @@ export class AgentLayer {
       vehicleCount,
     );
 
-    for (const mesh of [this.bodies, this.heads, this.cars, this.cabins]) {
+    for (const mesh of [this.bodies, this.heads, this.hair, this.cars, this.cabins]) {
       mesh.castShadow = true;
       mesh.frustumCulled = false;
       this.group.add(mesh);
@@ -98,11 +108,12 @@ export class AgentLayer {
     const citizens = this.state.citizens;
     for (let i = 0; i < this.bodies.count; i++) {
       const citizen = citizens[i];
-      if (!citizen) {
-        // Park unused instances far below the ground.
+      if (!citizen || !citizenIsOutdoors(citizen)) {
+        // Park unused or indoor people far below the ground.
         this.matrix.makeTranslation(0, -1000, 0);
         this.bodies.setMatrixAt(i, this.matrix);
         this.heads.setMatrixAt(i, this.matrix);
+        this.hair.setMatrixAt(i, this.matrix);
         continue;
       }
 
@@ -132,6 +143,16 @@ export class AgentLayer {
       this.position.set(wx, base + 1.24 + bob, wz);
       this.matrix.compose(this.position, this.quat, this.scale);
       this.heads.setMatrixAt(i, this.matrix);
+
+      const style = citizenHairStyle(citizen.id);
+      const hairScale =
+        style === 0 ? [1.08, 0.52, 1.06] : style === 1 ? [1.18, 0.78, 1.16] : [1.16, 1.12, 1.08];
+      const hairLift = style === 0 ? 0.1 : style === 1 ? 0.08 : 0.02;
+      this.scale.set(hairScale[0], hairScale[1], hairScale[2]);
+      this.position.set(wx, base + 1.24 + hairLift + bob, wz);
+      this.matrix.compose(this.position, this.quat, this.scale);
+      this.hair.setMatrixAt(i, this.matrix);
+      this.hair.setColorAt(i, this.color.set(citizenHairColor(citizen.id)));
     }
 
     const vehicles = this.state.vehicles;
@@ -188,14 +209,16 @@ export class AgentLayer {
 
     this.bodies.instanceMatrix.needsUpdate = true;
     this.heads.instanceMatrix.needsUpdate = true;
+    this.hair.instanceMatrix.needsUpdate = true;
     this.cars.instanceMatrix.needsUpdate = true;
     this.cabins.instanceMatrix.needsUpdate = true;
     if (this.bodies.instanceColor) this.bodies.instanceColor.needsUpdate = true;
+    if (this.hair.instanceColor) this.hair.instanceColor.needsUpdate = true;
     if (this.cars.instanceColor) this.cars.instanceColor.needsUpdate = true;
   }
 
   dispose() {
-    for (const mesh of [this.bodies, this.heads, this.cars, this.cabins]) {
+    for (const mesh of [this.bodies, this.heads, this.hair, this.cars, this.cabins]) {
       mesh.geometry.dispose();
       (mesh.material as THREE.Material).dispose();
     }

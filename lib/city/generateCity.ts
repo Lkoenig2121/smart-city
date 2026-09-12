@@ -6,12 +6,11 @@ import {
   RIVER_W,
   riverXAt,
 } from "./waterfront";
-import { citizenName } from "./names";
 import { mulberry32, pick, randInt, randRange } from "./rng";
+import { spawnCitizens } from "@/lib/simulation/citizens/spawnCitizens";
 import type {
   Building,
   BuildingKind,
-  Citizen,
   CityState,
   Graffiti,
   RoadCell,
@@ -355,48 +354,7 @@ export function generateCity(seed = 20260903): CityState {
 
   markNotableVenues(buildings);
 
-  const homes = [...buildings.values()].filter(
-    (b) => b.kind === "house" || b.kind === "apartment",
-  );
-  const workplaces = [...buildings.values()].filter((b) =>
-    [
-      "office",
-      "shop",
-      "skyscraper",
-      "tower",
-      "hospital",
-      "school",
-      "police",
-      "fire",
-      "city_hall",
-      "baseball_stadium",
-    ].includes(b.kind),
-  );
-
-  const citizens: Citizen[] = [];
-  for (let i = 0; i < 86; i++) {
-    const home = homes.length ? pick(rand, homes) : null;
-    const work = workplaces.length ? pick(rand, workplaces) : null;
-    citizens.push({
-      id: `c${i}`,
-      name: citizenName(rand),
-      age: randInt(rand, 18, 72),
-      homeId: home?.id ?? null,
-      workplaceId: work?.id ?? null,
-      money: randInt(rand, 1200, 9400),
-      happiness: randInt(rand, 58, 94),
-      health: randInt(rand, 62, 98),
-      education: randInt(rand, 40, 96),
-      transport: pick(rand, ["walk", "car", "bus"]),
-      x: home ? home.origin.x + 0.3 : randRange(rand, 14, 30),
-      y: home ? home.origin.y + 0.3 : randRange(rand, 14, 30),
-      path: [],
-      pathIndex: 0,
-      speed: randRange(rand, 0.9, 1.6),
-      color: pick(rand, ["#2c3e6b", "#6b2d2d", "#2f5d4a", "#4a3728", "#3d5a80", "#7a3e2e"]),
-      activity: "home",
-    });
-  }
+  const citizens = spawnCitizens(buildings, rand);
 
   if ([...buildings.values()].some((b) => b.kind === "baseball_stadium")) {
     for (const citizen of citizens) {
