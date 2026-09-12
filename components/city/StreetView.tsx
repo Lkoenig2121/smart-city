@@ -42,12 +42,22 @@ interface Props {
   state: CityState;
   entry: { x: number; y: number };
   startInterior?: Interior | null;
+  /** False while the overlay is hiding so the isometric view can paint first. */
+  active?: boolean;
   onTick: (dt: number) => void;
   onExit: () => void;
 }
 
-export function StreetView({ state, entry, startInterior = null, onTick, onExit }: Props) {
+export function StreetView({
+  state,
+  entry,
+  startInterior = null,
+  active = true,
+  onTick,
+  onExit,
+}: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  const outdoorCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const worldRef = useRef<StreetWorld | null>(null);
   const stadiumRef = useRef<StadiumWorld | null>(null);
@@ -88,8 +98,7 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
     interior?.kind === "subway" ? findSubwayStation(state, interior.stationId) : null;
 
   useEffect(() => {
-    if (interior) return;
-    const canvas = canvasRef.current;
+    const canvas = outdoorCanvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
 
@@ -104,9 +113,6 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
     }
 
     worldRef.current = world;
-    world.spawnNear(spawn.x, spawn.y);
-    world.setMoveMode(mode);
-
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
       world.resize(rect.width, rect.height);
@@ -114,6 +120,28 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
+
+    return () => {
+      ro.disconnect();
+      world.dispose();
+      worldRef.current = null;
+    };
+  }, [state]);
+
+  useEffect(() => {
+    if (!active || interior) return;
+    const canvas = outdoorCanvasRef.current;
+    const wrap = wrapRef.current;
+    const world = worldRef.current;
+    if (!canvas || !wrap || !world) return;
+
+    world.spawnNear(spawn.x, spawn.y);
+    world.setMoveMode(mode);
+    const resize = () => {
+      const rect = wrap.getBoundingClientRect();
+      world.resize(rect.width, rect.height);
+    };
+    resize();
 
     const detachInput = attachPointerInput(canvas, world.controls, {
       setLocked,
@@ -168,16 +196,13 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
 
     return () => {
       cancelAnimationFrame(frame);
-      ro.disconnect();
       detachInput();
       if (document.pointerLockElement === canvas) document.exitPointerLock();
-      world.dispose();
-      worldRef.current = null;
     };
-  }, [state, spawn.x, spawn.y, interior]);
+  }, [active, interior, spawn.x, spawn.y, state]);
 
   useEffect(() => {
-    if (interior?.kind !== "stadium") return;
+    if (!active || interior?.kind !== "stadium") return;
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
@@ -240,10 +265,10 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
       world.dispose();
       stadiumRef.current = null;
     };
-  }, [interior, state]);
+  }, [active, interior, state]);
 
   useEffect(() => {
-    if (interior?.kind !== "lodging") return;
+    if (!active || interior?.kind !== "lodging") return;
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     const building = findLodging(state, interior.buildingId);
@@ -327,10 +352,10 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
       world.dispose();
       lodgingRef.current = null;
     };
-  }, [interior, state]);
+  }, [active, interior, state]);
 
   useEffect(() => {
-    if (interior?.kind !== "subway") return;
+    if (!active || interior?.kind !== "subway") return;
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
@@ -418,11 +443,11 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
       world.dispose();
       subwayRef.current = null;
     };
-  }, [interior, state]);
+  }, [active, interior, state]);
 
   const requestLock = () => {
     if (atDesk || atComputer || pickingStop || riding || pickingRoom) return;
-    const canvas = canvasRef.current;
+    const canvas = inside ? canvasRef.current : outdoorCanvasRef.current;
     if (!canvas) return;
     void canvas.requestPointerLock();
   };
@@ -492,7 +517,16 @@ export function StreetView({ state, entry, startInterior = null, onTick, onExit 
 
   return (
     <div ref={wrapRef} className="absolute inset-0 z-30 bg-[#0b1420]">
-      <canvas ref={canvasRef} className="block h-full w-full" onClick={onCanvasClick} />
+      <canvas
+        ref={outdoorCanvasRef}
+        className={`absolute inset-0 h-full w-full ${inside ? "invisible pointer-events-none" : ""}`}
+        onClick={onCanvasClick}
+      />
+      <canvas
+        ref={canvasRef}
+        className={`absolute inset-0 h-full w-full ${inside ? "" : "invisible pointer-events-none"}`}
+        onClick={onCanvasClick}
+      />
 
       {failed ? (
         <div className="absolute inset-0 grid place-items-center bg-[#0b1420] p-6 text-center">

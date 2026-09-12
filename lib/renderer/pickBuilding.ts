@@ -1,3 +1,4 @@
+import { TILE_H, TILE_W, gridToScreen } from "@/lib/city/iso";
 import type { Building, CityState } from "@/lib/city/types";
 import { isoBoxCorners } from "./drawIso";
 
@@ -61,6 +62,13 @@ function hitsMast(px: number, py: number, b: Building, boxHeight: number) {
   return Math.abs(px - box.Be.x) <= 6 && py <= box.Be.y && py >= box.Be.y - extra;
 }
 
+function inReach(px: number, py: number, b: Building) {
+  const h = buildingDrawHeight(b);
+  const c = gridToScreen(b.origin.x + (b.width - 1) * 0.5, b.origin.y + (b.depth - 1) * 0.5);
+  const rad = (TILE_W / 2) * (b.width + b.depth) + 28;
+  return px >= c.x - rad && px <= c.x + rad && py <= c.y + TILE_H + 24 && py >= c.y - h - 80;
+}
+
 function hitsBuilding(px: number, py: number, b: Building) {
   const h = buildingDrawHeight(b);
   const box = isoBoxCorners(b.origin.x, b.origin.y, b.width, b.depth, h);
@@ -82,7 +90,7 @@ export function pickBuildingAt(state: CityState, worldX: number, worldY: number)
   let best: Building | null = null;
   let bestKey = -Infinity;
   for (const building of state.buildings.values()) {
-    if (!hitsBuilding(worldX, worldY, building)) continue;
+    if (!inReach(worldX, worldY, building) || !hitsBuilding(worldX, worldY, building)) continue;
     const key = frontKey(building);
     if (key >= bestKey) {
       best = building;

@@ -55,9 +55,10 @@ export function CityCanvas() {
     entry: { x: number; y: number };
     startInterior?: { kind: "subway"; stationId: string };
   } | null>(null);
-  /** While the street view is open it owns the simulation clock. */
+  const [streetOpen, setStreetOpen] = useState(false);
+  /** While the street overlay is visible it owns the simulation clock. */
   const streetActive = useRef(false);
-  streetActive.current = street !== null;
+  streetActive.current = streetOpen;
 
   const drag = useRef({
     active: false,
@@ -223,6 +224,7 @@ export function CityCanvas() {
       y: Math.max(0, Math.min(engine.state.size - 1, centre.y)),
     };
     setStreet({ state: engine.state, entry: clamped });
+    setStreetOpen(true);
   }, []);
 
   const enterSelectedStation = useCallback(() => {
@@ -237,11 +239,22 @@ export function CityCanvas() {
       entry: subwayGateTile(selected),
       startInterior: { kind: "subway", stationId: id },
     });
+    setStreetOpen(true);
   }, []);
 
   const tickFromStreet = useCallback((dt: number) => {
     engineRef.current?.tick(dt);
   }, []);
+
+  const leaveStreet = useCallback(() => {
+    setStreetOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (streetOpen || !street) return;
+    const id = window.setTimeout(() => setStreet(null), 160);
+    return () => window.clearTimeout(id);
+  }, [streetOpen, street]);
 
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     drag.current = {
@@ -265,7 +278,10 @@ export function CityCanvas() {
     const tile = renderer.camera.pickTile(sx, sy);
     const world = renderer.camera.screenToWorld(sx, sy);
     engine.hover = tile;
-    engine.hoverBuildingId = pickBuildingAt(engine.state, world.x, world.y)?.id ?? null;
+    engine.hoverBuildingId =
+      engine.tool === "inspect"
+        ? pickBuildingAt(engine.state, world.x, world.y)?.id ?? null
+        : getBuildingAt(engine.state, tile.x, tile.y)?.id ?? null;
 
     if (!drag.current.active) return;
     const dx = event.clientX - drag.current.lastX;
@@ -302,6 +318,7 @@ export function CityCanvas() {
       <canvas
         ref={canvasRef}
         className="block h-full w-full cursor-grab touch-none active:cursor-grabbing"
+        style={{ visibility: streetOpen ? "hidden" : "visible" }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -314,29 +331,34 @@ export function CityCanvas() {
         }}
         onWheel={(event) => event.preventDefault()}
       />
-      {hud && !street ? (
-        <CityHud
-          {...hud}
-          onTool={(tool) => {
-            if (engineRef.current) engineRef.current.setTool(tool);
-            setHud((prev) => (prev ? { ...prev, tool } : prev));
-          }}
-          onClose={() => {
-            if (engineRef.current) engineRef.current.selectedId = null;
-          }}
-          onEnterStreet={enterStreet}
-          onEnterStation={enterSelectedStation}
-        />
+      {hud ? (
+        <div className={streetOpen ? "hidden" : undefined}>
+          <CityHud
+            {...hud}
+            onTool={(tool) => {
+              if (engineRef.current) engineRef.current.setTool(tool);
+              setHud((prev) => (prev ? { ...prev, tool } : prev));
+            }}
+            onClose={() => {
+              if (engineRef.current) engineRef.current.selectedId = null;
+            }}
+            onEnterStreet={enterStreet}
+            onEnterStation={enterSelectedStation}
+          />
+        </div>
       ) : null}
 
       {street ? (
-        <StreetView
-          state={street.state}
-          entry={street.entry}
-          startInterior={street.startInterior}
-          onTick={tickFromStreet}
-          onExit={() => setStreet(null)}
-        />
+        <div className={streetOpen ? "absolute inset-0 z-30" : "hidden"}>
+          <StreetView
+            state={street.state}
+            entry={street.entry}
+            startInterior={street.startInterior}
+            active={streetOpen}
+            onTick={tickFromStreet}
+            onExit={leaveStreet}
+          />
+        </div>
       ) : null}
 
       {!ready ? (
