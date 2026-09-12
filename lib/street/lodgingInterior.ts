@@ -308,7 +308,12 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
   return {
     group,
     blockers,
-    spawn: { x: 0.3, z: 3.4, yaw: 0, pitch: -0.06 },
+    spawn: {
+      x: 0.3,
+      z: 3.4,
+      yaw: 0,
+      pitch: -0.1 - Math.min(0.2, (room?.floor ?? 8) * 0.014),
+    },
     bounds: { minX, maxX, minZ, maxZ },
     deskMat: null,
     tv,
@@ -543,6 +548,10 @@ function roundRect(
   ctx.closePath();
 }
 
+function vistaDrop(floor: number) {
+  return 3.4 + Math.min(floor, 24) * 2.55;
+}
+
 function addCityView(
   floorB: MeshBuilder,
   wallB: MeshBuilder,
@@ -557,9 +566,7 @@ function addCityView(
   const zFar = view.edgeZ + dir * 240;
   const z0 = Math.min(zNear, zFar);
   const z1 = Math.max(zNear, zFar);
-  const drop = 4.4 + Math.min(view.floor, 18) * 0.32;
-  const groundY = -drop;
-  const sill = 1.15;
+  const groundY = -vistaDrop(view.floor);
   const grass = new THREE.Color("#3d8c42");
   const park = new THREE.Color("#2a6a32");
   const pavement = new THREE.Color("#7d7972");
@@ -606,9 +613,7 @@ function addCityView(
     const z = zNear + dir * (8 + row * 18 + (i % 5) * 2.1);
     const w = Math.max(3.1, b.width * 2.5);
     const d = Math.max(2.6, b.depth * 2.1);
-    // Keep the first rows in the window even from a high floor.
-    const natural = 3.2 + b.floors * 1.12;
-    const h = row < 2 ? Math.max(natural, sill + 1.6 - groundY) : natural;
+    const h = 3.2 + b.floors * 1.12;
     const top = groundY + h;
     wallB.box(x - w / 2, z - d / 2, x + w / 2, z + d / 2, groundY, top, new THREE.Color(b.wallColor));
     trimB.box(
@@ -661,7 +666,7 @@ function addCityFlank(
   const xFar = edgeX + dir * 150;
   const x0 = Math.min(xNear, xFar);
   const x1 = Math.max(xNear, xFar);
-  const groundY = -(4.4 + Math.min(floor, 18) * 0.32);
+  const groundY = -vistaDrop(floor);
   const grass = new THREE.Color("#3d8c42");
   const asphalt = new THREE.Color("#3f4148");
   const trunk = new THREE.Color("#5a3d28");
@@ -681,7 +686,7 @@ function addCityFlank(
     const z = col * 10.5 + ((b.origin.y * 1.8) % 2.2);
     const w = Math.max(3, b.width * 2.3);
     const d = Math.max(2.4, b.depth * 2);
-    const h = Math.max(3.2 + b.floors * 1.05, 1.4 - groundY);
+    const h = 3.2 + b.floors * 1.05;
     wallB.box(x - w / 2, z - d / 2, x + w / 2, z + d / 2, groundY, groundY + h, new THREE.Color(b.wallColor));
     trimB.box(
       x - w / 2 - 0.08,
