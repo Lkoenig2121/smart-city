@@ -4,6 +4,7 @@ import { CityEngine } from "@/lib/simulation/city/cityEngine";
 import { formatClock, dayPhase } from "@/lib/simulation/city/cityTick";
 import { CityRenderer } from "@/lib/renderer/CityRenderer";
 import { getBuildingAt } from "@/lib/simulation/city/cityState";
+import { pickBuildingAt } from "@/lib/renderer/pickBuilding";
 import { subwayGateTile, subwayStationId } from "@/lib/city/subway";
 import { citizenIsOutdoors } from "@/lib/simulation/citizens/citizenBehavior";
 import type { Building, CityState, Tool } from "@/lib/city/types";
@@ -163,9 +164,11 @@ export function CityCanvas() {
       if (hudAcc > 0.12) {
         hudAcc = 0;
         const clock = formatClock(engine.state);
-        const hover = engine.hover
-          ? getBuildingAt(engine.state, engine.hover.x, engine.hover.y)
-          : null;
+        const hover = engine.hoverBuildingId
+          ? (engine.state.buildings.get(engine.hoverBuildingId) ?? null)
+          : engine.hover
+            ? getBuildingAt(engine.state, engine.hover.x, engine.hover.y)
+            : null;
         setHud({
           cityName: engine.state.name,
           population: engine.state.population,
@@ -251,8 +254,12 @@ export function CityCanvas() {
     const canvas = canvasRef.current;
     if (!engine || !renderer || !canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const tile = renderer.camera.pickTile(event.clientX - rect.left, event.clientY - rect.top);
+    const sx = event.clientX - rect.left;
+    const sy = event.clientY - rect.top;
+    const tile = renderer.camera.pickTile(sx, sy);
+    const world = renderer.camera.screenToWorld(sx, sy);
     engine.hover = tile;
+    engine.hoverBuildingId = pickBuildingAt(engine.state, world.x, world.y)?.id ?? null;
 
     if (!drag.current.active) return;
     const dx = event.clientX - drag.current.lastX;
@@ -270,8 +277,15 @@ export function CityCanvas() {
     if (!engine || !renderer || !canvas) return;
     if (!drag.current.moved) {
       const rect = canvas.getBoundingClientRect();
-      const tile = renderer.camera.pickTile(event.clientX - rect.left, event.clientY - rect.top);
-      engine.applyTool(tile.x, tile.y);
+      const sx = event.clientX - rect.left;
+      const sy = event.clientY - rect.top;
+      const world = renderer.camera.screenToWorld(sx, sy);
+      if (engine.tool === "inspect") {
+        engine.inspectWorld(world.x, world.y);
+      } else {
+        const tile = renderer.camera.pickTile(sx, sy);
+        engine.applyTool(tile.x, tile.y);
+      }
     }
     drag.current.active = false;
     drag.current.moved = false;
@@ -286,7 +300,10 @@ export function CityCanvas() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={() => {
-          if (engineRef.current) engineRef.current.hover = null;
+          if (engineRef.current) {
+            engineRef.current.hover = null;
+            engineRef.current.hoverBuildingId = null;
+          }
           drag.current.active = false;
         }}
         onWheel={(event) => event.preventDefault()}

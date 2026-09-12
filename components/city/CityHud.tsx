@@ -1,4 +1,5 @@
-import { formatMoney, kindLabel } from "@/lib/simulation/buildings/buildings";
+import { formatDaily, formatMoney, kindEmoji, kindLabel } from "@/lib/simulation/buildings/buildings";
+import { isResidential } from "@/lib/simulation/buildings/buildingLogic";
 import type { Building, Tool } from "@/lib/city/types";
 
 const TOOLS: { id: Tool; label: string; hint: string }[] = [
@@ -123,9 +124,6 @@ export function CityHud({
         <aside className="absolute right-4 top-24 z-20 w-80 rounded-2xl border border-white/10 bg-[#101826]/82 p-4 text-white shadow-2xl backdrop-blur-md">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-sky-200/70">
-                {kindLabel(selected)}
-              </p>
               <h2 className="text-xl font-semibold leading-tight">
                 {selected.name}
               </h2>
@@ -138,47 +136,35 @@ export function CityHud({
               ✕
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-sm">
+          <p className="mb-3 text-sm text-white/70">
+            {kindEmoji(selected)} {kindLabel(selected)}
+            <span className="ml-2 text-[11px] uppercase tracking-[0.16em] text-white/35">
+              {selected.constructionLeft && selected.constructionLeft > 0
+                ? `Building ${Math.ceil(selected.constructionLeft)}s`
+                : selected.stats.status}
+            </span>
+          </p>
+          <div className="space-y-2 text-sm">
             <Info
-              label={
-                selected.kind === "baseball_stadium"
-                  ? "Staff"
-                  : selected.stats.capacity && selected.kind !== "shop"
-                    ? "People"
-                    : "Staff"
-              }
+              icon={isResidential(selected) ? "👥" : "👥"}
+              label={isResidential(selected) ? "Residents" : "Employees"}
               value={
-                selected.kind === "house" || selected.kind === "apartment"
-                  ? `${selected.stats.residents}/${selected.stats.capacity}`
-                  : selected.kind === "baseball_stadium"
-                    ? `${selected.stats.employees}/${selected.stats.jobs}`
-                    : `${selected.stats.employees}`
+                isResidential(selected)
+                  ? `${selected.stats.residents.toLocaleString()} / ${selected.stats.capacity}`
+                  : selected.stats.jobs
+                    ? `${selected.stats.employees.toLocaleString()} / ${selected.stats.jobs.toLocaleString()}`
+                    : selected.stats.employees.toLocaleString()
               }
             />
-            <Info label="Happiness" value={`${selected.stats.happiness}%`} />
-            <Info
-              label={selected.kind === "baseball_stadium" ? "Daily gate" : selected.stats.revenue ? "Revenue" : "Value"}
-              value={
-                selected.kind === "baseball_stadium"
-                  ? `${formatMoney(selected.stats.revenue)}/day`
-                  : formatMoney(selected.stats.revenue || selected.stats.propertyValue)
-              }
-            />
-            <Info
-              label="Status"
-              value={
-                selected.constructionLeft && selected.constructionLeft > 0
-                  ? `Building ${Math.ceil(selected.constructionLeft)}s`
-                  : selected.stats.status === "open"
-                    ? "Open"
-                    : selected.stats.status
-              }
-            />
+            <Info icon="💰" label="Economic output" value={formatDaily(selected.stats.revenue)} />
+            <Meter icon="⚡" label="Energy" value={selected.stats.energy} />
+            <Meter icon="🚗" label="Parking" value={selected.stats.parking} />
+            <Meter icon="😊" label="Satisfaction" value={selected.stats.happiness} />
           </div>
           {selected.stats.extra ? (
             <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-sm text-white/70">
               {Object.entries(selected.stats.extra)
-                .filter(([key]) => key !== "station" && key !== "venue")
+                .filter(([key]) => !HIDDEN_EXTRA.has(key))
                 .map(([key, value]) => (
                   <p key={key} className="flex justify-between capitalize">
                     <span>{key}</span>
@@ -213,13 +199,44 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+const HIDDEN_EXTRA = new Set([
+  "station",
+  "venue",
+  "lodging",
+  "waterfront",
+  "rooms",
+  "nightly",
+  "homes",
+  "amenities",
+]);
+
+function Info({ icon, label, value }: { icon: string; label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-white/5 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">
+    <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
+      <p className="text-white/70">
+        <span className="mr-1.5">{icon}</span>
         {label}
       </p>
-      <p className="font-medium">{value}</p>
+      <p className="font-medium text-white">{value}</p>
+    </div>
+  );
+}
+
+function Meter({ icon, label, value }: { icon: string; label: string; value: number }) {
+  const tone =
+    value >= 80 ? "bg-emerald-400" : value >= 55 ? "bg-amber-400" : "bg-rose-400";
+  return (
+    <div className="rounded-xl bg-white/5 px-3 py-2">
+      <div className="mb-1.5 flex items-center justify-between">
+        <p className="text-white/70">
+          <span className="mr-1.5">{icon}</span>
+          {label}
+        </p>
+        <p className="font-medium text-white">{Math.round(value)}%</p>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
+      </div>
     </div>
   );
 }

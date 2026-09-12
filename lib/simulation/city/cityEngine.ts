@@ -6,6 +6,7 @@ import {
   stadiumPlacementError,
 } from "@/lib/city/stadium";
 import type { BuildingKind, CityState, Tool } from "@/lib/city/types";
+import { pickBuildingAt } from "@/lib/renderer/pickBuilding";
 import { createInitialCity, getBuildingAt, recountPopulation } from "./cityState";
 import { tickCity } from "./cityTick";
 
@@ -14,6 +15,7 @@ export class CityEngine {
   tool: Tool = "inspect";
   selectedId: string | null = null;
   hover: { x: number; y: number } | null = null;
+  hoverBuildingId: string | null = null;
   /** Last reason a tool click did nothing, shown in the HUD. */
   placementHint = "";
   private seed: number;
@@ -29,6 +31,13 @@ export class CityEngine {
 
   selectAt(x: number, y: number) {
     const building = getBuildingAt(this.state, x, y);
+    this.selectedId = building?.id ?? null;
+    return building ?? null;
+  }
+
+  /** Inspect the building volume under a world-space click, not just its footprint. */
+  inspectWorld(worldX: number, worldY: number) {
+    const building = pickBuildingAt(this.state, worldX, worldY);
     this.selectedId = building?.id ?? null;
     return building ?? null;
   }

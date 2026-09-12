@@ -44,178 +44,228 @@ export function footprintFor(kind: BuildingKind): { w: number; d: number } {
   }
 }
 
+function withSim(stats: Omit<BuildingStats, "energy" | "parking">, rand: () => number): BuildingStats {
+  return {
+    ...stats,
+    energy: randInt(rand, 68, 91),
+    parking: randInt(rand, 64, 94),
+  };
+}
+
 export function defaultStats(kind: BuildingKind, rand: () => number): BuildingStats {
   switch (kind) {
     case "house":
-      return {
-        residents: randInt(rand, 2, 5),
-        capacity: 5,
-        employees: 0,
-        jobs: 0,
-        revenue: 0,
-        happiness: randInt(rand, 68, 92),
-        propertyValue: randInt(rand, 320000, 680000),
-        status: "open",
-      };
+      return withSim(
+        {
+          residents: randInt(rand, 2, 5),
+          capacity: 5,
+          employees: 0,
+          jobs: 0,
+          revenue: 0,
+          happiness: randInt(rand, 68, 92),
+          propertyValue: randInt(rand, 320000, 680000),
+          status: "open",
+        },
+        rand,
+      );
     case "apartment":
-      return {
-        residents: randInt(rand, 18, 42),
-        capacity: 48,
-        employees: 0,
-        jobs: 0,
-        revenue: 0,
-        happiness: randInt(rand, 62, 86),
-        propertyValue: randInt(rand, 2400000, 5100000),
-        status: "open",
-      };
+      return withSim(
+        {
+          residents: randInt(rand, 18, 42),
+          capacity: 48,
+          employees: 0,
+          jobs: 0,
+          revenue: 0,
+          happiness: randInt(rand, 62, 86),
+          propertyValue: randInt(rand, 2400000, 5100000),
+          status: "open",
+        },
+        rand,
+      );
     case "shop":
-      return {
-        residents: 0,
-        capacity: 0,
-        employees: randInt(rand, 4, 14),
-        jobs: randInt(rand, 8, 18),
-        revenue: randInt(rand, 180000, 920000),
-        happiness: randInt(rand, 70, 90),
-        propertyValue: randInt(rand, 410000, 980000),
-        status: "open",
-      };
+      return withSim(
+        {
+          residents: 0,
+          capacity: 0,
+          employees: randInt(rand, 4, 14),
+          jobs: randInt(rand, 8, 18),
+          revenue: randInt(rand, 2400, 14000),
+          happiness: randInt(rand, 70, 90),
+          propertyValue: randInt(rand, 410000, 980000),
+          status: "open",
+        },
+        rand,
+      );
     case "office":
-      return {
-        residents: 0,
-        capacity: 0,
-        employees: randInt(rand, 28, 90),
-        jobs: randInt(rand, 40, 110),
-        revenue: randInt(rand, 1200000, 4800000),
-        happiness: randInt(rand, 64, 88),
-        propertyValue: randInt(rand, 4200000, 9800000),
-        status: "open",
-      };
+      return withSim(
+        {
+          residents: 0,
+          capacity: 0,
+          employees: randInt(rand, 28, 90),
+          jobs: randInt(rand, 40, 110),
+          revenue: randInt(rand, 18000, 72000),
+          happiness: randInt(rand, 64, 88),
+          propertyValue: randInt(rand, 4200000, 9800000),
+          status: "open",
+        },
+        rand,
+      );
     case "skyscraper":
-      return {
-        residents: 0,
-        capacity: 0,
-        employees: randInt(rand, 180, 420),
-        jobs: randInt(rand, 240, 520),
-        revenue: randInt(rand, 8200000, 24000000),
-        happiness: randInt(rand, 70, 91),
-        propertyValue: randInt(rand, 48000000, 120000000),
-        status: "open",
-      };
+      return withSim(
+        {
+          residents: 0,
+          capacity: 0,
+          employees: randInt(rand, 180, 420),
+          jobs: randInt(rand, 240, 520),
+          revenue: randInt(rand, 42000, 125000),
+          happiness: randInt(rand, 70, 91),
+          propertyValue: randInt(rand, 48000000, 120000000),
+          status: "open",
+        },
+        rand,
+      );
     case "tower":
-      return {
-        residents: 0,
-        capacity: 0,
-        employees: randInt(rand, 620, 1400),
-        jobs: randInt(rand, 780, 1700),
-        revenue: randInt(rand, 28000000, 74000000),
-        happiness: randInt(rand, 72, 93),
-        propertyValue: randInt(rand, 180000000, 420000000),
-        status: "open",
-        extra: { observationDeck: "Open", elevators: randInt(rand, 18, 34) },
-      };
+      return withSim(
+        {
+          residents: 0,
+          capacity: 0,
+          employees: randInt(rand, 620, 1400),
+          jobs: randInt(rand, 780, 1700),
+          revenue: randInt(rand, 90000, 220000),
+          happiness: randInt(rand, 72, 93),
+          propertyValue: randInt(rand, 180000000, 420000000),
+          status: "open",
+          extra: { observationDeck: "Open", elevators: randInt(rand, 18, 34) },
+        },
+        rand,
+      );
     case "hospital":
-      return {
-        residents: 0,
-        capacity: 120,
-        employees: 86,
-        jobs: 110,
-        revenue: 0,
-        happiness: 78,
-        propertyValue: 32000000,
-        status: "open",
-        extra: { beds: 120, patients: 41, doctors: 28 },
-      };
+      return withSim(
+        {
+          residents: 0,
+          capacity: 120,
+          employees: 86,
+          jobs: 110,
+          revenue: 18000,
+          happiness: 78,
+          propertyValue: 32000000,
+          status: "open",
+          extra: { beds: 120, patients: 41, doctors: 28 },
+        },
+        rand,
+      );
     case "school":
-      return {
-        residents: 0,
-        capacity: 420,
-        employees: 34,
-        jobs: 40,
-        revenue: 0,
-        happiness: 84,
-        propertyValue: 14000000,
-        status: "open",
-        extra: { students: 318, teachers: 28 },
-      };
+      return withSim(
+        {
+          residents: 0,
+          capacity: 420,
+          employees: 34,
+          jobs: 40,
+          revenue: 0,
+          happiness: 84,
+          propertyValue: 14000000,
+          status: "open",
+          extra: { students: 318, teachers: 28 },
+        },
+        rand,
+      );
     case "police":
-      return {
-        residents: 0,
-        capacity: 0,
-        employees: 22,
-        jobs: 28,
-        revenue: 0,
-        happiness: 74,
-        propertyValue: 6200000,
-        status: "open",
-        extra: { officers: 22, coverage: "Downtown / East" },
-      };
+      return withSim(
+        {
+          residents: 0,
+          capacity: 0,
+          employees: 22,
+          jobs: 28,
+          revenue: 0,
+          happiness: 74,
+          propertyValue: 6200000,
+          status: "open",
+          extra: { officers: 22, coverage: "Downtown / East" },
+        },
+        rand,
+      );
     case "fire":
-      return {
-        residents: 0,
-        capacity: 0,
-        employees: 16,
-        jobs: 18,
-        revenue: 0,
-        happiness: 80,
-        propertyValue: 5400000,
-        status: "open",
-        extra: { trucks: 3, coverage: "Central / South" },
-      };
+      return withSim(
+        {
+          residents: 0,
+          capacity: 0,
+          employees: 16,
+          jobs: 18,
+          revenue: 0,
+          happiness: 80,
+          propertyValue: 5400000,
+          status: "open",
+          extra: { trucks: 3, coverage: "Central / South" },
+        },
+        rand,
+      );
     case "city_hall":
-      return {
-        residents: 0,
-        capacity: 0,
-        employees: 48,
-        jobs: 60,
-        revenue: 0,
-        happiness: 76,
-        propertyValue: 18000000,
-        status: "open",
-      };
+      return withSim(
+        {
+          residents: 0,
+          capacity: 0,
+          employees: 48,
+          jobs: 60,
+          revenue: 0,
+          happiness: 76,
+          propertyValue: 18000000,
+          status: "open",
+        },
+        rand,
+      );
     case "park_pavilion":
-      return {
-        residents: 0,
-        capacity: 0,
-        employees: 2,
-        jobs: 2,
-        revenue: 0,
-        happiness: 94,
-        propertyValue: 420000,
-        status: "open",
-      };
+      return withSim(
+        {
+          residents: 0,
+          capacity: 0,
+          employees: 2,
+          jobs: 2,
+          revenue: 0,
+          happiness: 94,
+          propertyValue: 420000,
+          status: "open",
+        },
+        rand,
+      );
     case "baseball_stadium":
-      return {
-        residents: 0,
-        capacity: 12_000,
-        employees: 180,
-        jobs: 220,
-        revenue: 15_000,
-        happiness: 96,
-        propertyValue: 750_000,
-        status: "open",
-        extra: {
-          team: "Riverside Ravens",
-          seats: "12,000",
-          tourism: "Regional draw",
-          traffic: "Game-day surge",
-          "daily gate": "$15,000",
-          "city happiness": "+1,000",
+      return withSim(
+        {
+          residents: 0,
+          capacity: 12_000,
+          employees: 180,
+          jobs: 220,
+          revenue: 15_000,
+          happiness: 96,
+          propertyValue: 750_000,
+          status: "open",
+          extra: {
+            team: "Riverside Ravens",
+            seats: "12,000",
+            tourism: "Regional draw",
+            traffic: "Game-day surge",
+            "daily gate": "$15,000",
+            "city happiness": "+1,000",
+          },
         },
-      };
+        rand,
+      );
     case "subway_station":
-      return {
-        residents: 0,
-        capacity: 0,
-        employees: 14,
-        jobs: 18,
-        revenue: 0,
-        happiness: 88,
-        propertyValue: 9_400_000,
-        status: "open",
-        extra: {
-          line: "Riverside Line",
+      return withSim(
+        {
+          residents: 0,
+          capacity: 0,
+          employees: 14,
+          jobs: 18,
+          revenue: 4200,
+          happiness: 88,
+          propertyValue: 9_400_000,
+          status: "open",
+          extra: {
+            line: "Riverside Line",
+          },
         },
-      };
+        rand,
+      );
   }
 }
 
@@ -348,7 +398,7 @@ export function kindLabel(target: Building | BuildingKind) {
     case "shop":
       return "Business";
     case "office":
-      return "Offices";
+      return "Office";
     case "skyscraper":
       if (lodging === "hotel") return "Hotel";
       if (lodging === "residences") return "Residences";
@@ -381,6 +431,44 @@ export function formatMoney(value: number) {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`;
   return `$${Math.round(value)}`;
+}
+
+export function formatDaily(value: number) {
+  if (value <= 0) return "$0/day";
+  if (value >= 1_000_000) return `${formatMoney(value)}/day`;
+  return `$${Math.round(value).toLocaleString()}/day`;
+}
+
+export function kindEmoji(building: Building) {
+  const lodging = building.stats.extra?.lodging;
+  if (lodging === "hotel") return "🏨";
+  switch (building.kind) {
+    case "house":
+    case "apartment":
+      return "🏠";
+    case "shop":
+      return "🛍️";
+    case "office":
+    case "skyscraper":
+    case "tower":
+      return "🏢";
+    case "hospital":
+      return "🏥";
+    case "school":
+      return "🎓";
+    case "police":
+      return "🚓";
+    case "fire":
+      return "🚒";
+    case "city_hall":
+      return "🏛️";
+    case "park_pavilion":
+      return "🌳";
+    case "baseball_stadium":
+      return "🏟️";
+    case "subway_station":
+      return "🚇";
+  }
 }
 
 export function occupancyHint(building: Building) {

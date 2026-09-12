@@ -91,9 +91,14 @@ export interface BuildingStats {
   capacity: number;
   employees: number;
   jobs: number;
+  /** Daily economic output in dollars. */
   revenue: number;
   happiness: number;
   propertyValue: number;
+  /** Grid load, 0–100. */
+  energy: number;
+  /** Nearby parking vs demand, 0–100. */
+  parking: number;
   status: "open" | "closed" | "busy";
   extra?: Record<string, string | number>;
 }

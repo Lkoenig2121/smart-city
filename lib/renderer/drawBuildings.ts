@@ -2,6 +2,7 @@ import { TILE_H, TILE_W, diamondPoints, gridToScreen } from "@/lib/city/iso";
 import { hash2 } from "@/lib/city/rng";
 import type { Building } from "@/lib/city/types";
 import { lodgingUse } from "@/lib/city/lodging";
+import { venueRole } from "@/lib/city/venues";
 import { paintGraffiti } from "./drawBridges";
 import { drawGroundShadow, drawIsoBox, drawSlopedRoof, drawWindowGrid } from "./drawIso";
 import { alpha, lit, mix, shade, type Lighting } from "./palette";
@@ -65,6 +66,8 @@ export function drawBuilding(
       drawSubwayStation(ctx, building, light);
       break;
   }
+
+  drawBuildingSign(ctx, building, light);
 
   if (selected) {
     const d = diamondPoints(building.origin.x, building.origin.y);
@@ -297,7 +300,6 @@ function drawSkyscraper(ctx: CanvasRenderingContext2D, b: Building, light: Light
     { inset: 0.3, height: baseH + b.floors * 3.4, cols: 4 },
   ]);
   drawMast(ctx, cap.Be, 26, light);
-  drawLodgingPlaque(ctx, b, cap.B, light);
 }
 
 function drawTower(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
@@ -334,24 +336,94 @@ function drawTower(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) 
       ctx.fill();
     }
   }
-  drawLodgingPlaque(ctx, b, cap.B, light);
 }
 
-function drawLodgingPlaque(
-  ctx: CanvasRenderingContext2D,
-  b: Building,
-  face: { x: number; y: number },
-  light: Lighting,
-) {
-  const use = lodgingUse(b);
-  if (!use) return;
-  const hotel = use === "hotel";
-  ctx.fillStyle = lit(hotel ? "#c9a44c" : "#8a5a3a", light, "right");
-  ctx.fillRect(face.x - 26, face.y - 36, 52, 12);
-  ctx.fillStyle = "#f4f1ea";
+function signSpec(b: Building): { label: string; color: string; ink: string } | null {
+  const lodging = lodgingUse(b);
+  if (lodging === "hotel") return { label: "HOTEL", color: "#c9a44c", ink: "#1a1206" };
+  if (lodging === "residences") return { label: "HOME", color: "#8a5a3a", ink: "#f4f1ea" };
+  switch (b.kind) {
+    case "house":
+      return null;
+    case "apartment":
+      return { label: "APTS", color: "#6b4f3a", ink: "#f4efe4" };
+    case "shop": {
+      const role = venueRole(b);
+      if (role === "restaurant") return { label: "EAT", color: "#c0392b", ink: "#fff8f2" };
+      if (role === "bank") return { label: "BANK", color: "#2c3e6b", ink: "#eef3f8" };
+      return { label: "SHOP", color: b.accentColor, ink: "#fff8f2" };
+    }
+    case "office":
+      return { label: "OFFICE", color: "#3d5a80", ink: "#eef4f8" };
+    case "skyscraper":
+      return { label: "OFFICE", color: "#4a6270", ink: "#e8f0f4" };
+    case "tower":
+      return { label: "TOWER", color: "#2a3138", ink: "#e8f0f4" };
+    case "hospital":
+      return { label: "HOSPITAL", color: "#c0392b", ink: "#fff8f2" };
+    case "school":
+      return { label: "SCHOOL", color: "#2f5d4a", ink: "#f4f1ea" };
+    case "police":
+      return { label: "POLICE", color: "#1d2d4f", ink: "#eef3f8" };
+    case "fire":
+      return { label: "FIRE", color: "#c0392b", ink: "#fff8f2" };
+    case "city_hall":
+      return { label: "CITY HALL", color: "#c9a44c", ink: "#1a1206" };
+    case "park_pavilion":
+      return { label: "PARK", color: "#3f5d4c", ink: "#f4f1ea" };
+    default:
+      return null;
+  }
+}
+
+function signLift(b: Building) {
+  switch (b.kind) {
+    case "apartment":
+      return 18 + b.floors * 14 + 12;
+    case "shop":
+      return 40;
+    case "office":
+      return 22 + b.floors * 13 + 12;
+    case "skyscraper":
+      return 40 + b.floors * 12.4 - 6;
+    case "tower":
+      return 54 + b.floors * 9.8 - 10;
+    case "hospital":
+      return 70;
+    case "school":
+      return 52;
+    case "police":
+    case "fire":
+      return 48;
+    case "city_hall":
+      return 58;
+    case "park_pavilion":
+      return 30;
+    default:
+      return 36;
+  }
+}
+
+function drawBuildingSign(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
+  const spec = signSpec(b);
+  if (!spec) return;
+
+  const bottom = gridToScreen(b.origin.x + b.width - 1, b.origin.y + b.depth - 1);
+  const x = bottom.x;
+  const y = bottom.y + TILE_H - signLift(b);
+  const width = Math.max(34, spec.label.length * 5.4 + 12);
+
+  ctx.save();
+  ctx.fillStyle = alpha("#0b1220", light.phase === "night" ? 0.45 : 0.22);
+  ctx.fillRect(x - width / 2 + 1, y - 10, width, 11);
+  ctx.fillStyle = lit(spec.color, light, "right");
+  ctx.fillRect(x - width / 2, y - 11, width, 11);
+  ctx.fillStyle = spec.ink;
   ctx.font = "bold 7px sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText(hotel ? "HOTEL" : "RESIDENCES", face.x, face.y - 27);
+  ctx.textBaseline = "middle";
+  ctx.fillText(spec.label, x, y - 5.5);
+  ctx.restore();
 }
 
 function drawHospital(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {

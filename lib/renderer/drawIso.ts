@@ -23,16 +23,12 @@ export function drawDiamond(
   }
 }
 
-export function drawIsoBox(
-  ctx: CanvasRenderingContext2D,
+export function isoBoxCorners(
   gx: number,
   gy: number,
   width: number,
   depth: number,
   height: number,
-  left: string,
-  right: string,
-  top: string,
   inset = 6,
 ) {
   const topP = gridToScreen(gx, gy);
@@ -56,6 +52,22 @@ export function drawIsoBox(
   const Re = { x: R.x, y: R.y - lift };
   const Be = { x: B.x, y: B.y - lift };
   const Le = { x: L.x, y: L.y - lift };
+  return { T, R, B, L, Te, Re, Be, Le, lift };
+}
+
+export function drawIsoBox(
+  ctx: CanvasRenderingContext2D,
+  gx: number,
+  gy: number,
+  width: number,
+  depth: number,
+  height: number,
+  left: string,
+  right: string,
+  top: string,
+  inset = 6,
+) {
+  const { T, R, B, L, Te, Re, Be, Le, lift } = isoBoxCorners(gx, gy, width, depth, height, inset);
 
   ctx.beginPath();
   ctx.moveTo(L.x, L.y);

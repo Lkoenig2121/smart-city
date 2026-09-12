@@ -1,6 +1,7 @@
 import { mulberry32 } from "@/lib/city/rng";
 import type { CityState } from "@/lib/city/types";
 import { STADIUM_DAILY_REVENUE, stadiumIsOpen } from "@/lib/city/stadium";
+import { tickBuildingStats } from "../buildings/buildingLogic";
 import { stepCitizens, syncCitizenSchedules, wanderOutdoors } from "../citizens/citizenBehavior";
 import { seedVehicle, stepVehicles } from "../traffic/vehicleMovement";
 
@@ -62,4 +63,5 @@ export function tickCity(state: CityState, dtSeconds: number, seeded = true) {
   wanderOutdoors(state, rand);
   stepVehicles(state, dtSeconds, rand);
   stepCitizens(state, dtSeconds);
+  tickBuildingStats(state);
 }
