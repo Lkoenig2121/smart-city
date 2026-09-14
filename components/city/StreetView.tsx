@@ -274,10 +274,16 @@ export function StreetView({
     const building = findLodging(state, interior.buildingId);
     if (!canvas || !wrap || !building) return;
 
+    const street = worldRef.current;
+    const city = interior.zone === "room" ? street?.borrowCity() ?? null : null;
     let world: LodgingWorld;
     try {
       world = new LodgingWorld(canvas, state, building, interior.zone, interior.roomId);
+      if (city) {
+        world.attachCity(city, findLodgingRoom(building, interior.roomId)?.floor ?? 8);
+      }
     } catch (error) {
+      if (city) street?.returnCity(city);
       setFailed(error instanceof Error ? error.message : "WebGL is unavailable in this browser.");
       setInterior(null);
       return;
@@ -349,6 +355,8 @@ export function StreetView({
       ro.disconnect();
       detachInput();
       if (document.pointerLockElement === canvas) document.exitPointerLock();
+      const borrowed = world.detachCity();
+      if (borrowed) worldRef.current?.returnCity(borrowed);
       world.dispose();
       lodgingRef.current = null;
     };

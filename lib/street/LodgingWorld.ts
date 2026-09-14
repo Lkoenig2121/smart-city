@@ -2,8 +2,11 @@ import * as THREE from "three";
 import type { Building, CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
 import { findLodgingRoom, lodgingUse, type LodgingZone } from "@/lib/city/lodging";
+import { TILE } from "./buildCity";
 import { InteriorControls } from "./interiorControls";
 import { buildLodgingInterior, type LodgingInterior } from "./lodgingInterior";
+import { lodgingWindowDir } from "./StreetWorld";
+import { FLOOR_H } from "./textures";
 
 /**
  * First-person hotel / apartment interiors: lobby with a front-desk screen,
@@ -24,6 +27,8 @@ export class LodgingWorld {
   private deskCanvas: HTMLCanvasElement | null = null;
   private deskCtx: CanvasRenderingContext2D | null = null;
   private deskTexture: THREE.CanvasTexture | null = null;
+  private cityHolder: THREE.Group | null = null;
+  private borrowedCity: THREE.Group | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -46,7 +51,7 @@ export class LodgingWorld {
     this.renderer.toneMappingExposure = zone === "pool" ? 1.18 : 1.08;
     this.renderer.shadowMap.enabled = true;
 
-    this.camera = new THREE.PerspectiveCamera(74, 1, 0.1, zone === "lobby" ? 80 : 280);
+    this.camera = new THREE.PerspectiveCamera(74, 1, 0.1, zone === "lobby" ? 80 : 900);
     this.interior = buildLodgingInterior(building, zone, state, room);
     this.scene.add(this.interior.group);
 
@@ -81,7 +86,7 @@ export class LodgingWorld {
       this.scene.fog = new THREE.Fog(night ? 0x10182c : 0x7eb3e0, 48, 210);
     } else if (zone === "room") {
       this.scene.background = new THREE.Color(night ? "#10182c" : "#7eb3e0");
-      this.scene.fog = new THREE.Fog(night ? 0x10182c : 0x7eb3e0, 40, 200);
+      this.scene.fog = new THREE.Fog(night ? 0x10182c : 0x7eb3e0, 90, 640);
     } else {
       this.scene.background = new THREE.Color("#1c1814");
       this.scene.fog = new THREE.Fog(0x1c1814, 18, 48);
@@ -100,6 +105,40 @@ export class LodgingWorld {
         this.interior.deskMat.needsUpdate = true;
       }
     }
+  }
+
+  attachCity(city: THREE.Group, floor: number) {
+    const anchor = this.interior.windowAnchor;
+    if (!anchor) return;
+    this.detachCity();
+    const dir = lodgingWindowDir(this.state, this.building);
+    const midX = (this.building.origin.x + this.building.width / 2) * TILE;
+    const midZ = (this.building.origin.y + this.building.depth / 2) * TILE;
+    const fx = midX + dir.sx * ((this.building.width * TILE) / 2 + 0.45);
+    const fy = Math.max(2.2, (Math.max(1, floor) - 0.45) * FLOOR_H);
+    const fz = midZ + dir.sz * ((this.building.depth * TILE) / 2 + 0.45);
+    const holder = new THREE.Group();
+    holder.position.set(anchor.x, anchor.y, anchor.z);
+    holder.rotation.y = Math.atan2(dir.sx, -dir.sz);
+    city.position.set(-fx, -fy, -fz);
+    city.rotation.set(0, 0, 0);
+    holder.add(city);
+    this.scene.add(holder);
+    this.cityHolder = holder;
+    this.borrowedCity = city;
+  }
+
+  detachCity() {
+    const city = this.borrowedCity;
+    if (this.cityHolder && city) this.cityHolder.remove(city);
+    if (this.cityHolder) this.scene.remove(this.cityHolder);
+    this.cityHolder = null;
+    this.borrowedCity = null;
+    if (city) {
+      city.position.set(0, 0, 0);
+      city.rotation.set(0, 0, 0);
+    }
+    return city;
   }
 
   nearDesk() {
@@ -179,6 +218,7 @@ export class LodgingWorld {
   }
 
   dispose() {
+    this.detachCity();
     this.interior.dispose();
     this.deskTexture?.dispose();
     this.renderer.dispose();

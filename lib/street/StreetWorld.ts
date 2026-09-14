@@ -6,6 +6,7 @@ import { subwayStations } from "@/lib/city/subway";
 import { lightingFor, type Lighting } from "@/lib/renderer/palette";
 import { AgentLayer } from "./agents";
 import { buildCity, TILE, type CityMeshes } from "./buildCity";
+import { FLOOR_H } from "./textures";
 import { StreetControls, type MoveMode } from "./controls";
 import { skyTexture } from "./textures";
 import { StreetWeatherFx } from "./weatherFx";
@@ -41,6 +42,9 @@ export class StreetWorld {
   private skyKey = "";
   private time = 0;
   private weatherFx = new StreetWeatherFx();
+  private windowRT: THREE.WebGLRenderTarget | null = null;
+  private windowCam = new THREE.PerspectiveCamera(48, 1.6, 0.35, 700);
+  private windowBuf: Uint8Array | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -92,6 +96,19 @@ export class StreetWorld {
     }
 
     this.scene.fog = new THREE.Fog(0xc9d8e4, 60, 620);
+  }
+
+  /** Lets a hotel room parent the live city mesh so the window is a real opening. */
+  borrowCity() {
+    this.scene.remove(this.city.group);
+    return this.city.group;
+  }
+
+  returnCity(group: THREE.Group) {
+    if (group.parent) group.parent.remove(group);
+    group.position.set(0, 0, 0);
+    group.rotation.set(0, 0, 0);
+    this.scene.add(group);
   }
 
   /** Drops the walker onto the road tile closest to a target tile. */
@@ -370,6 +387,48 @@ export class StreetWorld {
     this.renderer.render(this.scene, this.camera);
   }
 
+  /**
+   * Draws the live city from a hotel floor into `dest`, so room windows can
+   * show the real streets, trees, and buildings outside.
+   */
+  renderWindowView(building: Building, floor: number, dest: HTMLCanvasElement, peekX = 0) {
+    const width = dest.width;
+    const height = dest.height;
+    if (!this.windowRT || this.windowRT.width !== width || this.windowRT.height !== height) {
+      this.windowRT?.dispose();
+      this.windowRT = new THREE.WebGLRenderTarget(width, height);
+      this.windowBuf = new Uint8Array(width * height * 4);
+    }
+    const pose = windowPose(this.state, building, floor, peekX);
+    this.windowCam.aspect = width / Math.max(1, height);
+    this.windowCam.position.set(pose.x, pose.y, pose.z);
+    this.windowCam.lookAt(pose.lookX, pose.lookY, pose.lookZ);
+    this.windowCam.updateProjectionMatrix();
+
+    const saved = this.controls.position.clone();
+    this.controls.position.set(pose.x, pose.y, pose.z);
+    this.applyLighting(lightingFor(this.state));
+    this.controls.position.copy(saved);
+
+    const prevShadow = this.renderer.shadowMap.enabled;
+    this.renderer.shadowMap.enabled = false;
+    this.renderer.setRenderTarget(this.windowRT);
+    this.renderer.render(this.scene, this.windowCam);
+    this.renderer.readRenderTargetPixels(this.windowRT, 0, 0, width, height, this.windowBuf!);
+    this.renderer.setRenderTarget(null);
+    this.renderer.shadowMap.enabled = prevShadow;
+
+    const ctx = dest.getContext("2d");
+    const buf = this.windowBuf;
+    if (!ctx || !buf) return;
+    const image = ctx.createImageData(width, height);
+    for (let y = 0; y < height; y++) {
+      const src = (height - 1 - y) * width * 4;
+      image.data.set(buf.subarray(src, src + width * 4), y * width * 4);
+    }
+    ctx.putImageData(image, 0, 0);
+  }
+
   /** Player position in tile coordinates, for the minimap. */
   get tilePosition() {
     return {
@@ -384,6 +443,83 @@ export class StreetWorld {
     this.city.dispose();
     this.weatherFx.dispose();
     this.sky?.dispose();
+    this.windowRT?.dispose();
     this.renderer.dispose();
   }
+}
+
+function windowPose(state: CityState, building: Building, floor: number, peekX: number) {
+  const midX = (building.origin.x + building.width / 2) * TILE;
+  const midZ = (building.origin.y + building.depth / 2) * TILE;
+  const dir = lodgingWindowDir(state, building);
+  const storeys = Math.max(1, floor);
+  const y = Math.max(2.4, (storeys - 0.35) * FLOOR_H);
+  const face = nearestFacade(state, building, dir);
+  // Look straight into a neighboring wall at this floor so sky stays out of frame.
+  const reach = face ? Math.min(26, Math.max(11, face.dist - 4)) : 16;
+  const lookY = face ? Math.min(y, Math.max(y - FLOOR_H * 0.4, face.roof - FLOOR_H)) : y;
+  const peek = peekX * 0.35;
+  const x = midX + dir.sx * ((building.width * TILE) / 2 + 1.6);
+  const z = midZ + dir.sz * ((building.depth * TILE) / 2 + 1.6);
+  return {
+    x: x + dir.sz * peek,
+    y,
+    z: z + dir.sx * peek,
+    lookX: x + dir.sx * reach + dir.sz * peek * 1.4,
+    lookY,
+    lookZ: z + dir.sz * reach + dir.sx * peek * 1.4,
+  };
+}
+
+export function lodgingWindowDir(state: CityState, building: Building) {
+  const dirs = [
+    { sx: 1, sz: 0 },
+    { sx: -1, sz: 0 },
+    { sx: 0, sz: 1 },
+    { sx: 0, sz: -1 },
+  ];
+  const ox = building.origin.x + building.width / 2;
+  const oy = building.origin.y + building.depth / 2;
+  let best = dirs[0];
+  let bestScore = -1;
+  for (const dir of dirs) {
+    let score = 0;
+    for (const other of state.buildings.values()) {
+      if (other.id === building.id) continue;
+      const cx = other.origin.x + other.width / 2 - ox;
+      const cz = other.origin.y + other.depth / 2 - oy;
+      const along = cx * dir.sx + cz * dir.sz;
+      const side = Math.abs(cx * dir.sz - cz * dir.sx);
+      if (along < 0.8 || along > 16 || side > 7) continue;
+      score += other.floors / (1 + along * 0.12);
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = dir;
+    }
+  }
+  return best;
+}
+
+function nearestFacade(
+  state: CityState,
+  building: Building,
+  dir: { sx: number; sz: number },
+) {
+  const ox = building.origin.x + building.width / 2;
+  const oy = building.origin.y + building.depth / 2;
+  let best: { dist: number; roof: number } | null = null;
+  for (const other of state.buildings.values()) {
+    if (other.id === building.id) continue;
+    const cx = other.origin.x + other.width / 2 - ox;
+    const cz = other.origin.y + other.depth / 2 - oy;
+    const along = cx * dir.sx + cz * dir.sz;
+    const side = Math.abs(cx * dir.sz - cz * dir.sx);
+    if (along < 0.8 || along > 14 || side > 5) continue;
+    const dist = along * TILE;
+    if (!best || dist < best.dist) {
+      best = { dist, roof: other.floors * FLOOR_H };
+    }
+  }
+  return best;
 }

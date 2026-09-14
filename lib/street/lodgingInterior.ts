@@ -17,6 +17,8 @@ export interface LodgingInterior {
   nearComputer: (x: number, z: number) => boolean;
   nearExit: (x: number, z: number) => boolean;
   computerHit: THREE.Object3D | null;
+  windowMesh: THREE.Mesh | null;
+  windowAnchor: { x: number; y: number; z: number } | null;
   dispose: () => void;
 }
 
@@ -183,6 +185,8 @@ function buildLobby(building: Building): LodgingInterior {
     nearComputer: () => false,
     nearExit: (x, z) => z > 12.4 && Math.abs(x) < 8,
     computerHit: null,
+    windowMesh: null,
+    windowAnchor: null,
     dispose: () => {
       for (const item of disposables) item.dispose();
       deskMat.dispose();
@@ -191,6 +195,7 @@ function buildLobby(building: Building): LodgingInterior {
 }
 
 function buildRoom(building: Building, state: CityState, room: LodgingRoom | null): LodgingInterior {
+  void state;
   const group = new THREE.Group();
   const blockers: Blocker[] = [];
   const disposables: Array<{ dispose: () => void }> = [];
@@ -247,24 +252,21 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
   wallB.box(winX0 - 0.85, minZ + 0.45, winX0 - 0.15, minZ + 0.7, 0.7, ceilY - 0.15, curtain);
   wallB.box(winX1 + 0.15, minZ + 0.45, winX1 + 0.85, minZ + 0.7, 0.7, ceilY - 0.15, curtain);
 
-  const glassGeo = new THREE.PlaneGeometry(winX1 - winX0 - 0.1, winY1 - winY0 - 0.1);
+  const glassW = winX1 - winX0 - 0.04;
+  const glassH = winY1 - winY0 - 0.04;
+  const glassGeo = new THREE.PlaneGeometry(glassW, glassH);
   const glassMat = new THREE.MeshStandardMaterial({
     color: "#d7eef8",
     transparent: true,
-    opacity: 0.18,
-    roughness: 0.08,
+    opacity: 0.07,
+    roughness: 0.04,
     metalness: 0.12,
+    depthWrite: false,
   });
   const glass = new THREE.Mesh(glassGeo, glassMat);
   glass.position.set((winX0 + winX1) / 2, (winY0 + winY1) / 2, minZ + 0.28);
   group.add(glass);
   disposables.push(glassGeo, glassMat);
-
-  addCityView(floorB, wallB, trimB, building, state, {
-    edgeZ: minZ,
-    toward: -1,
-    floor: room?.floor ?? 8,
-  });
 
   // Bed.
   trimB.box(-6.6, -1.4, -1.1, 5.2, 0, 0.55, wood);
@@ -322,6 +324,8 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
     nearComputer: (x, z) => x > 1.05 && x < 5.4 && z > 4.2 && z < 6.55,
     nearExit: (_x, z) => z > 6.6,
     computerHit: computer,
+    windowMesh: glass,
+    windowAnchor: { x: (winX0 + winX1) / 2, y: 1.7, z: minZ },
     dispose: () => {
       for (const item of disposables) item.dispose();
     },
@@ -829,6 +833,8 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
     nearComputer: () => false,
     nearExit: (_x, z) => z > 12.8,
     computerHit: null,
+    windowMesh: null,
+    windowAnchor: null,
     dispose: () => {
       for (const item of disposables) item.dispose();
     },
