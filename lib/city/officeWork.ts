@@ -79,28 +79,29 @@ const REPORTS: { title: string; body: string; action: string }[] = [
   { title: "Check the server status", body: "Nightly backup finished with no errors.", action: "Mark as reviewed" },
 ];
 
-export function officeTasksForDay(clock: CityClock, xp: number): OfficeTask[] {
+export function officeTasksForDay(clock: CityClock, xp: number, batch = 0): OfficeTask[] {
   const rank = officeRank(xp);
   const pay = rank.taskPay;
   const xpEach = 40 + OFFICE_RANKS_XP[rank.id];
   const day = `${clock.year}-${clock.dayOfYear}`;
+  const round = Math.max(0, Math.floor(batch));
   const tasks: OfficeTask[] = [];
   for (let i = 0; i < OFFICE_TASK_COUNT; i++) {
     if (i % 2 === 0) {
-      const mail = EMAILS[Math.floor(i / 2)] ?? EMAILS[i % EMAILS.length] ?? EMAILS[0];
+      const mail = EMAILS[(Math.floor(i / 2) + round) % EMAILS.length] ?? EMAILS[0];
       tasks.push({
         kind: "email",
-        id: `${day}-task-${i}`,
+        id: `${day}-b${round}-task-${i}`,
         title: mail.subject,
         pay,
         xp: xpEach,
         ...mail,
       });
     } else {
-      const report = REPORTS[Math.floor(i / 2)] ?? REPORTS[i % REPORTS.length] ?? REPORTS[0];
+      const report = REPORTS[(Math.floor(i / 2) + round * 3) % REPORTS.length] ?? REPORTS[0];
       tasks.push({
         kind: "approve",
-        id: `${day}-task-${i}`,
+        id: `${day}-b${round}-task-${i}`,
         title: report.title,
         pay,
         xp: xpEach,

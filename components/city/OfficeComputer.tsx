@@ -1,6 +1,6 @@
 "use client";
 
-import { completeShiftTask, dayKey, endOfficeShift, formatDollars, OFFICE_TASK_MINUTES, officeRank, readPlayer, type PlayerState } from "@/lib/city/player";
+import { completeShiftTask, endOfficeShift, formatDollars, inOfficeHours, OFFICE_TASK_COUNT, OFFICE_TASK_MINUTES, officeRank, readPlayer, advanceOfficeBatch, type PlayerState } from "@/lib/city/player";
 import { officeTasksForDay, type OfficeTask } from "@/lib/city/officeWork";
 import type { CityState } from "@/lib/city/types";
 import { formatClock, skipCityMinutes } from "@/lib/simulation/city/cityTick";
@@ -18,25 +18,24 @@ export function OfficeComputer({ state, onClose, onPlayerChange }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const tasks = useMemo(
-    () => officeTasksForDay(state.clock, player.career?.xp ?? 0),
-    [state.clock.year, state.clock.dayOfYear, player.career?.xp],
+    () => officeTasksForDay(state.clock, player.career?.xp ?? 0, player.shift?.batch ?? player.career?.workBatch ?? 0),
+    [state.clock.year, state.clock.dayOfYear, player.career?.xp, player.shift?.batch, player.career?.workBatch],
   );
   const rank = officeRank(player.career?.xp ?? 0);
   const completed = player.shift?.completedTaskIds ?? [];
   const nextTask = tasks.find((task) => !completed.includes(task.id)) ?? null;
   const active = tasks.find((task) => task.id === openId) ?? nextTask;
-  const stillOn = Boolean(player.shift);
-  const todayDone = player.career?.lastShiftDay === dayKey(state.clock) && !stillOn;
-  const allDone = completed.length >= tasks.length || todayDone;
-
-  useEffect(() => {
-    if (!openId && nextTask) setOpenId(nextTask.id);
-  }, [openId, nextTask]);
+  const hoursOpen = inOfficeHours(state.clock);
+  const allDone = !hoursOpen;
 
   const refresh = (next: PlayerState) => {
     setPlayer(next);
     onPlayerChange(next);
   };
+
+  useEffect(() => {
+    if (!openId && nextTask) setOpenId(nextTask.id);
+  }, [openId, nextTask]);
 
   const finish = (task: OfficeTask) => {
     const result = completeShiftTask(task.id, task.pay, task.xp, task.title, state);
@@ -45,9 +44,13 @@ export function OfficeComputer({ state, onClose, onPlayerChange }: Props) {
       return;
     }
     skipCityMinutes(state, OFFICE_TASK_MINUTES);
+    let latest = readPlayer();
+    if (latest.shift && inOfficeHours(state.clock) && latest.shift.completedTaskIds.length >= OFFICE_TASK_COUNT) {
+      latest = advanceOfficeBatch(latest);
+    }
     setNote(`${task.title} · +${formatDollars(task.pay)} · +${OFFICE_TASK_MINUTES} min`);
     setOpenId(null);
-    refresh(readPlayer());
+    refresh(latest);
   };
 
   const clockOut = () => {
@@ -64,10 +67,15 @@ export function OfficeComputer({ state, onClose, onPlayerChange }: Props) {
     onClose();
   };
 
+  const dismiss = (event: { target: EventTarget | null; currentTarget: EventTarget }) => {
+    if (event.target !== event.currentTarget) return;
+    onClose();
+  };
+
   return (
     <div
-      className="pointer-events-auto absolute inset-0 z-20 grid place-items-center bg-[#071018]/70 p-4 backdrop-blur-[2px]"
-      onClick={onClose}
+      className="pointer-events-auto absolute inset-0 z-40 grid place-items-center bg-[#071018]/70 p-4 backdrop-blur-[2px]"
+      onClick={dismiss}
     >
       <div
         className="flex h-[min(42rem,calc(100vh-2rem))] w-[min(52rem,calc(100%-1.5rem))] flex-col"
@@ -114,13 +122,9 @@ export function OfficeComputer({ state, onClose, onPlayerChange }: Props) {
               </div>
               {allDone ? (
                 <div className="text-center">
-                  <p className="text-lg font-semibold text-white">
-                    {completed.length >= tasks.length ? "Assignments complete" : "Office hours are over"}
-                  </p>
+                  <p className="text-lg font-semibold text-white">Office hours are over</p>
                   <p className="mt-2 text-sm text-slate-300">
-                    {completed.length >= tasks.length
-                      ? "Clock out whenever you're ready. Pay is already in your wallet."
-                      : "The workday ended at 10:00 PM. Pay for finished tasks is already in your wallet."}
+                    Come back between 9:00 AM and 10:00 PM. Pay for finished tasks is already in your wallet.
                   </p>
                   {note ? <p className="mt-2 text-sm text-sky-200">{note}</p> : null}
                   <button

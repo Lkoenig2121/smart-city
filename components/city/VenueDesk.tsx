@@ -19,24 +19,43 @@ import {
 import { venueLabel, venueRole, type VenueRole } from "@/lib/city/venues";
 import type { Building, CityState } from "@/lib/city/types";
 import { formatMoney } from "@/lib/simulation/buildings/buildings";
-import { useEffect, useState } from "react";
+import { useState, type ReactNode } from "react";
 
 interface Props {
   building: Building;
   state: CityState;
   onPlayerChange?: (player: PlayerState) => void;
   onOpenWorkstation?: () => void;
+  onClose?: () => void;
 }
 
-export function VenueDesk({ building, state, onPlayerChange, onOpenWorkstation }: Props) {
+export function VenueDesk({ building, state, onPlayerChange, onOpenWorkstation, onClose }: Props) {
   const role = venueRole(building) ?? "office";
-  if (role === "office") {
-    return <OfficeDesk building={building} state={state} onPlayerChange={onPlayerChange} onOpenWorkstation={onOpenWorkstation} />;
-  }
-  if (role === "bank") {
-    return <BankDesk building={building} state={state} onPlayerChange={onPlayerChange} />;
-  }
-  return <FlavorDesk building={building} state={state} role={role} />;
+  const body =
+    role === "office" ? (
+      <OfficeDesk building={building} state={state} onPlayerChange={onPlayerChange} onOpenWorkstation={onOpenWorkstation} />
+    ) : role === "bank" ? (
+      <BankDesk building={building} state={state} onPlayerChange={onPlayerChange} />
+    ) : (
+      <FlavorDesk building={building} state={state} role={role} />
+    );
+  return <DeskFrame onClose={onClose}>{body}</DeskFrame>;
+}
+
+function DeskFrame({ onClose, children }: { onClose?: () => void; children: ReactNode }) {
+  return (
+    <div
+      className="pointer-events-auto absolute inset-0 z-40 grid place-items-center p-4"
+      onClick={(event) => {
+        if (event.target !== event.currentTarget) return;
+        onClose?.();
+      }}
+    >
+      <div className="w-[min(26rem,calc(100%-2rem))]" onClick={(event) => event.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 function OfficeDesk({
@@ -55,12 +74,9 @@ function OfficeDesk({
   const hired = player.career?.id === "office_worker";
   const otherJob = Boolean(player.career && !hired);
   const onShift = Boolean(player.shift);
-  const alreadyWorked = player.career?.lastShiftDay === dayKey(state.clock) && !onShift;
+  const today = dayKey(state.clock);
+  const pausedToday = Boolean(player.career?.workDay === today && !onShift);
   const openHours = inOfficeHours(state.clock);
-
-  useEffect(() => {
-    if (onShift) onOpenWorkstation?.();
-  }, [onShift]);
 
   const applyResult = (result: PlayerState | string) => {
     if (typeof result === "string") {
@@ -86,7 +102,6 @@ function OfficeDesk({
   };
 
   return (
-    <div className="pointer-events-auto absolute left-1/2 top-1/2 z-20 w-[min(26rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2">
       <div className="rounded-2xl border border-amber-300/35 bg-[#14110c]/92 p-5 text-center shadow-2xl backdrop-blur">
         <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Offices</p>
         <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
@@ -94,7 +109,7 @@ function OfficeDesk({
           {hired
             ? onShift
               ? `You're on the clock. Finish today's ${OFFICE_TASK_COUNT} assignments — each pays ${formatDollars(officeRank(player.career?.xp ?? 0).taskPay)} and takes 30 minutes.`
-              : "Any Riverside office works. Shifts run 9:00 AM to 10:00 PM."
+              : "Any Riverside office works. Clock in anytime from 9:00 AM to 10:00 PM."
             : otherJob
               ? `You already work at ${player.career?.employerName}. Quit before applying here.`
               : "Walk in, start working, and collect a paycheck. Hours are 9:00 AM to 10:00 PM."}
@@ -109,19 +124,19 @@ function OfficeDesk({
         {!onShift && !otherJob ? (
           <button
             type="button"
-            disabled={alreadyWorked || (!openHours && hired)}
+            disabled={!openHours && hired}
             onClick={startWorking}
             className="mt-4 w-full rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-semibold text-[#1a1206] disabled:opacity-40"
           >
-            {alreadyWorked
-              ? "Shift complete for today"
-              : openHours
-                ? hired
-                  ? "Start working"
-                  : "Apply and start working"
-                : hired
-                  ? "Closed until 9:00 AM"
-                  : "Apply for office work"}
+            {openHours
+              ? hired
+                ? pausedToday
+                  ? "Keep working"
+                  : "Start working"
+                : "Apply and start working"
+              : hired
+                ? "Closed until 9:00 AM"
+                : "Apply for office work"}
           </button>
         ) : null}
 
@@ -139,7 +154,7 @@ function OfficeDesk({
               onClick={() => {
                 const result = endOfficeShift(state);
                 applyResult(result);
-                if (typeof result !== "string") setNote("Shift closed. Pay is based on the work you finished.");
+                if (typeof result !== "string") setNote("Clocked out. You can come back until 10:00 PM.");
               }}
               className="w-full rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/20"
             >
@@ -165,7 +180,6 @@ function OfficeDesk({
         {note ? <p className="mt-3 text-sm text-sky-200">{note}</p> : null}
         <p className="mt-3 text-[0.65rem] text-slate-500">Walk back to the doors and press E to leave</p>
       </div>
-    </div>
   );
 }
 
@@ -190,8 +204,7 @@ function BankDesk({
     setNote(ok);
   };
   return (
-    <div className="pointer-events-auto absolute left-1/2 top-1/2 z-20 w-[min(26rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2">
-      <div className="rounded-2xl border border-amber-300/35 bg-[#14110c]/92 p-5 text-center shadow-2xl backdrop-blur">
+    <div className="rounded-2xl border border-amber-300/35 bg-[#14110c]/92 p-5 text-center shadow-2xl backdrop-blur">
         <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Bank</p>
         <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
         <p className="mt-2 text-sm text-slate-300">Move cash between your wallet and account.</p>
@@ -216,7 +229,6 @@ function BankDesk({
         </div>
         {note ? <p className="mt-3 text-sm text-sky-200">{note}</p> : null}
         <p className="mt-3 text-[0.65rem] text-slate-500">Walk back to the doors and press E to leave</p>
-      </div>
     </div>
   );
 }
@@ -225,8 +237,7 @@ function FlavorDesk({ building, state, role }: { building: Building; state: City
   const [note, setNote] = useState<string | null>(null);
   const copy = deskCopy(role, building, state);
   return (
-    <div className="pointer-events-auto absolute left-1/2 top-1/2 z-20 w-[min(26rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2">
-      <div className="rounded-2xl border border-amber-300/35 bg-[#14110c]/92 p-5 text-center shadow-2xl backdrop-blur">
+    <div className="rounded-2xl border border-amber-300/35 bg-[#14110c]/92 p-5 text-center shadow-2xl backdrop-blur">
         <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">{venueLabel(role)}</p>
         <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
         <p className="mt-2 text-sm text-slate-300">{copy.body}</p>
@@ -240,7 +251,6 @@ function FlavorDesk({ building, state, role }: { building: Building; state: City
         </button>
         {note ? <p className="mt-3 text-sm text-sky-200">{note}</p> : null}
         <p className="mt-3 text-[0.65rem] text-slate-500">Walk back to the doors and press E to leave</p>
-      </div>
     </div>
   );
 }

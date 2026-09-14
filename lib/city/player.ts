@@ -37,12 +37,17 @@ export interface OfficeCareer {
   employerName: string;
   xp: number;
   lastShiftDay: string | null;
+  workDay: string | null;
+  workBatch: number;
+  savedTaskIds: string[];
+  savedEarnings: number;
 }
 
 export interface ActiveShift {
   careerId: CareerId;
   buildingId: string;
   dayKey: string;
+  batch: number;
   completedTaskIds: string[];
   taskEarnings: number;
 }
@@ -113,13 +118,7 @@ export function applyForOffice(building: Building): PlayerState | string {
     if (worksHere(player, building.id)) return "You already work here.";
     return `Quit your job at ${player.career.employerName} first.`;
   }
-  player.career = {
-    id: "office_worker",
-    employerId: building.id,
-    employerName: building.name,
-    xp: 0,
-    lastShiftDay: null,
-  };
+  player.career = emptyCareer(building.id, building.name);
   writePlayer(player);
   return player;
 }
@@ -147,16 +146,53 @@ export function startOfficeShift(building: Building, state: CityState): PlayerSt
   const today = dayKey(state.clock);
   const latest = readPlayer();
   if (latest.shift && latest.shift.dayKey === today) return latest;
-  if (latest.career?.lastShiftDay === today) return "Your shift for today is already done.";
+
+  let batch = 0;
+  let completedTaskIds: string[] = [];
+  let taskEarnings = 0;
+  if (latest.career?.workDay === today) {
+    batch = latest.career.workBatch;
+    completedTaskIds = [...latest.career.savedTaskIds];
+    taskEarnings = latest.career.savedEarnings;
+    if (completedTaskIds.length >= OFFICE_TASK_COUNT) {
+      batch += 1;
+      completedTaskIds = [];
+      taskEarnings = 0;
+    }
+  }
+
   latest.shift = {
     careerId: "office_worker",
     buildingId: building.id,
     dayKey: today,
-    completedTaskIds: [],
-    taskEarnings: 0,
+    batch,
+    completedTaskIds,
+    taskEarnings,
   };
+  if (latest.career) {
+    latest.career.workDay = today;
+    latest.career.workBatch = batch;
+    latest.career.savedTaskIds = completedTaskIds;
+    latest.career.savedEarnings = taskEarnings;
+  }
   writePlayer(latest);
   return latest;
+}
+
+/** Start the next set of assignments if this batch is finished during office hours. */
+export function advanceOfficeBatch(player: PlayerState): PlayerState {
+  if (!player.shift || player.shift.completedTaskIds.length < OFFICE_TASK_COUNT) return player;
+  player.shift.batch += 1;
+  player.shift.completedTaskIds = [];
+  player.shift.taskEarnings = 0;
+  if (player.career) {
+    player.career.workDay = player.shift.dayKey;
+    player.career.workBatch = player.shift.batch;
+    player.career.savedTaskIds = [];
+    player.career.savedEarnings = 0;
+  }
+  writePlayer(player);
+  return player;
 }
 
 export function completeShiftTask(
@@ -229,16 +265,38 @@ export function withdrawFromBank(amount: number, clock: CityClock): PlayerState 
 }
 
 function settleShift(player: PlayerState, _clock: CityClock, _payRemainder: boolean) {
-  const shift = player.shift;
-  if (!shift) return;
-  if (player.career) player.career.lastShiftDay = shift.dayKey;
-  player.shift = null;
+  pauseShift(player);
 }
 
 function abandonShift(player: PlayerState) {
-  if (!player.shift) return;
-  if (player.career) player.career.lastShiftDay = player.shift.dayKey;
+  pauseShift(player);
+}
+
+function pauseShift(player: PlayerState) {
+  const shift = player.shift;
+  if (!shift) return;
+  if (player.career) {
+    player.career.lastShiftDay = shift.dayKey;
+    player.career.workDay = shift.dayKey;
+    player.career.workBatch = shift.batch;
+    player.career.savedTaskIds = [...shift.completedTaskIds];
+    player.career.savedEarnings = shift.taskEarnings;
+  }
   player.shift = null;
+}
+
+function emptyCareer(employerId: string, employerName: string): OfficeCareer {
+  return {
+    id: "office_worker",
+    employerId,
+    employerName,
+    xp: 0,
+    lastShiftDay: null,
+    workDay: null,
+    workBatch: 0,
+    savedTaskIds: [],
+    savedEarnings: 0,
+  };
 }
 
 function credit(player: PlayerState, amount: number, description: string, clock: CityClock) {
@@ -303,12 +361,20 @@ function parseCareer(value: unknown): OfficeCareer | null {
   if (career.id !== "office_worker") return null;
   if (typeof career.employerId !== "string" || typeof career.employerName !== "string") return null;
   const xp = Number(career.xp);
+  const workBatch = Number(career.workBatch);
+  const savedEarnings = Number(career.savedEarnings);
   return {
     id: "office_worker",
     employerId: career.employerId,
     employerName: career.employerName,
     xp: Number.isFinite(xp) && xp >= 0 ? xp : 0,
     lastShiftDay: typeof career.lastShiftDay === "string" ? career.lastShiftDay : null,
+    workDay: typeof career.workDay === "string" ? career.workDay : null,
+    workBatch: Number.isFinite(workBatch) && workBatch >= 0 ? Math.floor(workBatch) : 0,
+    savedTaskIds: Array.isArray(career.savedTaskIds)
+      ? career.savedTaskIds.filter((id): id is string => typeof id === "string")
+      : [],
+    savedEarnings: Number.isFinite(savedEarnings) && savedEarnings >= 0 ? savedEarnings : 0,
   };
 }
 
@@ -318,10 +384,12 @@ function parseShift(value: unknown): ActiveShift | null {
   if (shift.careerId !== "office_worker") return null;
   if (typeof shift.buildingId !== "string" || typeof shift.dayKey !== "string") return null;
   const taskEarnings = Number(shift.taskEarnings);
+  const batch = Number(shift.batch);
   return {
     careerId: "office_worker",
     buildingId: shift.buildingId,
     dayKey: shift.dayKey,
+    batch: Number.isFinite(batch) && batch >= 0 ? Math.floor(batch) : 0,
     completedTaskIds: Array.isArray(shift.completedTaskIds)
       ? shift.completedTaskIds.filter((id): id is string => typeof id === "string")
       : [],

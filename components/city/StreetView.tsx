@@ -82,6 +82,7 @@ export function StreetView({
   const subwayDoorRef = useRef<Building | null>(null);
   const venueDoorRef = useRef<Building | null>(null);
   const atDeskRef = useRef(false);
+  const deskDismissedRef = useRef(false);
   const atComputerRef = useRef(false);
   const atOfficeComputerRef = useRef(false);
   const sleepingRef = useRef(false);
@@ -456,6 +457,7 @@ export function StreetView({
     }
     venueRef.current = world;
     setAtDesk(false);
+    deskDismissedRef.current = false;
     setAtOfficeComputer(false);
     atOfficeComputerRef.current = false;
 
@@ -497,9 +499,11 @@ export function StreetView({
       tickRef.current(dt);
       world.render(dt);
       const desk = world.nearDesk();
-      atDeskRef.current = desk;
-      setAtDesk((prev) => (prev === desk ? prev : desk));
-      if (desk && document.pointerLockElement === canvas) document.exitPointerLock();
+      if (!desk) deskDismissedRef.current = false;
+      const showDesk = desk && !deskDismissedRef.current;
+      atDeskRef.current = showDesk;
+      setAtDesk((prev) => (prev === showDesk ? prev : showDesk));
+      if (showDesk && document.pointerLockElement === canvas) document.exitPointerLock();
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
@@ -977,6 +981,10 @@ export function StreetView({
           building={venueBuilding}
           state={state}
           onPlayerChange={setPlayer}
+          onClose={() => {
+            deskDismissedRef.current = true;
+            setAtDesk(false);
+          }}
           onOpenWorkstation={() => {
             atOfficeComputerRef.current = true;
             setAtOfficeComputer(true);
