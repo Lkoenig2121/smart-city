@@ -149,6 +149,10 @@ export class LodgingWorld {
     return this.interior.nearComputer(this.controls.position.x, this.controls.position.z);
   }
 
+  nearBed() {
+    return this.interior.nearBed(this.controls.position.x, this.controls.position.z);
+  }
+
   aimedAtComputer(ndcX = 0, ndcY = 0) {
     const target = this.interior.computerHit;
     if (!target || this.zone !== "room") return false;

@@ -25,7 +25,7 @@ import { StadiumWorld } from "@/lib/street/StadiumWorld";
 import { LodgingWorld } from "@/lib/street/LodgingWorld";
 import { SubwayWorld } from "@/lib/street/SubwayWorld";
 import { attachPointerInput } from "@/lib/street/keys";
-import { formatClock } from "@/lib/simulation/city/cityTick";
+import { canSleepNow, formatClock, sleepUntilMorning } from "@/lib/simulation/city/cityTick";
 import { weatherEmoji } from "@/lib/simulation/weather/weather";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { LodgingDesk } from "./LodgingDesk";
@@ -69,6 +69,7 @@ export function StreetView({
   const subwayDoorRef = useRef<Building | null>(null);
   const atDeskRef = useRef(false);
   const atComputerRef = useRef(false);
+  const sleepingRef = useRef(false);
   const tickRef = useRef(onTick);
   tickRef.current = onTick;
 
@@ -89,6 +90,9 @@ export function StreetView({
   const [aimComputer, setAimComputer] = useState(false);
   const [hasKey, setHasKey] = useState(false);
   const [pickingRoom, setPickingRoom] = useState(false);
+  const [atBed, setAtBed] = useState(false);
+  const [sleeping, setSleeping] = useState(false);
+  const [sleepPhase, setSleepPhase] = useState<"night" | "morning">("night");
   const [spawn, setSpawn] = useState(entry);
 
   const inside = interior !== null;
@@ -294,7 +298,11 @@ export function StreetView({
     setAtComputer(false);
     setAimComputer(false);
     setPickingRoom(false);
+    setAtBed(false);
+    setSleeping(false);
+    setSleepPhase("night");
     atComputerRef.current = false;
+    sleepingRef.current = false;
 
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
@@ -309,13 +317,43 @@ export function StreetView({
       setInterior(null);
       setAtDesk(false);
     };
+    const timers: number[] = [];
+    const beginSleep = () => {
+      if (sleepingRef.current || interior.zone !== "room" || !canSleepNow(state)) return;
+      sleepingRef.current = true;
+      setSleeping(true);
+      setSleepPhase("night");
+      world.controls.enabled = false;
+      world.controls.clearKeys();
+      if (document.pointerLockElement === canvas) document.exitPointerLock();
+      timers.push(
+        window.setTimeout(() => {
+          sleepUntilMorning(state);
+          setClock(formatClock(state));
+          setSleepPhase("morning");
+          timers.push(
+            window.setTimeout(() => {
+              world.controls.enabled = true;
+              sleepingRef.current = false;
+              setSleeping(false);
+              setSleepPhase("night");
+            }, 1600),
+          );
+        }, 900),
+      );
+    };
     const detachInput = attachPointerInput(canvas, world.controls, {
       setLocked,
       consumeKey: (event) => {
         if (event.code !== "KeyE") return false;
         event.preventDefault();
+        if (sleepingRef.current) return true;
         if (atComputerRef.current) {
           setAtComputer(false);
+          return true;
+        }
+        if (interior.zone === "room" && world.nearBed() && canSleepNow(state)) {
+          beginSleep();
           return true;
         }
         if (interior.zone !== "lobby") {
@@ -333,13 +371,15 @@ export function StreetView({
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      tickRef.current(dt);
+      if (!sleepingRef.current) tickRef.current(dt);
       world.render(dt);
       const desk = interior.zone === "lobby" && world.nearDesk();
       atDeskRef.current = desk;
       setAtDesk((prev) => (prev === desk ? prev : desk));
       if (desk && document.pointerLockElement === canvas) document.exitPointerLock();
-      const aiming = interior.zone === "room" && !atComputerRef.current && world.aimedAtComputer();
+      const bed = interior.zone === "room" && !atComputerRef.current && world.nearBed();
+      setAtBed((prev) => (prev === bed ? prev : bed));
+      const aiming = interior.zone === "room" && !atComputerRef.current && !sleepingRef.current && world.aimedAtComputer();
       setAimComputer((prev) => (prev === aiming ? prev : aiming));
       clockAcc += dt;
       if (clockAcc > 0.25) {
@@ -352,9 +392,12 @@ export function StreetView({
 
     return () => {
       cancelAnimationFrame(frame);
+      for (const id of timers) window.clearTimeout(id);
       ro.disconnect();
       detachInput();
       if (document.pointerLockElement === canvas) document.exitPointerLock();
+      world.controls.enabled = true;
+      sleepingRef.current = false;
       const borrowed = world.detachCity();
       if (borrowed) worldRef.current?.returnCity(borrowed);
       world.dispose();
@@ -454,14 +497,14 @@ export function StreetView({
   }, [active, interior, state]);
 
   const requestLock = () => {
-    if (atDesk || atComputer || pickingStop || riding || pickingRoom) return;
+    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping) return;
     const canvas = inside ? canvasRef.current : outdoorCanvasRef.current;
     if (!canvas) return;
     void canvas.requestPointerLock();
   };
 
   const onCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (atDesk || atComputer || pickingStop || riding || pickingRoom) return;
+    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping) return;
     const canvas = canvasRef.current;
     const world = lodgingRef.current;
     if (canvas && world && interior?.kind === "lodging" && interior.zone === "room") {
@@ -632,7 +675,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom ? (
+      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom && !sleeping ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
           <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
             <p className="text-xs font-semibold text-white">Click to look around</p>
@@ -819,12 +862,46 @@ export function StreetView({
         </div>
       ) : null}
 
-      {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer && !pickingRoom ? (
+      {atBed && !sleeping && !atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-xl border border-amber-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
+            {canSleepNow(state) ? (
+              <p className="text-xs text-slate-200">
+                Press <span className="font-semibold text-white">E</span> to sleep until 8:00 AM
+              </p>
+            ) : (
+              <p className="text-xs text-slate-200">You can turn in after 10:00 PM</p>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer && !pickingRoom && !sleeping && !atBed ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
               Press <span className="font-semibold text-white">E</span> to return to the lobby
             </p>
+          </div>
+        </div>
+      ) : null}
+
+      {sleeping ? (
+        <div className="absolute inset-0 z-40 grid place-items-center bg-black">
+          <div className="text-center">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300/80">
+              {sleepPhase === "morning" ? "Good morning" : "Good night"}
+            </p>
+            {sleepPhase === "morning" ? (
+              <>
+                <p className="mt-2 text-xl font-semibold text-white">
+                  {clock.day} · {clock.date} · {clock.time}
+                </p>
+                <p className="mt-1 text-sm text-slate-400">8:00 AM wake-up</p>
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-slate-400">Sleeping until 8:00 AM</p>
+            )}
           </div>
         </div>
       ) : null}

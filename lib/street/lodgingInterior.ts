@@ -15,6 +15,7 @@ export interface LodgingInterior {
   groundAt: (x: number, z: number) => number;
   nearDesk: (x: number, z: number) => boolean;
   nearComputer: (x: number, z: number) => boolean;
+  nearBed: (x: number, z: number) => boolean;
   nearExit: (x: number, z: number) => boolean;
   computerHit: THREE.Object3D | null;
   windowMesh: THREE.Mesh | null;
@@ -183,6 +184,7 @@ function buildLobby(building: Building): LodgingInterior {
     groundAt: () => 0,
     nearDesk: (x, z) => Math.abs(x) < 8 && z > -4.4 && z < 1.6,
     nearComputer: () => false,
+    nearBed: () => false,
     nearExit: (x, z) => z > 12.4 && Math.abs(x) < 8,
     computerHit: null,
     windowMesh: null,
@@ -322,6 +324,9 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
     groundAt: () => 0,
     nearDesk: () => false,
     nearComputer: (x, z) => x > 1.05 && x < 5.4 && z > 4.2 && z < 6.55,
+    nearBed: (x, z) =>
+      (x > -1.5 && x < -0.12 && z > -1.6 && z < 5.35) ||
+      (x > -6.5 && x < -1.15 && z > 5.05 && z < 6.4),
     nearExit: (_x, z) => z > 6.6,
     computerHit: computer,
     windowMesh: glass,
@@ -831,6 +836,7 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
     },
     nearDesk: () => false,
     nearComputer: () => false,
+    nearBed: () => false,
     nearExit: (_x, z) => z > 12.8,
     computerHit: null,
     windowMesh: null,

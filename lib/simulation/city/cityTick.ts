@@ -6,6 +6,7 @@ import { tickBuildingStats } from "../buildings/buildingLogic";
 import { stepCitizens, syncCitizenSchedules, wanderOutdoors } from "../citizens/citizenBehavior";
 import { tickCityEvents } from "../events/cityEvents";
 import { seedVehicle, stepVehicles } from "../traffic/vehicleMovement";
+import { SIM_MINUTES_PER_SECOND } from "../weather/weather";
 
 export function formatClock(state: CityState) {
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -31,12 +32,39 @@ export function dayPhase(state: CityState): "night" | "dawn" | "day" | "dusk" {
   return "night";
 }
 
+/** Earliest you can turn in: 10:00 PM. Wake-up is 8:00 AM the following morning. */
+export const SLEEP_AFTER_MINUTE = 22 * 60;
+export const WAKE_MINUTE = 8 * 60;
+
+export function canSleepNow(state: CityState) {
+  const minute = state.clock.minuteOfDay;
+  return minute >= SLEEP_AFTER_MINUTE || minute < WAKE_MINUTE;
+}
+
+/** Fast-forward overnight so the clock reads 8:00 AM. No-op if it isn't late enough. */
+export function sleepUntilMorning(state: CityState) {
+  if (!canSleepNow(state)) return false;
+  let remaining =
+    state.clock.minuteOfDay >= WAKE_MINUTE
+      ? 24 * 60 - state.clock.minuteOfDay + WAKE_MINUTE
+      : WAKE_MINUTE - state.clock.minuteOfDay;
+  const chunk = 30;
+  while (remaining > 0.5) {
+    const step = Math.min(chunk, remaining);
+    tickCity(state, step / SIM_MINUTES_PER_SECOND);
+    remaining -= step;
+  }
+  state.clock.minuteOfDay = WAKE_MINUTE;
+  tickCity(state, 0);
+  return true;
+}
+
 export function tickCity(state: CityState, dtSeconds: number, seeded = true) {
   const rand = seeded
     ? mulberry32((state.clock.dayIndex + 1) * 100000 + state.clock.minuteOfDay)
     : Math.random;
 
-  state.clock.minuteOfDay += dtSeconds * 7.5;
+  state.clock.minuteOfDay += dtSeconds * SIM_MINUTES_PER_SECOND;
   let newDay = false;
   if (state.clock.minuteOfDay >= 24 * 60) {
     state.clock.minuteOfDay -= 24 * 60;
