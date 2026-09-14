@@ -25,6 +25,36 @@ const ROOM_STORAGE = "smartcity-lodging-rooms";
 
 /** Hotel room that is never occupied and always unlocks. */
 export const ALWAYS_OPEN_ROOM = "1110";
+export const HOTEL_COST = 320_000;
+export const HOTEL_BUILD_SECONDS = 16;
+export const HOTEL_STACK_COST = 80_000;
+export const HOTEL_STACK_FLOORS = 4;
+export const HOTEL_MAX_FLOORS = 80;
+
+const HOTEL_NAMES = [
+  "The Beacon Hotel",
+  "Summit Suites",
+  "Lakeside Inn",
+  "The Orchid Hotel",
+  "Pioneer Grand",
+  "Harborstack Hotel",
+  "The Meridian",
+  "Cobalt House",
+  "Willow Plaza Hotel",
+  "Northline Inn",
+];
+
+const SEED_HOTELS: Record<string, string> = {
+  "21,13": "The Helio Grand",
+  "17,13": "The Riverside Hotel",
+};
+
+export function nextHotelName(state: CityState) {
+  const used = new Set([...state.buildings.values()].map((building) => building.name));
+  const open = HOTEL_NAMES.find((name) => !used.has(name));
+  if (open) return open;
+  return `The ${HOTEL_NAMES[used.size % HOTEL_NAMES.length].replace(/^The /, "")} ${used.size}`;
+}
 
 export function isAlwaysOpenLodgingRoom(room: Pick<LodgingRoom, "id" | "label">) {
   return room.label === ALWAYS_OPEN_ROOM || room.id.endsWith(`-${ALWAYS_OPEN_ROOM}`);
@@ -57,7 +87,7 @@ export function lodgingGateTile(building: Building) {
   };
 }
 
-export function markLodging(building: Building, use: LodgingUse) {
+export function markLodging(building: Building, use: LodgingUse, name?: string) {
   building.stats.extra = {
     ...building.stats.extra,
     lodging: use,
@@ -69,7 +99,9 @@ export function markLodging(building: Building, use: LodgingUse) {
     building.wallColor = "#d8c4a8";
     building.roofColor = "#2a2420";
     building.accentColor = "#c9a44c";
-    building.name = building.origin.x === 21 ? "The Helio Grand" : "The Riverside Hotel";
+    const seedName = SEED_HOTELS[`${building.origin.x},${building.origin.y}`];
+    if (name) building.name = name;
+    else if (seedName) building.name = seedName;
   } else {
     building.wallColor = "#c4b09a";
     building.roofColor = "#3a322c";

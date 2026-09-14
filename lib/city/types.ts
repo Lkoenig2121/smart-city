@@ -30,6 +30,7 @@ export type Tool =
   | "road"
   | "house"
   | "apartment"
+  | "hotel"
   | "shop"
   | "office"
   | "park"

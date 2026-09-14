@@ -8,6 +8,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: "road", label: "Roads", hint: "Lay asphalt" },
   { id: "house", label: "Homes", hint: "Place a house" },
   { id: "apartment", label: "Flats", hint: "Place apartments" },
+  { id: "hotel", label: "Hotel", hint: "Place a hotel · $320K · click an existing hotel to add 4 floors · $80K" },
   { id: "shop", label: "Shops", hint: "Place a business" },
   { id: "office", label: "Offices", hint: "Place an office" },
   { id: "stadium", label: "Stadium", hint: "Ravens Ballpark · $750K · 5,000 people, road, parking" },
@@ -233,10 +234,6 @@ const HIDDEN_EXTRA = new Set([
   "venue",
   "lodging",
   "waterfront",
-  "rooms",
-  "nightly",
-  "homes",
-  "amenities",
 ]);
 
 function Info({ icon, label, value }: { icon: string; label: string; value: string }) {

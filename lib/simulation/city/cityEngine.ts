@@ -5,8 +5,18 @@ import {
   STADIUM_COST,
   stadiumPlacementError,
 } from "@/lib/city/stadium";
-import type { BuildingKind, CityState, Tool } from "@/lib/city/types";
+import type { Building, BuildingKind, CityState, Tool } from "@/lib/city/types";
 import { pickBuildingAt } from "@/lib/renderer/pickBuilding";
+import {
+  HOTEL_BUILD_SECONDS,
+  HOTEL_COST,
+  HOTEL_MAX_FLOORS,
+  HOTEL_STACK_COST,
+  HOTEL_STACK_FLOORS,
+  lodgingUse,
+  markLodging,
+  nextHotelName,
+} from "@/lib/city/lodging";
 import { announceConstruction } from "@/lib/simulation/events/cityEvents";
 import { createInitialCity, getBuildingAt, recountPopulation } from "./cityState";
 import { tickCity } from "./cityTick";
@@ -133,6 +143,8 @@ export class CityEngine {
       return true;
     }
 
+    if (this.tool === "hotel") return this.placeHotel(x, y);
+
     const kind = toolToKind(this.tool);
     if (!kind) return false;
     if (kind === "baseball_stadium") {
@@ -145,7 +157,64 @@ export class CityEngine {
     return this.placeBuilding(kind, x, y);
   }
 
-  placeBuilding(kind: BuildingKind, x: number, y: number) {
+  placeHotel(x: number, y: number) {
+    const existing = getBuildingAt(this.state, x, y);
+    if (existing && lodgingUse(existing) === "hotel") return this.raiseHotel(existing);
+
+    if (this.state.budget.treasury < HOTEL_COST) {
+      this.placementHint = `Costs $${(HOTEL_COST / 1000).toFixed(0)}K — treasury is short`;
+      return false;
+    }
+    const placed = this.placeBuilding("skyscraper", x, y, false);
+    if (!placed) {
+      this.placementHint = "Needs a clear 2×2 lot";
+      return false;
+    }
+    const building = this.selectedId ? this.state.buildings.get(this.selectedId) : null;
+    if (!building) return false;
+    markLodging(building, "hotel", nextHotelName(this.state));
+    building.floors = 14;
+    building.stats.residents = 0;
+    building.stats.capacity = 0;
+    building.stats.jobs = 110;
+    building.stats.employees = 86;
+    building.stats.revenue = 24000;
+    building.stats.propertyValue = 18_500_000;
+    building.constructionLeft = HOTEL_BUILD_SECONDS;
+    building.stats.status = "closed";
+    this.state.budget.treasury -= HOTEL_COST;
+    this.mapRev += 1;
+    announceConstruction(this.state, building);
+    return true;
+  }
+
+  raiseHotel(building: Building) {
+    if (building.floors >= HOTEL_MAX_FLOORS) {
+      this.placementHint = "This hotel is as tall as it can go";
+      return false;
+    }
+    if (this.state.budget.treasury < HOTEL_STACK_COST) {
+      this.placementHint = `Adding floors costs $${(HOTEL_STACK_COST / 1000).toFixed(0)}K — treasury is short`;
+      return false;
+    }
+    building.floors = Math.min(HOTEL_MAX_FLOORS, building.floors + HOTEL_STACK_FLOORS);
+    building.stats.extra = {
+      ...building.stats.extra,
+      rooms: Math.round(building.floors * 18),
+      nightly: building.stats.extra?.nightly ?? "$189",
+    };
+    building.stats.jobs = Math.min(240, building.stats.jobs + 18);
+    building.stats.employees = Math.min(building.stats.jobs, building.stats.employees + 12);
+    building.stats.revenue += 4200;
+    building.stats.propertyValue += 2_400_000;
+    this.state.budget.treasury -= HOTEL_STACK_COST;
+    this.selectedId = building.id;
+    this.placementHint = `${building.name} is now ${building.floors} floors`;
+    this.mapRev += 1;
+    return true;
+  }
+
+  placeBuilding(kind: BuildingKind, x: number, y: number, finish = true) {
     const fp = footprintFor(kind);
     for (let dy = 0; dy < fp.d; dy++) {
       for (let dx = 0; dx < fp.w; dx++) {
@@ -166,6 +235,7 @@ export class CityEngine {
     recountPopulation(this.state);
     this.selectedId = id;
     this.mapRev += 1;
+    if (!finish) return true;
     if (kind === "baseball_stadium") {
       this.state.budget.treasury -= STADIUM_COST;
       building.constructionLeft = STADIUM_BUILD_SECONDS;

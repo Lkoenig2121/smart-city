@@ -85,7 +85,10 @@ export function announceConstruction(state: CityState, building: Building) {
   if (hasEvent(state, "construction") && state.events.some((e) => e.buildingId === building.id)) return;
   pushEvent(state, {
     kind: "construction",
-    headline: `New ${building.kind === "skyscraper" ? "skyscraper" : building.kind.replace("_", " ")} construction begins.`,
+    headline:
+      building.stats.extra?.lodging === "hotel"
+        ? "New hotel construction begins."
+        : `New ${building.kind === "skyscraper" ? "skyscraper" : building.kind.replace("_", " ")} construction begins.`,
     detail: `${building.name} is going up.`,
     x: building.origin.x,
     y: building.origin.y,
