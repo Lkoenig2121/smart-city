@@ -80,13 +80,16 @@ export function buildVenueInterior(building: Building): VenueInterior {
 
   assemble(group, floorB, wallB, trimB, disposables);
 
+  const office = role === "office";
   return {
     group,
     blockers,
-    spawn: { x: 0, z: 9.4, yaw: 0, pitch: -0.06 },
+    spawn: office ? { x: 0, z: -3.2, yaw: 0, pitch: -0.06 } : { x: 0, z: 9.4, yaw: 0, pitch: -0.06 },
     bounds: { minX, maxX, minZ, maxZ },
     groundAt: () => 0,
-    nearDesk: (x, z) => Math.abs(x) < 7.2 && z > -5.2 && z < 0.6,
+    nearDesk: office
+      ? (x, z) => Math.abs(x) < 9 && z < 8.4
+      : (x, z) => Math.abs(x) < 7.2 && z > -5.2 && z < 0.6,
     nearExit: (x, z) => z > 9.6 && Math.abs(x) < 2.6,
     dispose: () => {
       for (const item of disposables) item.dispose();

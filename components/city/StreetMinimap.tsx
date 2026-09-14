@@ -3,6 +3,7 @@
 import type { CityState } from "@/lib/city/types";
 import { BUS_STOPS, isTramTile } from "@/lib/city/transit";
 import { POI_LEGEND, drawPoiMark, poiKind } from "@/lib/city/minimapPois";
+import { readPlayer } from "@/lib/city/player";
 import { isPromenadeTile, waterfrontPois } from "@/lib/city/waterfront";
 import { useEffect, useRef } from "react";
 
@@ -126,8 +127,23 @@ export function StreetMinimap({
           ctx.clearRect(0, 0, size, height);
           ctx.drawImage(base, 0, offsetY, size, size);
 
+          const cell = size / state.size;
+          const employerId = readPlayer().career?.employerId;
+          const workplace = employerId ? state.buildings.get(employerId) : null;
+          if (workplace) {
+            const wx = (workplace.origin.x + workplace.width / 2) * cell;
+            const wy = (workplace.origin.y + workplace.depth / 2) * cell + offsetY;
+            if (!poiKind(workplace)) {
+              drawPoiMark(ctx, wx, wy, "office", Math.max(4.2, cell * 1.15));
+            }
+            ctx.beginPath();
+            ctx.arc(wx, wy, Math.max(6.2, cell * 1.55), 0, Math.PI * 2);
+            ctx.strokeStyle = "#f4d03f";
+            ctx.lineWidth = 1.6;
+            ctx.stroke();
+          }
+
           if (position) {
-            const cell = size / state.size;
             const px = position.x * cell;
             const py = position.y * cell + offsetY;
             const heading = position.yaw + Math.PI / 2;

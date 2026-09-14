@@ -48,6 +48,7 @@ export function venueRole(building: Building): VenueRole | null {
   if (building.kind === "city_hall") return "city_hall";
   if (building.kind === "police") return "police";
   if (building.kind === "fire") return "fire";
+  if (building.kind === "office") return "office";
   return null;
 }
 

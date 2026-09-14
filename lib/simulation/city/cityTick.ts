@@ -7,6 +7,7 @@ import { stepCitizens, syncCitizenSchedules, wanderOutdoors } from "../citizens/
 import { tickCityEvents } from "../events/cityEvents";
 import { seedVehicle, stepVehicles } from "../traffic/vehicleMovement";
 import { SIM_MINUTES_PER_SECOND } from "../weather/weather";
+import { abandonOpenShift, syncPlayerShift } from "@/lib/city/player";
 
 export function formatClock(state: CityState) {
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -55,8 +56,15 @@ export function sleepUntilMorning(state: CityState) {
     remaining -= step;
   }
   state.clock.minuteOfDay = WAKE_MINUTE;
+  abandonOpenShift();
   tickCity(state, 0);
   return true;
+}
+
+/** Advance the live city clock by a number of simulated minutes. */
+export function skipCityMinutes(state: CityState, minutes: number) {
+  if (minutes <= 0) return;
+  tickCity(state, minutes / SIM_MINUTES_PER_SECOND);
 }
 
 export function tickCity(state: CityState, dtSeconds: number, seeded = true) {
@@ -101,4 +109,5 @@ export function tickCity(state: CityState, dtSeconds: number, seeded = true) {
   stepVehicles(state, dtSeconds, rand);
   stepCitizens(state, dtSeconds);
   tickBuildingStats(state);
+  syncPlayerShift(state);
 }

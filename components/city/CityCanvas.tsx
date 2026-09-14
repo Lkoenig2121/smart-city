@@ -8,6 +8,7 @@ import { pickBuildingAt } from "@/lib/renderer/pickBuilding";
 import { subwayGateTile, subwayStationId } from "@/lib/city/subway";
 import { citizenIsOutdoors } from "@/lib/simulation/citizens/citizenBehavior";
 import type { Building, CityEvent, CityState, CityWeather, Tool } from "@/lib/city/types";
+import { officeRank, readPlayer, totalBalance } from "@/lib/city/player";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CityHud } from "./CityHud";
 import { StreetView } from "./StreetView";
@@ -41,6 +42,8 @@ interface HudSnap {
   selected: Building | null;
   hoverLabel: string;
   streetLife: number;
+  wallet: number;
+  careerLabel: string;
 }
 
 export function CityCanvas() {
@@ -169,6 +172,7 @@ export function CityCanvas() {
       if (hudAcc > 0.12) {
         hudAcc = 0;
         const clock = formatClock(engine.state);
+        const life = readPlayer();
         const hover = engine.hoverBuildingId
           ? (engine.state.buildings.get(engine.hoverBuildingId) ?? null)
           : engine.hover
@@ -196,6 +200,8 @@ export function CityCanvas() {
                 ? `Tile ${engine.hover.x}, ${engine.hover.y}`
                 : "",
           streetLife: engine.state.citizens.filter(citizenIsOutdoors).length,
+          wallet: totalBalance(life),
+          careerLabel: life.career ? officeRank(life.career.xp).label : "",
         });
       }
       frame = requestAnimationFrame(loop);

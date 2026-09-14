@@ -2,6 +2,7 @@ import { formatDaily, formatMoney, kindEmoji, kindLabel } from "@/lib/simulation
 import { isResidential } from "@/lib/simulation/buildings/buildingLogic";
 import { weatherEmoji } from "@/lib/simulation/weather/weather";
 import type { Building, CityEvent, CityWeather, Tool } from "@/lib/city/types";
+import { formatDollars } from "@/lib/city/player";
 
 const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: "inspect", label: "Inspect", hint: "Select a building" },
@@ -33,6 +34,8 @@ interface HudProps {
   selected: Building | null;
   hoverLabel: string;
   streetLife: number;
+  wallet: number;
+  careerLabel: string;
   onTool: (tool: Tool) => void;
   onClose: () => void;
   onEnterStreet: () => void;
@@ -53,6 +56,8 @@ export function CityHud({
   selected,
   hoverLabel,
   streetLife,
+  wallet,
+  careerLabel,
   onTool,
   onClose,
   onEnterStreet,
@@ -82,6 +87,8 @@ export function CityHud({
             <Stat label="Out now" value={streetLife.toLocaleString()} />
             <span className="h-8 w-px bg-white/10" />
             <Stat label="Treasury" value={formatMoney(treasury)} />
+            <span className="h-8 w-px bg-white/10" />
+            <Stat label={careerLabel ? `You · ${careerLabel}` : "You"} value={formatDollars(wallet)} />
             <span className="h-8 w-px bg-white/10" />
             <Stat label={`${day} · ${date}`} value={`${time} · ${phase}`} />
             <span className="h-8 w-px bg-white/10" />

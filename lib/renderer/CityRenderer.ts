@@ -10,7 +10,7 @@ import { drawRoadTile } from "./drawRoads";
 import { drawTerrainTile } from "./drawTerrain";
 import { drawWaterfrontDecor } from "./drawWaterfront";
 import { drawVehicle } from "./drawVehicles";
-import { drawEventMarkers } from "./drawEvents";
+import { drawEventMarkers, drawJobMarkers } from "./drawEvents";
 import { drawWeatherOverlay } from "./drawWeather";
 import { CityCamera, tileVisible, visibleTileRange } from "./camera";
 import { alpha, lightingFor, lit, type Lighting } from "./palette";
@@ -147,6 +147,7 @@ export class CityRenderer {
     }
 
     drawEventMarkers(ctx, state, this.time);
+    drawJobMarkers(ctx, state, this.time);
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     if (light.phase === "night") {

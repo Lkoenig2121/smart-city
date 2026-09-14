@@ -1,5 +1,8 @@
 import { gridToScreen, TILE_H } from "@/lib/city/iso";
-import type { CityState } from "@/lib/city/types";
+import { drawPoiMark, isJobBuilding } from "@/lib/city/minimapPois";
+import { readPlayer } from "@/lib/city/player";
+import type { Building, CityState } from "@/lib/city/types";
+import { buildingDrawHeight } from "./pickBuilding";
 import { alpha } from "./palette";
 
 export function drawEventMarkers(
@@ -11,6 +14,36 @@ export function drawEventMarkers(
     if (event.kind === "fire") drawFire(ctx, event.x, event.y, time);
     if (event.kind === "accident") drawCrash(ctx, event.x, event.y, time);
   }
+}
+
+export function drawJobMarkers(
+  ctx: CanvasRenderingContext2D,
+  state: CityState,
+  time: number,
+) {
+  const employerId = readPlayer().career?.employerId ?? null;
+  for (const building of state.buildings.values()) {
+    if (!isJobBuilding(building) && building.id !== employerId) continue;
+    drawJobPin(ctx, building, time, building.id === employerId);
+  }
+}
+
+function drawJobPin(ctx: CanvasRenderingContext2D, building: Building, time: number, yours: boolean) {
+  const gx = building.origin.x + building.width / 2;
+  const gy = building.origin.y + building.depth / 2;
+  const p = gridToScreen(gx, gy);
+  const y = p.y - buildingDrawHeight(building) + TILE_H * 0.15;
+  const pulse = yours ? 1.15 + Math.sin(time * 3.2) * 0.12 : 1;
+  if (yours) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(p.x, y, 11 * pulse, 0, Math.PI * 2);
+    ctx.strokeStyle = alpha("#f4d03f", 0.85);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+  drawPoiMark(ctx, p.x, y, "office", 7.4 * pulse);
 }
 
 function drawFire(ctx: CanvasRenderingContext2D, gx: number, gy: number, time: number) {

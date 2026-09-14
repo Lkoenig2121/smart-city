@@ -1,6 +1,7 @@
 import type { Building } from "@/lib/city/types";
 import { lodgingUse } from "./lodging";
 import { isSubwayStation } from "./subway";
+import { venueRole } from "./venues";
 
 export type PoiKind =
   | "subway"
@@ -13,6 +14,7 @@ export type PoiKind =
   | "city_hall"
   | "stadium"
   | "bank"
+  | "office"
   | "bus"
   | "marina"
   | "beach"
@@ -28,6 +30,7 @@ export const POI_LEGEND: { kind: PoiKind; label: string }[] = [
   { kind: "city_hall", label: "Hall" },
   { kind: "stadium", label: "Stadium" },
   { kind: "bank", label: "Bank" },
+  { kind: "office", label: "Jobs" },
   { kind: "bus", label: "Bus" },
   { kind: "marina", label: "Marina" },
   { kind: "beach", label: "Beach" },
@@ -45,8 +48,16 @@ export function poiKind(building: Building): PoiKind | null {
   if (building.kind === "school") return "school";
   if (building.kind === "city_hall") return "city_hall";
   if (building.kind === "baseball_stadium") return "stadium";
+  if (isJobBuilding(building)) return "office";
   if (building.stats.extra?.venue === "bank") return "bank";
   return null;
+}
+
+/** Offices you can actually work at, without covering downtown in pins. */
+export function isJobBuilding(building: Building) {
+  if (venueRole(building) !== "office") return false;
+  if (building.kind === "skyscraper" || building.kind === "tower") return true;
+  return building.stats.extra?.venue === "office";
 }
 
 const FILL: Record<PoiKind, string> = {
@@ -60,6 +71,7 @@ const FILL: Record<PoiKind, string> = {
   city_hall: "#b8953a",
   stadium: "#1f4d8c",
   bank: "#2f5d4a",
+  office: "#3d9ad1",
   bus: "#5d7384",
   marina: "#1d6a8a",
   beach: "#d6c38a",
@@ -162,6 +174,16 @@ function drawGlyph(
       ctx.fillRect(cx - r * 0.06, cy - r * 0.18, r * 0.12, r * 0.4);
       ctx.fillRect(cx + r * 0.2, cy - r * 0.18, r * 0.12, r * 0.4);
       ctx.fillRect(cx - r * 0.4, cy - r * 0.3, r * 0.8, r * 0.14);
+      break;
+    case "office":
+      ctx.strokeStyle = "#f7f4ea";
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.16, cy - r * 0.08);
+      ctx.lineTo(cx - r * 0.16, cy - r * 0.28);
+      ctx.lineTo(cx + r * 0.16, cy - r * 0.28);
+      ctx.lineTo(cx + r * 0.16, cy - r * 0.08);
+      ctx.stroke();
+      ctx.fillRect(cx - r * 0.42, cy - r * 0.1, r * 0.84, r * 0.5);
       break;
     case "bus":
       ctx.fillRect(cx - r * 0.42, cy - r * 0.22, r * 0.84, r * 0.42);

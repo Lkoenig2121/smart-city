@@ -19,24 +19,36 @@ import {
   subwayGateFromId,
   subwayStationId,
 } from "@/lib/city/subway";
+import {
+  findVenue,
+  venueGateTile,
+  venueLabel,
+  venueRole,
+} from "@/lib/city/venues";
+import { readPlayer, type PlayerState } from "@/lib/city/player";
 import type { MoveMode } from "@/lib/street/controls";
 import { StreetWorld } from "@/lib/street/StreetWorld";
 import { StadiumWorld } from "@/lib/street/StadiumWorld";
 import { LodgingWorld } from "@/lib/street/LodgingWorld";
 import { SubwayWorld } from "@/lib/street/SubwayWorld";
+import { VenueWorld } from "@/lib/street/VenueWorld";
 import { attachPointerInput } from "@/lib/street/keys";
 import { canSleepNow, formatClock, sleepUntilMorning } from "@/lib/simulation/city/cityTick";
 import { weatherEmoji } from "@/lib/simulation/weather/weather";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { LodgingDesk } from "./LodgingDesk";
+import { OfficeComputer } from "./OfficeComputer";
+import { PlayerStatus } from "./PlayerStatus";
 import { RoomComputer } from "./RoomComputer";
 import { StreetMinimap } from "./StreetMinimap";
 import { SubwayBoard } from "./SubwayBoard";
+import { VenueDesk } from "./VenueDesk";
 
 type Interior =
   | { kind: "stadium" }
   | { kind: "lodging"; buildingId: string; zone: LodgingZone; roomId?: string }
-  | { kind: "subway"; stationId: string; arrived?: boolean };
+  | { kind: "subway"; stationId: string; arrived?: boolean }
+  | { kind: "venue"; buildingId: string };
 
 interface Props {
   state: CityState;
@@ -63,12 +75,15 @@ export function StreetView({
   const stadiumRef = useRef<StadiumWorld | null>(null);
   const lodgingRef = useRef<LodgingWorld | null>(null);
   const subwayRef = useRef<SubwayWorld | null>(null);
+  const venueRef = useRef<VenueWorld | null>(null);
   const positionRef = useRef<{ x: number; y: number; yaw: number } | null>(null);
   const atGateRef = useRef(false);
   const lodgingDoorRef = useRef<Building | null>(null);
   const subwayDoorRef = useRef<Building | null>(null);
+  const venueDoorRef = useRef<Building | null>(null);
   const atDeskRef = useRef(false);
   const atComputerRef = useRef(false);
+  const atOfficeComputerRef = useRef(false);
   const sleepingRef = useRef(false);
   const tickRef = useRef(onTick);
   tickRef.current = onTick;
@@ -94,12 +109,17 @@ export function StreetView({
   const [sleeping, setSleeping] = useState(false);
   const [sleepPhase, setSleepPhase] = useState<"night" | "morning">("night");
   const [spawn, setSpawn] = useState(entry);
+  const [venueDoor, setVenueDoor] = useState<Building | null>(null);
+  const [atOfficeComputer, setAtOfficeComputer] = useState(false);
+  const [player, setPlayer] = useState<PlayerState>(() => readPlayer());
 
   const inside = interior !== null;
   const lodgingBuilding =
     interior?.kind === "lodging" ? findLodging(state, interior.buildingId) : null;
   const subwayBuilding =
     interior?.kind === "subway" ? findSubwayStation(state, interior.stationId) : null;
+  const venueBuilding =
+    interior?.kind === "venue" ? findVenue(state, interior.buildingId) : null;
 
   useEffect(() => {
     const canvas = outdoorCanvasRef.current;
@@ -167,6 +187,11 @@ export function StreetView({
           if (id) setInterior({ kind: "subway", stationId: id });
           return true;
         }
+        const venue = venueDoorRef.current;
+        if (venue) {
+          setInterior({ kind: "venue", buildingId: venue.id });
+          return true;
+        }
         return false;
       },
     });
@@ -189,10 +214,14 @@ export function StreetView({
       const subway = world.nearSubwayEntrance();
       subwayDoorRef.current = subway;
       setSubwayDoor((prev) => (prev?.id === subway?.id ? prev : subway));
+      const venue = world.nearVenueEntrance();
+      venueDoorRef.current = venue;
+      setVenueDoor((prev) => (prev?.id === venue?.id ? prev : venue));
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
         setClock(formatClock(state));
+        setPlayer(readPlayer());
       }
       frame = requestAnimationFrame(loop);
     };
@@ -330,6 +359,7 @@ export function StreetView({
         window.setTimeout(() => {
           sleepUntilMorning(state);
           setClock(formatClock(state));
+          setPlayer(readPlayer());
           setSleepPhase("morning");
           timers.push(
             window.setTimeout(() => {
@@ -385,6 +415,7 @@ export function StreetView({
       if (clockAcc > 0.25) {
         clockAcc = 0;
         setClock(formatClock(state));
+        setPlayer(readPlayer());
       }
       frame = requestAnimationFrame(loop);
     };
@@ -402,6 +433,90 @@ export function StreetView({
       if (borrowed) worldRef.current?.returnCity(borrowed);
       world.dispose();
       lodgingRef.current = null;
+    };
+  }, [active, interior, state]);
+
+  useEffect(() => {
+    if (!active || interior?.kind !== "venue") return;
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    const building = findVenue(state, interior.buildingId);
+    if (!canvas || !wrap || !building) {
+      setInterior(null);
+      return;
+    }
+
+    let world: VenueWorld;
+    try {
+      world = new VenueWorld(canvas, state, building);
+    } catch (error) {
+      setFailed(error instanceof Error ? error.message : "WebGL is unavailable in this browser.");
+      setInterior(null);
+      return;
+    }
+    venueRef.current = world;
+    setAtDesk(false);
+    setAtOfficeComputer(false);
+    atOfficeComputerRef.current = false;
+
+    const resize = () => {
+      const rect = wrap.getBoundingClientRect();
+      world.resize(rect.width, rect.height);
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(wrap);
+
+    const leaveStreet = () => {
+      setSpawn(venueGateTile(building));
+      setInterior(null);
+      setAtDesk(false);
+      setAtOfficeComputer(false);
+    };
+    const detachInput = attachPointerInput(canvas, world.controls, {
+      setLocked,
+      consumeKey: (event) => {
+        if (event.code !== "KeyE") return false;
+        event.preventDefault();
+        if (atOfficeComputerRef.current) {
+          atOfficeComputerRef.current = false;
+          setAtOfficeComputer(false);
+          return true;
+        }
+        if (world.nearExit()) leaveStreet();
+        return true;
+      },
+    });
+
+    let frame = 0;
+    let last = performance.now();
+    let clockAcc = 0;
+    const loop = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      tickRef.current(dt);
+      world.render(dt);
+      const desk = world.nearDesk();
+      atDeskRef.current = desk;
+      setAtDesk((prev) => (prev === desk ? prev : desk));
+      if (desk && document.pointerLockElement === canvas) document.exitPointerLock();
+      clockAcc += dt;
+      if (clockAcc > 0.25) {
+        clockAcc = 0;
+        setClock(formatClock(state));
+        setPlayer(readPlayer());
+      }
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      detachInput();
+      if (document.pointerLockElement === canvas) document.exitPointerLock();
+      world.dispose();
+      venueRef.current = null;
     };
   }, [active, interior, state]);
 
@@ -497,14 +612,14 @@ export function StreetView({
   }, [active, interior, state]);
 
   const requestLock = () => {
-    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping) return;
+    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer) return;
     const canvas = inside ? canvasRef.current : outdoorCanvasRef.current;
     if (!canvas) return;
     void canvas.requestPointerLock();
   };
 
   const onCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping) return;
+    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer) return;
     const canvas = canvasRef.current;
     const world = lodgingRef.current;
     if (canvas && world && interior?.kind === "lodging" && interior.zone === "room") {
@@ -563,8 +678,10 @@ export function StreetView({
       ? currentRoom
         ? `${lodgingBuilding.name} · ${lodgingUse(lodgingBuilding) === "hotel" ? "Room" : "Apt"} ${currentRoom.label}`
         : lodgingBuilding.name
-    : subwayBuilding?.name
-      ?? (interior?.kind === "subway" ? stationDef(interior.stationId).name : "Street level");
+      : venueBuilding
+        ? venueBuilding.name
+        : subwayBuilding?.name
+          ?? (interior?.kind === "subway" ? stationDef(interior.stationId).name : "Street level");
 
   return (
     <div ref={wrapRef} className="absolute inset-0 z-30 bg-[#0b1420]">
@@ -595,6 +712,7 @@ export function StreetView({
       ) : null}
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4 p-4">
+        <div className="flex flex-col gap-2">
         <div className="pointer-events-auto rounded-xl border border-white/10 bg-black/45 px-3.5 py-2 backdrop-blur">
           <p className="text-[0.6rem] uppercase tracking-[0.2em] text-amber-300/80">
             {inside ? placeName : "Street level"}
@@ -606,6 +724,10 @@ export function StreetView({
             {weatherEmoji(state.weather.kind)} {state.weather.tempF}° {state.weather.label}
             {state.events[0] ? ` · ${state.events[0].icon} ${state.events[0].headline}` : ""}
           </p>
+        </div>
+        <div className="pointer-events-auto">
+          <PlayerStatus player={player} />
+        </div>
         </div>
 
         <div className="pointer-events-auto flex items-center gap-2">
@@ -633,6 +755,8 @@ export function StreetView({
                   if (stadium) setSpawn(stadiumGateTile(stadium));
                 } else if (lodgingBuilding) {
                   setSpawn(lodgingGateTile(lodgingBuilding));
+                } else if (venueBuilding) {
+                  setSpawn(venueGateTile(venueBuilding));
                 } else if (interior?.kind === "subway") {
                   const dest = subwayRef.current?.rideDestination() ?? interior.stationId;
                   setSpawn(subwayGateFromId(state, dest));
@@ -640,6 +764,9 @@ export function StreetView({
                 setRiding(false);
                 setPickingStop(false);
                 setPickingRoom(false);
+                setAtOfficeComputer(false);
+                atOfficeComputerRef.current = false;
+                setAtDesk(false);
                 setInterior(null);
               }}
               className="rounded-xl bg-amber-400 px-3.5 py-2 text-xs font-semibold text-[#1a1206] backdrop-blur"
@@ -675,7 +802,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom && !sleeping ? (
+      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom && !sleeping && !atOfficeComputer ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
           <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
             <p className="text-xs font-semibold text-white">Click to look around</p>
@@ -748,6 +875,24 @@ export function StreetView({
             <p className="mt-1 text-xl font-semibold text-white">{lodgingDoor.name}</p>
             <p className="mt-1 text-sm text-slate-300">
               Press <span className="font-semibold text-white">E</span> to enter the lobby
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {venueDoor && !lodgingDoor && !subwayDoor && !atGate && !inside && !failed ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
+              {(() => {
+                const role = venueRole(venueDoor);
+                return role ? venueLabel(role) : "Building";
+              })()}
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">{venueDoor.name}</p>
+            <p className="mt-1 text-sm text-slate-300">
+              Press <span className="font-semibold text-white">E</span> to enter
+              {venueRole(venueDoor) === "office" ? " · start work at the desk" : ""}
             </p>
           </div>
         </div>
@@ -827,6 +972,31 @@ export function StreetView({
         />
       ) : null}
 
+      {atDesk && venueBuilding && interior?.kind === "venue" && !atOfficeComputer ? (
+        <VenueDesk
+          building={venueBuilding}
+          state={state}
+          onPlayerChange={setPlayer}
+          onOpenWorkstation={() => {
+            atOfficeComputerRef.current = true;
+            setAtOfficeComputer(true);
+            setAtDesk(false);
+          }}
+        />
+      ) : null}
+
+      {atOfficeComputer && venueBuilding && interior?.kind === "venue" ? (
+        <OfficeComputer
+          state={state}
+          onClose={() => {
+            atOfficeComputerRef.current = false;
+            setAtOfficeComputer(false);
+            setPlayer(readPlayer());
+          }}
+          onPlayerChange={setPlayer}
+        />
+      ) : null}
+
       {(atDesk || pickingRoom) && lodgingBuilding && interior?.kind === "lodging" ? (
         <LodgingDesk
           building={lodgingBuilding}
@@ -872,6 +1042,16 @@ export function StreetView({
             ) : (
               <p className="text-xs text-slate-200">You can turn in after 10:00 PM</p>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {interior?.kind === "venue" && !atDesk && !atOfficeComputer ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
+            <p className="text-xs text-slate-200">
+              Walk to the desk · press <span className="font-semibold text-white">E</span> at the doors to leave
+            </p>
           </div>
         </div>
       ) : null}
