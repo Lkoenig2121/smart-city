@@ -196,6 +196,29 @@ export function generateCity(seed = 20260903): CityState {
     return building;
   };
 
+  const placeNear = (kind: BuildingKind, x: number, y: number) => {
+    const tries = [
+      [0, 0],
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+      [-2, 0],
+      [2, 0],
+      [0, -2],
+      [0, 2],
+    ];
+    for (const [dx, dy] of tries) {
+      const building = place(kind, x + dx, y + dy);
+      if (building) return building;
+    }
+    return null;
+  };
+
   place("hospital", 29, 6);
   place("school", 28, 17);
   place("city_hall", 21, 17);
@@ -271,7 +294,7 @@ export function generateCity(seed = 20260903): CityState {
   fillRect(tiles, 32, 35, 34, 39, "lot");
 
   for (const def of SUBWAY_STATIONS) {
-    const station = place("subway_station", def.x, def.y);
+    const station = placeNear("subway_station", def.x, def.y);
     if (station) markSubwayStation(station, def);
   }
 

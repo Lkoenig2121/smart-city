@@ -61,7 +61,7 @@ export function isJobBuilding(building: Building) {
 }
 
 const FILL: Record<PoiKind, string> = {
-  subway: "#e8c36a",
+  subway: "#7b3fd4",
   hotel: "#c9a44c",
   residences: "#8a5a3a",
   hospital: "#c0392b",
@@ -90,9 +90,13 @@ export function drawPoiMark(
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   ctx.fillStyle = FILL[kind];
   ctx.fill();
-  ctx.strokeStyle = "rgba(0,0,0,0.45)";
-  ctx.lineWidth = 0.8;
+  ctx.strokeStyle = kind === "subway" ? "rgba(250, 245, 255, 0.85)" : "rgba(0,0,0,0.45)";
+  ctx.lineWidth = kind === "subway" ? 1.15 : 0.8;
   ctx.stroke();
+  if (kind === "subway") {
+    ctx.restore();
+    return;
+  }
   ctx.fillStyle = "#f7f4ea";
   ctx.strokeStyle = "#f7f4ea";
   ctx.lineWidth = 1.15;
@@ -110,12 +114,6 @@ function drawGlyph(
   r: number,
 ) {
   switch (kind) {
-    case "subway":
-      ctx.font = `bold ${r * 1.35}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("M", cx, cy + 0.2);
-      break;
     case "hotel":
       ctx.fillRect(cx - r * 0.45, cy - r * 0.15, r * 0.9, r * 0.38);
       ctx.fillRect(cx - r * 0.45, cy - r * 0.42, r * 0.22, r * 0.28);

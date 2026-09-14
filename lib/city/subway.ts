@@ -15,7 +15,7 @@ export const SUBWAY_STATIONS: SubwayStationDef[] = [
   { id: "central", name: "Riverside Central", x: 19, y: 15, color: "#e8c36a", hint: "Downtown plaza" },
   { id: "north", name: "Helio North", x: 19, y: 7, color: "#6f8ea3", hint: "Towers & hotels" },
   { id: "civic", name: "Civic East", x: 30, y: 15, color: "#c0392b", hint: "Hospital · police · fire" },
-  { id: "ravens", name: "Ravens Station", x: 34, y: 34, color: "#1f4d8c", hint: "Ballpark" },
+  { id: "ravens", name: "Ravens Station", x: 32, y: 33, color: "#1f4d8c", hint: "Ballpark" },
 ];
 
 export const SUBWAY_LINE = "Riverside Line";
@@ -48,7 +48,6 @@ export function findSubwayStation(state: CityState, id: string) {
     stations.find((building) => subwayStationId(building) === id) ??
     stations.find((building) => building.name === def.name) ??
     stations.find((building) => building.origin.x === def.x && building.origin.y === def.y) ??
-    stations[0] ??
     null
   );
 }
