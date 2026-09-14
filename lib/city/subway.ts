@@ -20,6 +20,14 @@ export const SUBWAY_STATIONS: SubwayStationDef[] = [
 
 export const SUBWAY_LINE = "Riverside Line";
 
+/** Geographic connections drawn on the in-car map. */
+export const SUBWAY_EDGES: [string, string][] = [
+  ["harbor", "central"],
+  ["central", "north"],
+  ["central", "civic"],
+  ["civic", "ravens"],
+];
+
 export function isSubwayStation(building: Building) {
   return building.kind === "subway_station";
 }
