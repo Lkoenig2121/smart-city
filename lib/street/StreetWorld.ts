@@ -380,6 +380,11 @@ export class StreetWorld {
     this.renderer.render(this.scene, this.camera);
   }
 
+  /** Keep bursts moving while the city mesh is borrowed by a hotel room. */
+  tickFireworks(dt: number) {
+    this.updateFireworks(dt);
+  }
+
   private updateFireworks(dt: number) {
     const stadium = findStadium(this.state);
     if (!stadium) {

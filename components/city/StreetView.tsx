@@ -536,6 +536,7 @@ export function StreetView({
       last = now;
       if (!sleepingRef.current) tickRef.current(dt);
       world.render(dt);
+      worldRef.current?.tickFireworks(dt);
       const desk = interior.zone === "lobby" && world.nearDesk();
       atDeskRef.current = desk;
       setAtDesk((prev) => (prev === desk ? prev : desk));

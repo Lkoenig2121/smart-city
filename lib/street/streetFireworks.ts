@@ -4,6 +4,7 @@ import {
   createFireworkSparks,
   sparkFade,
   stepFireworks,
+  type FireworkBurstOpts,
   type FireworkSpark,
 } from "@/lib/city/fireworks";
 
@@ -46,7 +47,7 @@ export class StreetFireworks {
     this.hideAll();
   }
 
-  update(dt: number, on: boolean, origin: THREE.Vector3) {
+  update(dt: number, on: boolean, origin: THREE.Vector3, opts?: FireworkBurstOpts) {
     this.time += dt;
     this.group.position.copy(origin);
     this.mesh.visible = on;
@@ -61,6 +62,7 @@ export class StreetFireworks {
       bursts: 2,
       sparksPerBurst: 16,
       rate: 2.4,
+      ...opts,
     });
 
     const dummy = this.dummy;

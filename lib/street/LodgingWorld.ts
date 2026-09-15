@@ -2,10 +2,12 @@ import * as THREE from "three";
 import type { Building, CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
 import { findLodgingRoom, lodgingUse, type LodgingZone } from "@/lib/city/lodging";
+import { stadiumFireworksOn } from "@/lib/city/fireworks";
 import { TILE } from "./buildCity";
 import { InteriorControls } from "./interiorControls";
 import { buildLodgingInterior, type LodgingInterior } from "./lodgingInterior";
 import { lodgingWindowDir } from "./StreetWorld";
+import { StreetFireworks } from "./streetFireworks";
 import { FLOOR_H } from "./textures";
 
 /**
@@ -29,6 +31,8 @@ export class LodgingWorld {
   private deskTexture: THREE.CanvasTexture | null = null;
   private cityHolder: THREE.Group | null = null;
   private borrowedCity: THREE.Group | null = null;
+  private fireworks: StreetFireworks | null = null;
+  private fireworkOrigin = new THREE.Vector3();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -80,6 +84,11 @@ export class LodgingWorld {
       this.scene.add(windowLight, windowLight.target);
     }
     this.scene.add(this.hemi, this.sun, this.fill);
+
+    if (zone === "room" || zone === "pool") {
+      this.fireworks = new StreetFireworks(160);
+      this.scene.add(this.fireworks.group);
+    }
 
     if (zone === "pool") {
       this.scene.background = new THREE.Color(night ? "#10182c" : "#7eb3e0");
@@ -210,7 +219,24 @@ export class LodgingWorld {
     if (this.deskCtx && this.deskTexture) this.drawDesk();
     this.interior.tv?.update(dt, this.state);
     this.interior.slider?.update(dt);
+    this.updateFireworks(dt);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private updateFireworks(dt: number) {
+    if (!this.fireworks) return;
+    if (this.zone === "pool") this.fireworkOrigin.set(0, 6, 32);
+    else this.fireworkOrigin.set(0, 12, -40);
+    this.fireworks.update(dt, stadiumFireworksOn(this.state), this.fireworkOrigin, {
+      spreadX: 32,
+      spreadZ: 18,
+      z0: 0,
+      height0: 8,
+      height1: 24,
+      bursts: 2,
+      sparksPerBurst: 18,
+      rate: 2.5,
+    });
   }
 
   private isNight() {
@@ -248,6 +274,7 @@ export class LodgingWorld {
 
   dispose() {
     this.detachCity();
+    this.fireworks?.dispose();
     this.interior.dispose();
     this.deskTexture?.dispose();
     this.renderer.dispose();
