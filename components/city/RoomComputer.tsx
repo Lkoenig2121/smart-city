@@ -8,7 +8,7 @@ import {
   type Portfolio,
   type StockQuote,
 } from "@/lib/city/brokerage";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
 
 interface Props {
   minuteOfDay: number;
@@ -244,10 +244,10 @@ function WebApp({ minuteOfDay }: { minuteOfDay: number }) {
           {loading ? "…" : "Search"}
         </button>
       </form>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        {error ? <p className="mb-2 text-xs text-rose-300">{error}</p> : null}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-3">
+        {error ? <p className="mb-2 shrink-0 text-xs text-rose-300">{error}</p> : null}
         {article ? (
-          <article>
+          <article className="min-h-0 flex-1 overflow-y-auto">
             <button onClick={() => setArticle(null)} className="text-xs font-semibold text-sky-300">
               ← {searched ? "Results" : "News"}
             </button>
@@ -272,54 +272,50 @@ function WebApp({ minuteOfDay }: { minuteOfDay: number }) {
               </a>
             ) : null}
           </article>
+        ) : searched ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <button
+              onClick={() => {
+                setSearched(false);
+                setHits([]);
+                setAnswer("");
+                setError(null);
+              }}
+              className="mb-3 text-xs font-semibold text-sky-300"
+            >
+              ← News
+            </button>
+            {answer ? <p className="mb-3 text-sm text-slate-200">{answer}</p> : null}
+            {hits.length === 0 && !loading ? (
+              <p className="text-sm text-slate-500">No results. Try another search.</p>
+            ) : null}
+            <ul className="space-y-2">
+              {hits.map((hit) => (
+                <li key={`${hit.title}-${hit.url}`}>
+                  <button
+                    onClick={() => void openHit(hit)}
+                    className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-left hover:bg-white/10"
+                  >
+                    <span className="block text-sm font-semibold text-sky-200">{hit.title}</span>
+                    <span className="mt-0.5 block text-xs text-slate-400">{hit.snippet}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : (
-          <>
-            {searched ? (
-              <>
-                <button
-                  onClick={() => {
-                    setSearched(false);
-                    setHits([]);
-                    setAnswer("");
-                    setError(null);
-                  }}
-                  className="mb-3 text-xs font-semibold text-sky-300"
-                >
-                  ← News
-                </button>
-                {answer ? <p className="mb-3 text-sm text-slate-200">{answer}</p> : null}
-                {hits.length === 0 && !loading ? (
-                  <p className="text-sm text-slate-500">No results. Try another search.</p>
-                ) : null}
-                <ul className="space-y-2">
-                  {hits.map((hit) => (
-                    <li key={`${hit.title}-${hit.url}`}>
-                      <button
-                        onClick={() => void openHit(hit)}
-                        className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-left hover:bg-white/10"
-                      >
-                        <span className="block text-sm font-semibold text-sky-200">{hit.title}</span>
-                        <span className="mt-0.5 block text-xs text-slate-400">{hit.snippet}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <NewsPage
-                stories={news}
-                loading={loading}
-                onOpen={(story) => {
-                  void openHit({
-                    ...story,
-                    keepTitle: !story.url,
-                    keepExtract: !story.url,
-                    topic: story.topic ?? story.title,
-                  });
-                }}
-              />
-            )}
-          </>
+          <NewsPage
+            stories={news}
+            loading={loading}
+            onOpen={(story) => {
+              void openHit({
+                ...story,
+                keepTitle: !story.url,
+                keepExtract: !story.url,
+                topic: story.topic ?? story.title,
+              });
+            }}
+          />
         )}
       </div>
     </div>
@@ -335,30 +331,89 @@ function NewsPage({
   loading: boolean;
   onOpen: (story: NewsStory) => void;
 }) {
+  const scrollerRef = useRef<HTMLUListElement>(null);
+  const [thumb, setThumb] = useState({ top: 0, height: 32 });
+
+  const syncThumb = () => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const visible = Math.max(clientHeight, 1);
+    const total = Math.max(scrollHeight, 1);
+    const height = Math.max(32, (visible / total) * visible);
+    const maxTop = Math.max(0, visible - height);
+    const top = total <= visible ? 0 : (scrollTop / (total - visible)) * maxTop;
+    setThumb({ top, height });
+  };
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    syncThumb();
+    el.addEventListener("scroll", syncThumb, { passive: true });
+    const ro = new ResizeObserver(syncThumb);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", syncThumb);
+      ro.disconnect();
+    };
+  }, [stories.length]);
+
+  const dragThumb = (event: PointerEvent<HTMLDivElement>) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    event.preventDefault();
+    const track = event.currentTarget.parentElement;
+    if (!track) return;
+    const startY = event.clientY;
+    const startTop = thumb.top;
+    const move = (next: PointerEvent) => {
+      const maxTop = Math.max(0, track.clientHeight - thumb.height);
+      const nextTop = Math.min(maxTop, Math.max(0, startTop + (next.clientY - startY)));
+      const range = el.scrollHeight - el.clientHeight;
+      el.scrollTop = maxTop <= 0 ? 0 : (nextTop / maxTop) * range;
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   return (
-    <div>
-      <p className="text-[0.65rem] uppercase tracking-[0.18em] text-sky-200/70">Today’s news</p>
-      <p className="mt-1 text-sm text-slate-300">Riverside Gazette and the wider web.</p>
-      {loading && stories.length === 0 ? <p className="mt-3 text-sm text-slate-500">Loading headlines…</p> : null}
-      <ul className="mt-3 space-y-2">
-        {stories.map((story) => (
-          <li key={`${story.source}-${story.title}`}>
-            <button
-              onClick={() => onOpen(story)}
-              className="flex w-full gap-3 rounded-xl bg-white/5 px-3 py-2.5 text-left hover:bg-white/10"
-            >
-              {story.image ? (
-                <img src={story.image} alt="" referrerPolicy="no-referrer" className="h-16 w-20 shrink-0 rounded-lg object-cover" />
-              ) : null}
-              <span className="min-w-0">
-                <span className="block text-[0.6rem] uppercase tracking-[0.16em] text-amber-300/80">{story.source}</span>
-                <span className="mt-0.5 block text-sm font-semibold text-sky-200">{story.title}</span>
-                <span className="mt-0.5 block text-xs text-slate-400">{story.snippet}</span>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+    <div className="flex h-0 min-h-0 flex-1 flex-col">
+      <p className="shrink-0 text-[0.65rem] uppercase tracking-[0.18em] text-sky-200/70">Today’s news</p>
+      <p className="mt-1 shrink-0 text-sm text-slate-300">Riverside Gazette and the wider web.</p>
+      {loading && stories.length === 0 ? <p className="mt-3 shrink-0 text-sm text-slate-500">Loading headlines…</p> : null}
+      <div className="mt-3 flex h-0 min-h-0 flex-1 gap-2">
+        <ul ref={scrollerRef} className="room-news-scroll min-h-0 flex-1 space-y-2 pr-1">
+          {stories.map((story) => (
+            <li key={`${story.source}-${story.title}`}>
+              <button
+                onClick={() => onOpen(story)}
+                className="flex w-full gap-3 rounded-xl bg-white/5 px-3 py-2.5 text-left hover:bg-white/10"
+              >
+                {story.image ? (
+                  <img src={story.image} alt="" referrerPolicy="no-referrer" className="h-16 w-20 shrink-0 rounded-lg object-cover" />
+                ) : null}
+                <span className="min-w-0">
+                  <span className="block text-[0.6rem] uppercase tracking-[0.16em] text-amber-300/80">{story.source}</span>
+                  <span className="mt-0.5 block text-sm font-semibold text-sky-200">{story.title}</span>
+                  <span className="mt-0.5 block text-xs text-slate-400">{story.snippet}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="relative w-2.5 shrink-0 rounded-full bg-[#3a424d]">
+          <div
+            className="absolute inset-x-0 cursor-pointer rounded-full bg-[#9aa3ad]"
+            style={{ top: thumb.top, height: thumb.height }}
+            onPointerDown={dragThumb}
+          />
+        </div>
+      </div>
     </div>
   );
 }
