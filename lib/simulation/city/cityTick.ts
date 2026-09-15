@@ -6,6 +6,7 @@ import { tickBuildingStats } from "../buildings/buildingLogic";
 import { stepCitizens, syncCitizenSchedules, wanderOutdoors } from "../citizens/citizenBehavior";
 import { tickCityEvents } from "../events/cityEvents";
 import { seedVehicle, stepVehicles } from "../traffic/vehicleMovement";
+import { tickRoadNetwork } from "../traffic/roadNetwork";
 import { SIM_MINUTES_PER_SECOND } from "../weather/weather";
 import { abandonOpenShift, syncPlayerShift } from "@/lib/city/player";
 
@@ -86,6 +87,7 @@ export function tickCity(state: CityState, dtSeconds: number, seeded = true) {
     }
   }
   tickCityEvents(state, dtSeconds, rand, newDay);
+  tickRoadNetwork(state, dtSeconds, rand);
 
   for (const building of state.buildings.values()) {
     if (!building.constructionLeft || building.constructionLeft <= 0) continue;

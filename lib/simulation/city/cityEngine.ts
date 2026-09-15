@@ -18,6 +18,7 @@ import {
   nextHotelName,
 } from "@/lib/city/lodging";
 import { announceConstruction } from "@/lib/simulation/events/cityEvents";
+import { removeTrafficAt, startRoadWorks, toggleTrafficLight } from "@/lib/simulation/traffic/roadNetwork";
 import { createInitialCity, getBuildingAt, recountPopulation } from "./cityState";
 import { tickCity } from "./cityTick";
 
@@ -73,6 +74,8 @@ export class CityEngine {
       if (tile.road) {
         tile.road = null;
         tile.bridge = null;
+        tile.upgraded = false;
+        removeTrafficAt(this.state, x, y);
         this.reconnectRoads();
         this.mapRev += 1;
         return true;
@@ -123,6 +126,26 @@ export class CityEngine {
       if (tile.road || tile.buildingId || tile.terrain === "water") return false;
       tile.terrain = "park";
       if (!tile.tree) tile.tree = { variant: 2, scale: 1 };
+      this.mapRev += 1;
+      return true;
+    }
+
+    if (this.tool === "signal") {
+      const result = toggleTrafficLight(this.state, x, y);
+      if (result !== true) {
+        this.placementHint = result;
+        return false;
+      }
+      this.mapRev += 1;
+      return true;
+    }
+
+    if (this.tool === "works") {
+      const result = startRoadWorks(this.state, x, y);
+      if (result !== true) {
+        this.placementHint = result;
+        return false;
+      }
       this.mapRev += 1;
       return true;
     }

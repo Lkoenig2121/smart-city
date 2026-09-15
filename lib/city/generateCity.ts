@@ -9,6 +9,7 @@ import {
 import { mulberry32, pick, randInt, randRange } from "./rng";
 import { spawnCitizens } from "@/lib/simulation/citizens/spawnCitizens";
 import { bootstrapEvents } from "@/lib/simulation/events/cityEvents";
+import { seedTrafficNetwork } from "@/lib/simulation/traffic/roadNetwork";
 import { openingClock, weatherFor } from "@/lib/simulation/weather/weather";
 import type {
   Building,
@@ -437,7 +438,11 @@ export function generateCity(seed = 20260903): CityState {
       roads: 0.63,
     },
     population,
+    trafficLights: [],
+    roadWorks: [],
+    parked: [],
   };
+  seedTrafficNetwork(state, rand);
   bootstrapEvents(state);
   return state;
 }

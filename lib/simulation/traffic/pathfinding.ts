@@ -16,19 +16,27 @@ export function isRoad(state: CityState, x: number, y: number) {
   return Boolean(tile?.road);
 }
 
+function blockedByWorks(state: CityState, x: number, y: number) {
+  return state.roadWorks.some((work) => work.x === x && work.y === y);
+}
+
 export function neighbors(state: CityState, x: number, y: number): Vec2[] {
   const tile = state.tiles[y]?.[x];
   if (!tile?.road) return [];
   const next: Vec2[] = [];
-  if (tile.road.north && isRoad(state, x, y - 1)) next.push({ x, y: y - 1 });
-  if (tile.road.east && isRoad(state, x + 1, y)) next.push({ x: x + 1, y });
-  if (tile.road.south && isRoad(state, x, y + 1)) next.push({ x, y: y + 1 });
-  if (tile.road.west && isRoad(state, x - 1, y)) next.push({ x: x - 1, y });
+  const consider = (nx: number, ny: number) => {
+    if (!isRoad(state, nx, ny) || blockedByWorks(state, nx, ny)) return;
+    next.push({ x: nx, y: ny });
+  };
+  if (tile.road.north) consider(x, y - 1);
+  if (tile.road.east) consider(x + 1, y);
+  if (tile.road.south) consider(x, y + 1);
+  if (tile.road.west) consider(x - 1, y);
   if (next.length === 0) {
     for (const d of DIRS) {
       const nx = x + d.x;
       const ny = y + d.y;
-      if (isRoad(state, nx, ny)) next.push({ x: nx, y: ny });
+      if (isRoad(state, nx, ny) && !blockedByWorks(state, nx, ny)) next.push({ x: nx, y: ny });
     }
   }
   return next;
@@ -82,7 +90,7 @@ export function findPath(state: CityState, start: Vec2, goal: Vec2): Vec2[] {
 
     for (const n of neighbors(state, current.x, current.y)) {
       const nk = key(n.x, n.y);
-      const tentative = (g.get(current.k) ?? Infinity) + 1;
+      const tentative = (g.get(current.k) ?? Infinity) + (state.tiles[n.y][n.x].upgraded ? 0.7 : 1);
       if (tentative < (g.get(nk) ?? Infinity)) {
         came.set(nk, current.k);
         g.set(nk, tentative);

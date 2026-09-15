@@ -9,6 +9,7 @@ import { subwayGateTile, subwayStationId } from "@/lib/city/subway";
 import { citizenIsOutdoors } from "@/lib/simulation/citizens/citizenBehavior";
 import type { Building, CityEvent, CityState, CityWeather, Tool } from "@/lib/city/types";
 import { officeRank, readPlayer, totalBalance } from "@/lib/city/player";
+import { parkingFill, trafficFlowScore } from "@/lib/simulation/traffic/roadNetwork";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CityHud } from "./CityHud";
 import { StreetView } from "./StreetView";
@@ -42,6 +43,8 @@ interface HudSnap {
   selected: Building | null;
   hoverLabel: string;
   streetLife: number;
+  trafficFlow: number;
+  parkingFill: number;
   wallet: number;
   careerLabel: string;
 }
@@ -200,6 +203,8 @@ export function CityCanvas() {
                 ? `Tile ${engine.hover.x}, ${engine.hover.y}`
                 : "",
           streetLife: engine.state.citizens.filter(citizenIsOutdoors).length,
+          trafficFlow: trafficFlowScore(engine.state),
+          parkingFill: parkingFill(engine.state).pct,
           wallet: totalBalance(life),
           careerLabel: life.career ? officeRank(life.career.xp).label : "",
         });

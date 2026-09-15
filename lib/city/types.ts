@@ -38,6 +38,8 @@ export type Tool =
   | "sand"
   | "tree"
   | "stadium"
+  | "signal"
+  | "works"
   | "bulldoze";
 
 export interface Vec2 {
@@ -85,6 +87,8 @@ export interface Tile {
   buildingId: string | null;
   tree: Tree | null;
   graffiti: Graffiti | null;
+  /** Repaved after road works — traffic moves more freely. */
+  upgraded?: boolean;
 }
 
 export interface BuildingStats {
@@ -171,6 +175,30 @@ export interface Vehicle {
   ownerId: string | null;
 }
 
+export interface TrafficLight {
+  x: number;
+  y: number;
+  /** 0 = north–south green, 1 = east–west green */
+  phase: 0 | 1;
+  t: number;
+}
+
+export interface RoadWork {
+  x: number;
+  y: number;
+  remaining: number;
+}
+
+export interface ParkedCar {
+  id: string;
+  x: number;
+  y: number;
+  ox: number;
+  oy: number;
+  color: string;
+  remaining: number;
+}
+
 export type WeatherKind = "clear" | "cloudy" | "rain" | "snow";
 
 export interface CityWeather {
@@ -231,6 +259,9 @@ export interface CityState {
   events: CityEvent[];
   budget: CityBudget;
   population: number;
+  trafficLights: TrafficLight[];
+  roadWorks: RoadWork[];
+  parked: ParkedCar[];
 }
 
 export const DAYS = [

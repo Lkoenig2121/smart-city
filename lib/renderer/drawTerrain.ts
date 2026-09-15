@@ -75,6 +75,18 @@ export function drawTerrainTile(
     drawDiamond(ctx, x, y, "transparent", ctx.strokeStyle);
   }
 
+  if (terrain === "lot") {
+    const d = diamondPoints(x, y);
+    ctx.strokeStyle = alpha(lit("#d9d4c4", light, "top"), 0.45);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo((d.top.x + d.left.x) / 2, (d.top.y + d.left.y) / 2);
+    ctx.lineTo((d.bottom.x + d.right.x) / 2, (d.bottom.y + d.right.y) / 2);
+    ctx.moveTo((d.top.x + d.right.x) / 2, (d.top.y + d.right.y) / 2);
+    ctx.lineTo((d.bottom.x + d.left.x) / 2, (d.bottom.y + d.left.y) / 2);
+    ctx.stroke();
+  }
+
   if (terrain === "playground") {
     drawDiamond(ctx, x, y, lit(mix("#5aa35a", "#d4a24c", n2 * 0.25), light, "ground"));
   }

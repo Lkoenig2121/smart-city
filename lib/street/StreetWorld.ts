@@ -6,7 +6,7 @@ import { subwayStations } from "@/lib/city/subway";
 import { enterableVenues } from "@/lib/city/venues";
 import { lightingFor, type Lighting } from "@/lib/renderer/palette";
 import { AgentLayer } from "./agents";
-import { buildCity, TILE, type CityMeshes } from "./buildCity";
+import { buildCity, TILE, updateTrafficSignals, type CityMeshes } from "./buildCity";
 import { FLOOR_H } from "./textures";
 import { StreetControls, type MoveMode } from "./controls";
 import { skyTexture } from "./textures";
@@ -363,6 +363,7 @@ export class StreetWorld {
     const light = lightingFor(this.state);
     this.applyLighting(light);
     this.agents.update(dt);
+    updateTrafficSignals(this.city.signals, this.state);
 
     // Drift the river surface so it never looks like a frozen sheet.
     const water = this.city.water;

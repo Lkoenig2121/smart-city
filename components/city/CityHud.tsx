@@ -15,7 +15,9 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: "stadium", label: "Stadium", hint: "Ravens Ballpark · $750K · 5,000 people, road, parking" },
   { id: "park", label: "Parks", hint: "Grow a park tile" },
   { id: "sand", label: "Sand", hint: "Paint a beach" },
-  { id: "parking", label: "Parking", hint: "Paint a parking lot" },
+  { id: "parking", label: "Parking", hint: "Paint a parking lot · stalls fill with cars" },
+  { id: "signal", label: "Lights", hint: "Traffic lights on a junction · $8K · click again to remove" },
+  { id: "works", label: "Works", hint: "Close a block for repairs · $3.5K · reopens as a smoother road" },
   { id: "tree", label: "Trees", hint: "Plant a tree" },
   { id: "bulldoze", label: "Clear", hint: "Remove a tile" },
 ];
@@ -34,6 +36,8 @@ interface HudProps {
   selected: Building | null;
   hoverLabel: string;
   streetLife: number;
+  trafficFlow: number;
+  parkingFill: number;
   wallet: number;
   careerLabel: string;
   onTool: (tool: Tool) => void;
@@ -56,6 +60,8 @@ export function CityHud({
   selected,
   hoverLabel,
   streetLife,
+  trafficFlow,
+  parkingFill,
   wallet,
   careerLabel,
   onTool,
@@ -85,6 +91,10 @@ export function CityHud({
             <Stat label="Population" value={population.toLocaleString()} />
             <span className="h-8 w-px bg-white/10" />
             <Stat label="Out now" value={streetLife.toLocaleString()} />
+            <span className="h-8 w-px bg-white/10" />
+            <Stat label="Traffic" value={`${trafficFlow}%`} />
+            <span className="h-8 w-px bg-white/10" />
+            <Stat label="Parking" value={`${parkingFill}%`} />
             <span className="h-8 w-px bg-white/10" />
             <Stat label="Treasury" value={formatMoney(treasury)} />
             <span className="h-8 w-px bg-white/10" />

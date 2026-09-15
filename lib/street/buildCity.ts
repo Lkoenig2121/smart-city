@@ -68,11 +68,23 @@ export interface CityMeshes {
   emissiveMaterials: THREE.MeshStandardMaterial[];
   /** Street-lamp globes; brighter at night than window glass. */
   lampGlow: THREE.MeshStandardMaterial | null;
+  /** Traffic-signal lenses; colours follow `state.trafficLights` each frame. */
+  signals: StreetSignal[];
   /** Moored boats; bobbed each frame. */
   boats: THREE.Group | null;
   /** Ferris wheel; spun each frame. */
   ferrisWheel: THREE.Group | null;
   dispose: () => void;
+}
+
+/** One intersection's unlit lens materials, shared by both facing heads. */
+export interface StreetSignal {
+  x: number;
+  y: number;
+  nsGreen: THREE.MeshBasicMaterial;
+  nsRed: THREE.MeshBasicMaterial;
+  ewGreen: THREE.MeshBasicMaterial;
+  ewRed: THREE.MeshBasicMaterial;
 }
 
 function terrainColorOf(tile: Tile) {
@@ -198,6 +210,8 @@ export function buildCity(state: CityState): CityMeshes {
     addBusShelter(stop.x, stop.y, state.tiles, trimB, roofB);
   }
 
+  const signals = addTrafficSignals(state, trimB, group, blockers, disposables);
+
   const waterfront = addWaterfrontDecor(state, group, trimB, lampHeadB, lamps, blockers);
 
   // ─── Bridges ───────────────────────────────────────────────────────────────
@@ -312,6 +326,7 @@ export function buildCity(state: CityState): CityMeshes {
     lamps,
     emissiveMaterials,
     lampGlow,
+    signals,
     boats: waterfront.boats,
     ferrisWheel: waterfront.ferrisWheel,
     dispose: () => {
@@ -387,6 +402,160 @@ function addLamp(
   headB.box(hx - 0.38, hz - 0.28, hx + 0.38, hz + 0.28, top - 0.7, top - 0.28, head);
 
   lamps.push(new THREE.Vector3(hx, top - 0.55, hz));
+}
+
+const SIGNAL_GREEN = "#3dcc6a";
+const SIGNAL_RED = "#e74c3c";
+const SIGNAL_OFF = "#1a1c20";
+
+function lensMaterial(hex: string) {
+  return new THREE.MeshBasicMaterial({ color: hex });
+}
+
+/**
+ * Mast-arm signals on opposite sidewalk corners. Lenses are unlit meshes so
+ * red and green stay readable in daylight; `updateTrafficSignals` paints them
+ * from the live phase each frame.
+ */
+function addTrafficSignals(
+  state: CityState,
+  trimB: MeshBuilder,
+  group: THREE.Group,
+  blockers: Blocker[],
+  disposables: Array<{ dispose: () => void }>,
+): StreetSignal[] {
+  const signals: StreetSignal[] = [];
+  if (!state.trafficLights.length) return signals;
+
+  const pole = new THREE.Color("#3a4048");
+  const housing = new THREE.Color("#1c1e22");
+  const visor = new THREE.Color("#141618");
+  const lensGeo = new THREE.SphereGeometry(0.1, 10, 8);
+  disposables.push(lensGeo);
+
+  const addLens = (material: THREE.MeshBasicMaterial, x: number, y: number, z: number) => {
+    const mesh = new THREE.Mesh(lensGeo, material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    group.add(mesh);
+  };
+
+  for (const light of state.trafficLights) {
+    const x0 = light.x * TILE;
+    const z0 = light.y * TILE;
+    const x1 = x0 + TILE;
+    const z1 = z0 + TILE;
+    const cx = (x0 + x1) / 2;
+    const cz = (z0 + z1) / 2;
+    const inset = SIDEWALK_W * 0.42;
+
+    const nsGreen = lensMaterial(SIGNAL_OFF);
+    const nsRed = lensMaterial(SIGNAL_OFF);
+    const ewGreen = lensMaterial(SIGNAL_OFF);
+    const ewRed = lensMaterial(SIGNAL_OFF);
+    disposables.push(nsGreen, nsRed, ewGreen, ewRed);
+
+    addSignalPole(trimB, x0 + inset, z0 + inset, cx, z0 + inset, x0 + inset, cz, pole, blockers);
+    addSignalPole(trimB, x1 - inset, z1 - inset, cx, z1 - inset, x1 - inset, cz, pole, blockers);
+
+    addSignalHead(trimB, addLens, nsGreen, nsRed, cx, z0 + 1.05, "ns", 1, housing, visor);
+    addSignalHead(trimB, addLens, nsGreen, nsRed, cx, z1 - 1.05, "ns", -1, housing, visor);
+    addSignalHead(trimB, addLens, ewGreen, ewRed, x0 + 1.05, cz, "ew", 1, housing, visor);
+    addSignalHead(trimB, addLens, ewGreen, ewRed, x1 - 1.05, cz, "ew", -1, housing, visor);
+
+    signals.push({ x: light.x, y: light.y, nsGreen, nsRed, ewGreen, ewRed });
+  }
+
+  updateTrafficSignals(signals, state);
+  return signals;
+}
+
+function addSignalPole(
+  trimB: MeshBuilder,
+  px: number,
+  pz: number,
+  armX: number,
+  armZAlongX: number,
+  armXAlongZ: number,
+  armZ: number,
+  color: THREE.Color,
+  blockers: Blocker[],
+) {
+  const top = 4.55;
+  trimB.box(px - 0.09, pz - 0.09, px + 0.09, pz + 0.09, CURB_H, top, color);
+  trimB.box(
+    Math.min(px, armX) - 0.07,
+    armZAlongX - 0.07,
+    Math.max(px, armX) + 0.07,
+    armZAlongX + 0.07,
+    top - 0.22,
+    top,
+    color,
+  );
+  trimB.box(
+    armXAlongZ - 0.07,
+    Math.min(pz, armZ) - 0.07,
+    armXAlongZ + 0.07,
+    Math.max(pz, armZ) + 0.07,
+    top - 0.22,
+    top,
+    color,
+  );
+  blockers.push({ minX: px - 0.28, maxX: px + 0.28, minZ: pz - 0.28, maxZ: pz + 0.28 });
+}
+
+function addSignalHead(
+  trimB: MeshBuilder,
+  addLens: (material: THREE.MeshBasicMaterial, x: number, y: number, z: number) => void,
+  green: THREE.MeshBasicMaterial,
+  red: THREE.MeshBasicMaterial,
+  hx: number,
+  hz: number,
+  axis: "ns" | "ew",
+  face: 1 | -1,
+  housing: THREE.Color,
+  visor: THREE.Color,
+) {
+  const y0 = 3.52;
+  const y1 = 4.38;
+  const thick = 0.2;
+  const wide = 0.34;
+  if (axis === "ns") {
+    trimB.box(hx - wide / 2, hz - thick / 2, hx + wide / 2, hz + thick / 2, y0, y1, housing);
+  } else {
+    trimB.box(hx - thick / 2, hz - wide / 2, hx + thick / 2, hz + wide / 2, y0, y1, housing);
+  }
+
+  const bump = 0.14 * face;
+  const lx = axis === "ew" ? hx + bump : hx;
+  const lz = axis === "ns" ? hz + bump : hz;
+  addLens(red, lx, 4.16, lz);
+  addLens(green, lx, 3.74, lz);
+
+  const hood = 0.16;
+  if (axis === "ns") {
+    const zFace = face > 0 ? hz + thick / 2 : hz - thick / 2 - hood;
+    trimB.box(hx - 0.14, zFace, hx + 0.14, zFace + hood, 4.22, 4.36, visor);
+    trimB.box(hx - 0.14, zFace, hx + 0.14, zFace + hood, 3.8, 3.94, visor);
+  } else {
+    const xFace = face > 0 ? hx + thick / 2 : hx - thick / 2 - hood;
+    trimB.box(xFace, hz - 0.14, xFace + hood, hz + 0.14, 4.22, 4.36, visor);
+    trimB.box(xFace, hz - 0.14, xFace + hood, hz + 0.14, 3.8, 3.94, visor);
+  }
+}
+
+/** Paints Street View lenses to match the isometric red/green phase. */
+export function updateTrafficSignals(signals: StreetSignal[], state: CityState) {
+  for (const signal of signals) {
+    const light = state.trafficLights.find((item) => item.x === signal.x && item.y === signal.y);
+    const nsGo = light?.phase === 0;
+    const ewGo = light?.phase === 1;
+    signal.nsGreen.color.set(nsGo ? SIGNAL_GREEN : SIGNAL_OFF);
+    signal.nsRed.color.set(light && !nsGo ? SIGNAL_RED : SIGNAL_OFF);
+    signal.ewGreen.color.set(ewGo ? SIGNAL_GREEN : SIGNAL_OFF);
+    signal.ewRed.color.set(light && !ewGo ? SIGNAL_RED : SIGNAL_OFF);
+  }
 }
 
 function addBuilding(
