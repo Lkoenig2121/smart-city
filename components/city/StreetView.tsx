@@ -403,7 +403,12 @@ export function StreetView({
           return true;
         }
         if (interior.zone !== "lobby") {
-          setInterior({ kind: "lodging", buildingId: building.id, zone: "lobby" });
+          setInterior({
+            kind: "lodging",
+            buildingId: building.id,
+            zone: "lobby",
+            roomId: interior.roomId,
+          });
           return true;
         }
         if (world.nearExit()) leaveStreet();
@@ -664,14 +669,31 @@ export function StreetView({
     worldRef.current?.setMoveMode(next);
   };
 
-  const goLodgingZone = (zone: LodgingZone) => {
+  const stayRoomId =
+    interior?.kind === "lodging"
+      ? (interior.roomId ?? (lodgingBuilding ? findLodgingRoom(lodgingBuilding)?.id : null) ?? null)
+      : null;
+  const stayRoom = lodgingBuilding ? findLodgingRoom(lodgingBuilding, stayRoomId) : null;
+  const hotelStay = lodgingBuilding ? lodgingUse(lodgingBuilding) === "hotel" : false;
+  const stayLabel = stayRoom
+    ? `${hotelStay ? "Room" : "Apt"} ${stayRoom.label}`
+    : hotelStay
+      ? "your room"
+      : "your apartment";
+
+  const goLodgingZone = (zone: LodgingZone, roomId: string | null = stayRoomId) => {
     if (interior?.kind !== "lodging") return;
+    if (zone === "room" && !roomId) {
+      setPickingRoom(true);
+      return;
+    }
     setPickingRoom(false);
+    if (document.pointerLockElement) document.exitPointerLock();
     setInterior({
       kind: "lodging",
       buildingId: interior.buildingId,
       zone,
-      roomId: zone === "room" ? interior.roomId : undefined,
+      roomId: roomId ?? undefined,
     });
   };
 
@@ -697,9 +719,11 @@ export function StreetView({
   const placeName = interior?.kind === "stadium"
     ? "Ravens Ballpark"
     : lodgingBuilding
-      ? currentRoom
-        ? `${lodgingBuilding.name} · ${lodgingUse(lodgingBuilding) === "hotel" ? "Room" : "Apt"} ${currentRoom.label}`
-        : lodgingBuilding.name
+      ? interior.zone === "pool"
+        ? `${lodgingBuilding.name} · Pool`
+        : currentRoom
+          ? `${lodgingBuilding.name} · ${hotelStay ? "Room" : "Apt"} ${currentRoom.label}`
+          : lodgingBuilding.name
       : venueBuilding
         ? venueBuilding.name
         : subwayBuilding?.name
@@ -796,14 +820,30 @@ export function StreetView({
               {interior?.kind === "stadium" ? "Leave stadium" : "Leave building"}
             </button>
             {interior?.kind === "lodging" && interior.zone === "room" ? (
+              <>
+                <button
+                  onClick={() => goLodgingZone("pool")}
+                  className="rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                >
+                  Roof deck pool
+                </button>
+                <button
+                  onClick={() => {
+                    setPickingRoom(true);
+                    if (document.pointerLockElement) document.exitPointerLock();
+                  }}
+                  className="rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                >
+                  Switch rooms
+                </button>
+              </>
+            ) : null}
+            {interior?.kind === "lodging" && interior.zone === "pool" && stayRoom ? (
               <button
-                onClick={() => {
-                  setPickingRoom(true);
-                  if (document.pointerLockElement) document.exitPointerLock();
-                }}
-                className="rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                onClick={() => goLodgingZone("room", stayRoom.id)}
+                className="rounded-xl bg-amber-400 px-3.5 py-2 text-xs font-semibold text-[#1a1206] backdrop-blur"
               >
-                Switch rooms
+                Back to {stayLabel}
               </button>
             ) : null}
             </>
@@ -1034,7 +1074,7 @@ export function StreetView({
               : findLodgingRoom(lodgingBuilding)?.id
           }
           onEnterRoom={enterLodgingRoom}
-          onPool={() => goLodgingZone("pool")}
+          onPool={() => goLodgingZone("pool", stayRoomId)}
           onClose={pickingRoom ? () => setPickingRoom(false) : undefined}
         />
       ) : null}
@@ -1095,11 +1135,30 @@ export function StreetView({
       ) : null}
 
       {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer && !pickingRoom && !sleeping && !atBed && !atSlider ? (
-        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
-          <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
-            <p className="text-xs text-slate-200">
-              Press <span className="font-semibold text-white">E</span> to return to the lobby
-            </p>
+        <div className="pointer-events-auto absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="flex flex-col items-center gap-2">
+            {interior.zone === "room" ? (
+              <button
+                type="button"
+                onClick={() => goLodgingZone("pool")}
+                className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-[#1a1206] shadow-2xl"
+              >
+                Go to the roof deck pool
+              </button>
+            ) : stayRoom ? (
+              <button
+                type="button"
+                onClick={() => goLodgingZone("room", stayRoom.id)}
+                className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-[#1a1206] shadow-2xl"
+              >
+                Back to {stayLabel}
+              </button>
+            ) : null}
+            <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
+              <p className="text-xs text-slate-200">
+                Press <span className="font-semibold text-white">E</span> to return to the lobby
+              </p>
+            </div>
           </div>
         </div>
       ) : null}
