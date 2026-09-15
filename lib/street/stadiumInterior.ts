@@ -9,6 +9,9 @@ export interface StadiumInterior {
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   scoreboard: THREE.MeshStandardMaterial;
   fans: THREE.InstancedMesh;
+  seatedCount: number;
+  walkingCount: number;
+  rest: Float32Array;
   groundAt: (x: number, z: number) => number;
   dispose: () => void;
 }
@@ -28,11 +31,13 @@ const FIELD_STAIR_Z0 = SEAT_Z0 - 4.4;
 const FIELD_HALF = 18;
 const FIELD_Z_FAR = -19;
 const CF_GAP = 7.2;
-const SEATED_FANS = 52;
-const WALKING_FANS = 24;
+const SEATED_FANS = 480;
+const WALKING_FANS = 42;
 const PLAYER_FANS = 4;
 
 export const STADIUM_FAN_WALK_START = SEATED_FANS;
+export const STADIUM_SEATED_COUNT = SEATED_FANS;
+export const STADIUM_WALKING_COUNT = WALKING_FANS;
 
 function rowWalkY(row: number) {
   return STAND_CLEAR + SEAT_THICK + row * ROW_RISE;
@@ -59,7 +64,7 @@ export function stadiumGroundAt(x: number, z: number) {
     const step = Math.min(STAIR_STEPS, Math.max(1, Math.ceil(t * STAIR_STEPS)));
     return (top * step) / STAIR_STEPS;
   }
-  if (inAisle(x) && z >= FIELD_STAIR_Z0 && z < SEAT_Z0) {
+  if (inAisle(x) && Math.abs(x) > AISLE_HALF + 0.5 && z >= FIELD_STAIR_Z0 && z < SEAT_Z0) {
     const t = (z - FIELD_STAIR_Z0) / (SEAT_Z0 - FIELD_STAIR_Z0);
     return rowWalkY(0) * Math.max(0, Math.min(1, t));
   }
@@ -193,6 +198,8 @@ export function buildStadiumInterior(): StadiumInterior {
   wallB.box(CF_GAP, FIELD_Z_FAR - 0.42, FIELD_HALF, FIELD_Z_FAR + 0.22, 0, lip, ivy);
   wallB.box(-CF_GAP, FIELD_Z_FAR - 0.42, CF_GAP, FIELD_Z_FAR + 0.22, 0, 1.45, ivy);
 
+  addFloodTowers(wallB, trimB, blockers);
+
   // Soffits and extra columns close the under-stand tunnels.
   addSeatBand(floorB, -ox, ox, SEAT_Z0, ozNear, STAND_CLEAR - 0.16, STAND_CLEAR, concrete);
   floorB.box(FIELD_HALF, FIELD_Z_FAR, ox, SEAT_Z0, STAND_CLEAR - 0.16, STAND_CLEAR, concrete);
@@ -211,7 +218,7 @@ export function buildStadiumInterior(): StadiumInterior {
   }
 
   for (const ax of AISLES) {
-    addStairFlight(floorB, trimB, ax - AISLE_HALF, ax + AISLE_HALF);
+    addStairFlight(floorB, trimB, ax - AISLE_HALF, ax + AISLE_HALF, ax !== 0);
   }
 
   // ─── Scoreboard in center field ────────────────────────────────────────────
@@ -275,7 +282,7 @@ export function buildStadiumInterior(): StadiumInterior {
     }),
   );
 
-  const fans = buildFans();
+  const { mesh: fans, rest } = buildFans();
   group.add(fans);
   disposables.push(fans.geometry);
   disposables.push(fans.material as THREE.Material);
@@ -287,6 +294,9 @@ export function buildStadiumInterior(): StadiumInterior {
     bounds: { minX, maxX, minZ, maxZ },
     scoreboard: boardMat,
     fans,
+    seatedCount: SEATED_FANS,
+    walkingCount: WALKING_FANS,
+    rest,
     groundAt: stadiumGroundAt,
     dispose: () => {
       for (const item of disposables) item.dispose();
@@ -470,7 +480,7 @@ function addSeatBand(
   if (cursor < x1) seats.box(cursor, z0, x1, z1, y0, y1, color);
 }
 
-function addStairFlight(floorB: MeshBuilder, trimB: MeshBuilder, x0: number, x1: number) {
+function addStairFlight(floorB: MeshBuilder, trimB: MeshBuilder, x0: number, x1: number, ontoField = true) {
   const concrete = new THREE.Color("#c5c0b6");
   const nosing = new THREE.Color("#d8d3c8");
   const rail = new THREE.Color("#dfe6ee");
@@ -493,15 +503,17 @@ function addStairFlight(floorB: MeshBuilder, trimB: MeshBuilder, x0: number, x1:
     floorB.box(x0, z0, x1, z1, y - 0.05, y, nosing);
   }
 
-  const fieldTop = rowWalkY(0);
-  const fieldSteps = 8;
-  for (let i = 1; i <= fieldSteps; i++) {
-    const t = i / fieldSteps;
-    const zFar = SEAT_Z0 - (SEAT_Z0 - FIELD_STAIR_Z0) * ((i - 1) / fieldSteps);
-    const zNear = SEAT_Z0 - (SEAT_Z0 - FIELD_STAIR_Z0) * t;
-    const y = fieldTop * (1 - (i - 1) / fieldSteps);
-    floorB.box(x0, Math.min(zNear, zFar), x1, Math.max(zNear, zFar), 0, Math.max(0.08, y), concrete);
-    floorB.box(x0, Math.min(zNear, zFar), x1, Math.max(zNear, zFar), Math.max(0.08, y) - 0.05, Math.max(0.08, y), nosing);
+  if (ontoField) {
+    const fieldTop = rowWalkY(0);
+    const fieldSteps = 8;
+    for (let i = 1; i <= fieldSteps; i++) {
+      const t = i / fieldSteps;
+      const zFar = SEAT_Z0 - (SEAT_Z0 - FIELD_STAIR_Z0) * ((i - 1) / fieldSteps);
+      const zNear = SEAT_Z0 - (SEAT_Z0 - FIELD_STAIR_Z0) * t;
+      const y = fieldTop * (1 - (i - 1) / fieldSteps);
+      floorB.box(x0, Math.min(zNear, zFar), x1, Math.max(zNear, zFar), 0, Math.max(0.08, y), concrete);
+      floorB.box(x0, Math.min(zNear, zFar), x1, Math.max(zNear, zFar), Math.max(0.08, y) - 0.05, Math.max(0.08, y), nosing);
+    }
   }
 
   const railH = 0.92;
@@ -588,8 +600,47 @@ function addDugout(
   else blockers.push({ minX: x1 - 0.45, maxX: x1, minZ: z, maxZ: z + 6 });
 }
 
+function addFloodTowers(walls: MeshBuilder, trim: MeshBuilder, blockers: Blocker[]) {
+  const steel = new THREE.Color("#c5cdd6");
+  const lamp = new THREE.Color("#fff4d2");
+  const spots = [
+    { x: -22.4, z: 13.6 },
+    { x: 21.6, z: 13.6 },
+    { x: -23.2, z: -16.4 },
+    { x: 22.4, z: -16.4 },
+  ];
+  for (const spot of spots) {
+    walls.box(spot.x, spot.z, spot.x + 0.55, spot.z + 0.55, 0, 15.2, steel);
+    trim.box(spot.x - 0.55, spot.z - 0.35, spot.x + 1.1, spot.z + 0.9, 15.2, 16.1, lamp);
+    blockers.push({ minX: spot.x, maxX: spot.x + 0.55, minZ: spot.z, maxZ: spot.z + 0.55 });
+  }
+}
+
+function seatLayout() {
+  const seats: { x: number; y: number; z: number }[] = [];
+  for (let row = 0; row < SEAT_ROWS; row++) {
+    const pad = row * ROW_RUN;
+    const y = rowWalkY(row) + 0.55;
+    const zNear = SEAT_Z0 + pad + 0.32;
+    const zFar = FIELD_Z_FAR - pad - 0.32;
+    const xInner = FIELD_HALF + pad + 0.42;
+    for (let x = -16.6; x <= 16.6; x += 0.95) {
+      if (inAisle(x)) continue;
+      seats.push({ x, y, z: zNear });
+    }
+    for (let z = -15.2; z <= 13.8; z += 1.05) {
+      seats.push({ x: xInner, y, z });
+      seats.push({ x: -xInner, y, z });
+    }
+    for (let x = -17.2; x <= -CF_GAP - 1.15; x += 1.05) seats.push({ x, y, z: zFar });
+    for (let x = CF_GAP + 1.15; x <= 17.2; x += 1.05) seats.push({ x, y, z: zFar });
+  }
+  return seats;
+}
+
 function buildFans() {
-  const geo = new THREE.CapsuleGeometry(0.24, 0.78, 3, 6);
+  const seats = seatLayout();
+  const geo = new THREE.CapsuleGeometry(0.22, 0.72, 3, 6);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78 });
   const count = SEATED_FANS + WALKING_FANS + PLAYER_FANS;
   const mesh = new THREE.InstancedMesh(geo, mat, count);
@@ -597,57 +648,36 @@ function buildFans() {
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const matrix = new THREE.Matrix4();
   const color = new THREE.Color();
-  const palettes = ["#1f4d8c", "#c0392b", "#f4f1ea", "#2c3e6b", "#7a2e2e", "#e8c36a", "#3d5a80", "#d4a017"];
-  const fieldSpots = [
-    [0, 8.6],
-    [7.6, 9],
-    [-7.6, 9],
-    [0, 16.8],
-  ];
+  const palettes = ["#1f4d8c", "#c0392b", "#f4f1ea", "#2c3e6b", "#7a2e2e", "#e8c36a", "#3d5a80", "#d4a017", "#4aa3c4", "#8a4b2f"];
+  const rest = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
     let x: number;
     let z: number;
     let y: number;
     if (i < SEATED_FANS) {
-      const row = i % SEAT_ROWS;
-      const section = Math.floor(i / SEAT_ROWS) % 4;
-      const along = Math.floor(i / 4) % 12;
-      const pad = row * ROW_RUN;
-      const xInner = FIELD_HALF + pad + 0.4;
-      const zNear = SEAT_Z0 + pad + 0.28;
-      const zFar = FIELD_Z_FAR - pad - 0.28;
-      y = rowWalkY(row) + 0.55;
-      if (section === 0) {
-        x = -15 + along * 2.7 + (i % 2) * 0.35;
-        if (inAisle(x)) x += 2.1;
-        z = zNear;
-      } else if (section === 1) {
-        x = xInner;
-        z = -15 + along * 2.5;
-      } else if (section === 2) {
-        x = -xInner;
-        z = -15 + along * 2.5;
-      } else {
-        x = -16 + along * 2.6;
-        if (Math.abs(x) < CF_GAP) x = x < 0 ? -CF_GAP - 1.2 : CF_GAP + 1.2;
-        z = zFar;
-      }
+      const seat = seats[i % seats.length];
+      x = seat.x;
+      y = seat.y;
+      z = seat.z;
     } else if (i < SEATED_FANS + WALKING_FANS) {
       const n = i - SEATED_FANS;
-      x = -18 + n * 1.55;
-      z = 41.4 + ((n * 2) % 4) * 0.28;
+      x = -19 + (n % 20) * 1.9;
+      z = 40.6 + Math.floor(n / 20) * 1.35 + (n % 3) * 0.2;
       y = 0.97;
     } else {
-      const spot = fieldSpots[i - SEATED_FANS - WALKING_FANS];
-      x = spot[0];
-      z = spot[1];
+      const n = i - SEATED_FANS - WALKING_FANS;
+      x = n < 2 ? -14.6 : 14.6;
+      z = 7.4 + (n % 2) * 1.5;
       y = 0.95;
     }
+    rest[i * 3] = x;
+    rest[i * 3 + 1] = y;
+    rest[i * 3 + 2] = z;
     matrix.makeTranslation(x, y, z);
     mesh.setMatrixAt(i, matrix);
     mesh.setColorAt(i, color.set(i >= SEATED_FANS + WALKING_FANS ? "#1f4d8c" : palettes[i % palettes.length]));
   }
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  return mesh;
+  return { mesh, rest };
 }

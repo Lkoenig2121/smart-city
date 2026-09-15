@@ -1,7 +1,7 @@
 "use client";
 
 import type { Building, CityState } from "@/lib/city/types";
-import { findStadium, isGameNight, stadiumGateTile } from "@/lib/city/stadium";
+import { findStadium, GAME_HOURS_LABEL, isGameNight, stadiumGateTile } from "@/lib/city/stadium";
 import {
   canEnterLodgingRoom,
   findLodging,
@@ -1107,7 +1107,7 @@ export function StreetView({
           <div className="rounded-xl border border-white/15 bg-[#1f4d8c]/90 px-5 py-2.5 text-center shadow-xl backdrop-blur">
             <p className="text-sm font-bold tracking-wide text-white">⚾ RIVERSIDE RAVENS</p>
             <p className="text-[0.7rem] uppercase tracking-[0.18em] text-amber-200">
-              {isGameNight(state) ? "Home Game — 7:00 PM" : "Open for tours"}
+              {isGameNight(state) ? `Live game · ${GAME_HOURS_LABEL}` : `Open for tours · first pitch 6:00 PM`}
             </p>
           </div>
         </div>

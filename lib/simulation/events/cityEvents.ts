@@ -124,8 +124,8 @@ function seedDailyEvents(state: CityState, rand: () => number) {
     if (weekend || hash < 0.18) {
       pushEvent(state, {
         kind: "baseball",
-        headline: "Riverside Ravens vs. Bayville Bears — 7:00 PM.",
-        detail: `${stadium.name} gates open at six.`,
+        headline: "Riverside Ravens vs. Bayville Bears — 6:00 PM.",
+        detail: `${stadium.name} first pitch at six, last out around nine.`,
         x: stadium.origin.x,
         y: stadium.origin.y,
         buildingId: stadium.id,
