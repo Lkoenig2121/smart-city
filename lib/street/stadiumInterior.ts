@@ -27,7 +27,6 @@ const STAND_CLEAR = 2.88;
 const STAIR_STEPS = 20;
 const STAIR_Z1 = 38.2;
 const STAIR_Z0 = SEAT_Z0 + (SEAT_ROWS - 1) * ROW_RUN + 0.55;
-const FIELD_STAIR_Z0 = SEAT_Z0 - 4.4;
 const FIELD_HALF = 18;
 const FIELD_Z_FAR = -19;
 const CF_GAP = 7.2;
@@ -51,12 +50,36 @@ function inAisle(x: number) {
   return AISLES.some((ax) => Math.abs(x - ax) <= AISLE_HALF);
 }
 
-function seatRowAtZ(z: number) {
-  const t = (z - SEAT_Z0) / ROW_RUN;
-  return Math.max(0, Math.min(SEAT_ROWS - 1, Math.floor(t + 0.001)));
+/** Which seating plank contains this point, wrapping the whole bowl. */
+function bowlSeatRow(x: number, z: number) {
+  const slack = 0.4;
+  for (let row = 0; row < SEAT_ROWS; row++) {
+    const pad = row * ROW_RUN;
+    const run = ROW_RUN;
+    const xInner = FIELD_HALF + pad;
+    const zNear = SEAT_Z0 + pad;
+    const zFar = FIELD_Z_FAR - pad;
+    const xOuter = xInner + run;
+    if (z >= zNear - slack && z <= zNear + run + slack && x >= -xInner - slack && x <= xInner + slack) {
+      return row;
+    }
+    if (x >= xInner - slack && x <= xOuter + slack && z >= zFar - slack && z <= zNear + slack) {
+      return row;
+    }
+    if (x <= -xInner + slack && x >= -xOuter - slack && z >= zFar - slack && z <= zNear + slack) {
+      return row;
+    }
+    if (z <= zFar + slack && z >= zFar - run - slack && x >= -xOuter - slack && x <= -CF_GAP + 0.35) {
+      return row;
+    }
+    if (z <= zFar + slack && z >= zFar - run - slack && x >= CF_GAP - 0.35 && x <= xOuter + slack) {
+      return row;
+    }
+  }
+  return null;
 }
 
-/** Walkable height: concourse, stairs onto the deck, then the rake of the seats. */
+/** Walkable height: concourse, stairs onto the deck, then the rake around the bowl. */
 export function stadiumGroundAt(x: number, z: number) {
   const top = topSeatY();
   if (inAisle(x) && z >= STAIR_Z0 && z <= STAIR_Z1) {
@@ -64,14 +87,8 @@ export function stadiumGroundAt(x: number, z: number) {
     const step = Math.min(STAIR_STEPS, Math.max(1, Math.ceil(t * STAIR_STEPS)));
     return (top * step) / STAIR_STEPS;
   }
-  if (inAisle(x) && Math.abs(x) > AISLE_HALF + 0.5 && z >= FIELD_STAIR_Z0 && z < SEAT_Z0) {
-    const t = (z - FIELD_STAIR_Z0) / (SEAT_Z0 - FIELD_STAIR_Z0);
-    return rowWalkY(0) * Math.max(0, Math.min(1, t));
-  }
-  const seatEnd = SEAT_Z0 + SEAT_ROWS * ROW_RUN;
-  if (z >= SEAT_Z0 && z <= seatEnd && Math.abs(x) <= FIELD_HALF + SEAT_ROWS * ROW_RUN) {
-    return rowWalkY(seatRowAtZ(z));
-  }
+  const row = bowlSeatRow(x, z);
+  if (row != null) return rowWalkY(row);
   return 0;
 }
 
@@ -189,14 +206,30 @@ export function buildStadiumInterior(): StadiumInterior {
   wallB.box(-ox - 0.55, ozFar, -ox, ozNear, 0, fasciaH, navy);
   wallB.box(ox, ozFar, ox + 0.55, ozNear, 0, fasciaH, navy);
 
-  // Inner field walls so the bowl meets the grass instead of open sky.
+  // Solid inner walls (no aisle cuts) plus a rail so the field stays closed.
   const lip = STAND_CLEAR + 0.35;
-  addSeatBand(wallB, -FIELD_HALF, FIELD_HALF, SEAT_Z0 - 0.5, SEAT_Z0 + 0.22, 0, lip, fieldWall);
+  const railTop = lip + 1.12;
+  const rail = new THREE.Color("#e8eef4");
+  wallB.box(-FIELD_HALF, SEAT_Z0 - 0.5, FIELD_HALF, SEAT_Z0 + 0.22, 0, lip, fieldWall);
   wallB.box(FIELD_HALF - 0.22, FIELD_Z_FAR, FIELD_HALF + 0.42, SEAT_Z0, 0, lip, ivy);
   wallB.box(-FIELD_HALF - 0.42, FIELD_Z_FAR, -FIELD_HALF + 0.22, SEAT_Z0, 0, lip, ivy);
   wallB.box(-FIELD_HALF, FIELD_Z_FAR - 0.42, -CF_GAP, FIELD_Z_FAR + 0.22, 0, lip, ivy);
   wallB.box(CF_GAP, FIELD_Z_FAR - 0.42, FIELD_HALF, FIELD_Z_FAR + 0.22, 0, lip, ivy);
   wallB.box(-CF_GAP, FIELD_Z_FAR - 0.42, CF_GAP, FIELD_Z_FAR + 0.22, 0, 1.45, ivy);
+  trimB.box(-FIELD_HALF, SEAT_Z0 - 0.58, FIELD_HALF, SEAT_Z0 - 0.16, lip, railTop, rail);
+  trimB.box(FIELD_HALF - 0.48, FIELD_Z_FAR, FIELD_HALF - 0.12, SEAT_Z0, lip, railTop, rail);
+  trimB.box(-FIELD_HALF + 0.12, FIELD_Z_FAR, -FIELD_HALF + 0.48, SEAT_Z0, lip, railTop, rail);
+  trimB.box(-FIELD_HALF, FIELD_Z_FAR + 0.12, -CF_GAP, FIELD_Z_FAR + 0.48, lip, railTop, rail);
+  trimB.box(CF_GAP, FIELD_Z_FAR + 0.12, FIELD_HALF, FIELD_Z_FAR + 0.48, lip, railTop, rail);
+  trimB.box(-CF_GAP, FIELD_Z_FAR + 0.12, CF_GAP, FIELD_Z_FAR + 0.48, 1.45, 2.55, rail);
+
+  const fieldInset = 0.58;
+  blockers.push({
+    minX: -FIELD_HALF + fieldInset,
+    maxX: FIELD_HALF - fieldInset,
+    minZ: FIELD_Z_FAR + fieldInset,
+    maxZ: SEAT_Z0 - fieldInset,
+  });
 
   addFloodTowers(wallB, trimB, blockers);
 
@@ -218,23 +251,23 @@ export function buildStadiumInterior(): StadiumInterior {
   }
 
   for (const ax of AISLES) {
-    addStairFlight(floorB, trimB, ax - AISLE_HALF, ax + AISLE_HALF, ax !== 0);
+    addStairFlight(floorB, trimB, ax - AISLE_HALF, ax + AISLE_HALF);
   }
 
   // ─── Scoreboard in center field ────────────────────────────────────────────
   const boardZ = ozFar - 2.4;
-  scratch.set("#12171c");
-  wallB.box(-10, boardZ, 10, boardZ + 2.4, 0, 14, scratch);
-  blockers.push({ minX: -10, maxX: 10, minZ: boardZ, maxZ: boardZ + 2.4 });
-  const boardGeo = new THREE.PlaneGeometry(18, 8);
+  scratch.set("#2ea44a");
+  wallB.box(-10.4, boardZ, 10.4, boardZ + 2.5, 0, 15.4, scratch);
+  blockers.push({ minX: -10.4, maxX: 10.4, minZ: boardZ, maxZ: boardZ + 2.5 });
+  const boardGeo = new THREE.PlaneGeometry(19.2, 11.8);
   const boardMat = new THREE.MeshStandardMaterial({
-    color: "#111",
-    emissive: new THREE.Color("#1a3a12"),
-    emissiveIntensity: 0.8,
-    roughness: 0.4,
+    color: "#ffffff",
+    emissive: new THREE.Color("#6ecf7a"),
+    emissiveIntensity: 0.42,
+    roughness: 0.55,
   });
   const board = new THREE.Mesh(boardGeo, boardMat);
-  board.position.set(0, 9.2, boardZ + 2.42);
+  board.position.set(0, 8.15, boardZ + 2.52);
   group.add(board);
   disposables.push(boardGeo);
 
@@ -347,7 +380,7 @@ function addShop(
 
   walls.box(x0, z0, x1, z1, 0, h, concrete);
   walls.box(x0 - 0.06, z0 - 0.06, x1 + 0.06, z1 + 0.06, h, h + 0.12, accent);
-  blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1 });
+  blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, maxY: STAND_CLEAR + 0.05 });
 
   const awning = 0.7;
   const cx = (x0 + x1) / 2;
@@ -480,7 +513,7 @@ function addSeatBand(
   if (cursor < x1) seats.box(cursor, z0, x1, z1, y0, y1, color);
 }
 
-function addStairFlight(floorB: MeshBuilder, trimB: MeshBuilder, x0: number, x1: number, ontoField = true) {
+function addStairFlight(floorB: MeshBuilder, trimB: MeshBuilder, x0: number, x1: number) {
   const concrete = new THREE.Color("#c5c0b6");
   const nosing = new THREE.Color("#d8d3c8");
   const rail = new THREE.Color("#dfe6ee");
@@ -501,19 +534,6 @@ function addStairFlight(floorB: MeshBuilder, trimB: MeshBuilder, x0: number, x1:
     const y = rowWalkY(row);
     floorB.box(x0, z0, x1, z1, 0, y, concrete);
     floorB.box(x0, z0, x1, z1, y - 0.05, y, nosing);
-  }
-
-  if (ontoField) {
-    const fieldTop = rowWalkY(0);
-    const fieldSteps = 8;
-    for (let i = 1; i <= fieldSteps; i++) {
-      const t = i / fieldSteps;
-      const zFar = SEAT_Z0 - (SEAT_Z0 - FIELD_STAIR_Z0) * ((i - 1) / fieldSteps);
-      const zNear = SEAT_Z0 - (SEAT_Z0 - FIELD_STAIR_Z0) * t;
-      const y = fieldTop * (1 - (i - 1) / fieldSteps);
-      floorB.box(x0, Math.min(zNear, zFar), x1, Math.max(zNear, zFar), 0, Math.max(0.08, y), concrete);
-      floorB.box(x0, Math.min(zNear, zFar), x1, Math.max(zNear, zFar), Math.max(0.08, y) - 0.05, Math.max(0.08, y), nosing);
-    }
   }
 
   const railH = 0.92;

@@ -57,6 +57,9 @@ export interface Blocker {
   maxX: number;
   minZ: number;
   maxZ: number;
+  /** Omit to block every height. Used so under-stand shops don't seal the deck above. */
+  minY?: number;
+  maxY?: number;
 }
 
 export interface CityMeshes {

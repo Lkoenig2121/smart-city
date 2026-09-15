@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Building, CityState } from "@/lib/city/types";
 import { findStadium, stadiumIsOpen } from "@/lib/city/stadium";
+import { stadiumFireworksOn } from "@/lib/city/fireworks";
 import { lodgingUse } from "@/lib/city/lodging";
 import { isEnterableVenue } from "@/lib/city/venues";
 import { lightingFor, type Lighting } from "@/lib/renderer/palette";
@@ -11,6 +12,7 @@ import { FLOOR_H } from "./textures";
 import { StreetControls, type MoveMode } from "./controls";
 import { skyTexture } from "./textures";
 import { StreetWeatherFx } from "./weatherFx";
+import { StreetFireworks } from "./streetFireworks";
 
 /** Field of view at rest, and how far it narrows mid-hop. */
 const BASE_FOV = 72;
@@ -43,6 +45,8 @@ export class StreetWorld {
   private skyKey = "";
   private time = 0;
   private weatherFx = new StreetWeatherFx();
+  private fireworks = new StreetFireworks();
+  private fireworkOrigin = new THREE.Vector3();
   private glow = new BuildingGlow();
   private pinnedId: string | null = null;
   private aimedId: string | null = null;
@@ -79,6 +83,7 @@ export class StreetWorld {
     this.agents = new AgentLayer(state, (x, z) => this.controls.groundAt(x, z));
     this.scene.add(this.agents.group);
     this.scene.add(this.weatherFx.group);
+    this.city.group.add(this.fireworks.group);
 
     // The sun casts across a moving box centred on the player.
     this.sun.castShadow = true;
@@ -370,8 +375,23 @@ export class StreetWorld {
     }
 
     this.weatherFx.update(dt, this.camera, this.state.weather?.kind ?? "clear");
+    this.updateFireworks(dt);
     this.updateGlow(dt);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private updateFireworks(dt: number) {
+    const stadium = findStadium(this.state);
+    if (!stadium) {
+      this.fireworks.update(dt, false, this.fireworkOrigin);
+      return;
+    }
+    this.fireworkOrigin.set(
+      (stadium.origin.x + stadium.width / 2) * TILE,
+      0,
+      (stadium.origin.y + stadium.depth / 2) * TILE,
+    );
+    this.fireworks.update(dt, stadiumFireworksOn(this.state), this.fireworkOrigin);
   }
 
   private updateGlow(dt: number) {
@@ -446,9 +466,11 @@ export class StreetWorld {
 
   dispose() {
     this.agents.dispose();
-    this.city.dispose();
     this.glow.dispose();
     this.weatherFx.dispose();
+    this.fireworks.group.removeFromParent();
+    this.fireworks.dispose();
+    this.city.dispose();
     this.sky?.dispose();
     this.windowRT?.dispose();
     this.renderer.dispose();

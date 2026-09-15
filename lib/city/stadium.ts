@@ -78,12 +78,28 @@ export function stadiumAttendance(state: CityState): StadiumAttendance {
   return { seated: 0.04, walking: 0.08, lights: 0, fireworks: false };
 }
 
+export const RAVENS_LINEUP = ["Rivera", "Chen", "Brooks", "Patel", "Nguyen", "Walsh", "Ortiz", "Kim", "Hale"];
+export const BEARS_LINEUP = ["Vargas", "Cole", "Dunn", "Rossi", "Blake", "Frost", "Dean", "Pike", "Moss"];
+
 export interface StadiumGame {
   inning: number;
   top: boolean;
   ravens: number;
   visitors: number;
   outs: number;
+  balls: number;
+  strikes: number;
+  ravensHits: number;
+  visitorsHits: number;
+  ravensErrors: number;
+  visitorsErrors: number;
+  ravensLine: Array<number | null>;
+  visitorsLine: Array<number | null>;
+  hitLight: boolean;
+  errorLight: boolean;
+  atBat: string;
+  onDeck: string;
+  inTheHole: string;
   playing: boolean;
   firstPitch: boolean;
 }
@@ -95,36 +111,93 @@ export function stadiumGame(state: CityState): StadiumGame | null {
   const playMinutes = GAME_END_MINUTE - GAME_START_MINUTE - 8;
   const playing = elapsed < playMinutes;
   const halves = 18;
-  const halfIndex = playing
-    ? Math.min(halves - 1, Math.floor((elapsed / playMinutes) * halves))
-    : halves;
+  const rawHalf = playing ? (elapsed / playMinutes) * halves : halves;
+  const halfIndex = playing ? Math.min(halves - 1, Math.floor(rawHalf)) : halves;
+  const halfProgress = playing ? Math.min(1, rawHalf - halfIndex) : 1;
   const inning = Math.min(9, Math.floor((playing ? halfIndex : halves - 1) / 2) + 1);
   const top = playing ? halfIndex % 2 === 0 : false;
+  const visitorsLine: Array<number | null> = Array.from({ length: 9 }, () => null);
+  const ravensLine: Array<number | null> = Array.from({ length: 9 }, () => null);
   let ravens = 0;
   let visitors = 0;
-  const completed = playing ? halfIndex : halves;
-  for (let half = 0; half < completed; half++) {
-    const runs = inningRuns(state.clock, half);
-    if (half % 2 === 0) visitors += runs;
-    else ravens += runs;
+  let justScored = false;
+  const lastHalf = playing ? halfIndex : halves - 1;
+  for (let half = 0; half <= lastHalf; half++) {
+    const events = scoringTimes(state.clock, half);
+    const progress = half < halfIndex ? 1 : playing ? halfProgress : 1;
+    const runs = events.filter((at) => at <= progress).length;
+    if (half === halfIndex && playing) {
+      justScored = events.some((at) => progress - at >= 0 && progress - at < 0.09);
+    }
+    const slot = Math.floor(half / 2);
+    if (half % 2 === 0) {
+      visitors += runs;
+      visitorsLine[slot] = runs;
+    } else {
+      ravens += runs;
+      ravensLine[slot] = runs;
+    }
   }
   const outs = playing ? Math.min(2, Math.floor(hash2(state.clock.dayOfYear, elapsed, 19) * 3)) : 0;
+  const balls = playing ? Math.min(3, Math.floor(hash2(state.clock.dayOfYear, Math.floor(elapsed), 21) * 4)) : 0;
+  const strikes = playing ? Math.min(2, Math.floor(hash2(state.clock.dayOfYear, Math.floor(elapsed), 22) * 3)) : 0;
+  const visitorsHits = hitsFor(state.clock, 3, visitors, halfIndex);
+  const ravensHits = hitsFor(state.clock, 7, ravens, halfIndex);
+  const visitorsErrors = errorsFor(state.clock, 11);
+  const ravensErrors = errorsFor(state.clock, 13);
+  const lineup = top ? BEARS_LINEUP : RAVENS_LINEUP;
+  const batter = Math.floor(elapsed / 3.4) % 9;
   return {
     inning,
     top,
     ravens,
     visitors,
     outs,
+    balls,
+    strikes,
+    ravensHits,
+    visitorsHits,
+    ravensErrors,
+    visitorsErrors,
+    ravensLine,
+    visitorsLine,
+    hitLight: playing && (justScored || hash2(state.clock.dayOfYear, Math.floor(elapsed * 2), 31) > 0.86),
+    errorLight: playing && hash2(state.clock.dayOfYear, Math.floor(elapsed * 2), 32) > 0.93,
+    atBat: playing ? lineup[batter] : "",
+    onDeck: playing ? lineup[(batter + 1) % 9] : "",
+    inTheHole: playing ? lineup[(batter + 2) % 9] : "",
     playing,
     firstPitch: elapsed < 3,
   };
 }
 
-function inningRuns(clock: CityClock, half: number) {
-  const n = hash2(clock.year, clock.dayOfYear, 80 + half * 17);
-  if (n > 0.82) return 2;
-  if (n > 0.55) return 1;
+function hitsFor(clock: CityClock, salt: number, runs: number, halfIndex: number) {
+  return runs + Math.floor(hash2(clock.year, clock.dayOfYear, 200 + salt) * 2) + Math.floor(halfIndex * 0.35);
+}
+
+function errorsFor(clock: CityClock, salt: number) {
+  const n = hash2(clock.year, clock.dayOfYear, 240 + salt);
+  if (n > 0.88) return 2;
+  if (n > 0.62) return 1;
   return 0;
+}
+
+/**
+ * Moments (0–1 through a half-inning) when a run crosses. Ravens still
+ * outscore the Bears overall, but a 4-run frame is rare.
+ */
+function scoringTimes(clock: CityClock, half: number) {
+  const ravensHalf = half % 2 === 1;
+  const chance = ravensHalf ? 0.2 : 0.14;
+  const times: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    const roll = hash2(clock.year, clock.dayOfYear, 80 + half * 19 + i * 7);
+    if (roll >= chance) continue;
+    times.push(0.1 + hash2(clock.year, clock.dayOfYear, 180 + half * 13 + i * 11) * 0.8);
+  }
+  times.sort((a, b) => a - b);
+  const rareFour = ravensHalf && hash2(clock.year, clock.dayOfYear, 410 + half * 23) > 0.94;
+  return times.slice(0, rareFour ? 4 : ravensHalf ? 3 : 2);
 }
 
 function ringHasRoad(state: CityState, x: number, y: number, w: number, d: number) {

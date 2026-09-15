@@ -1,9 +1,11 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
-import { GAME_HOURS_LABEL, isGameNight, stadiumAttendance, stadiumGame } from "@/lib/city/stadium";
+import { isGameNight, stadiumAttendance, stadiumGame } from "@/lib/city/stadium";
+import { createFireworkSparks, FIREWORK_PALETTE, sparkFade, stepFireworks, type FireworkSpark } from "@/lib/city/fireworks";
+import { paintRavensScoreboard } from "./ravensScoreboard";
 import { InteriorControls } from "./interiorControls";
-import { buildStadiumInterior } from "./stadiumInterior";
+import { buildStadiumInterior, type StadiumInterior } from "./stadiumInterior";
 
 const DEFENSE: { x: number; z: number }[] = [
   { x: 0, z: 8.7 },
@@ -45,7 +47,7 @@ export class StadiumWorld {
   private floodFill: THREE.PointLight[] = [];
   private sparks: THREE.InstancedMesh;
   private sparkDummy = new THREE.Object3D();
-  private sparkLife: { x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; life: number }[] = [];
+  private sparkLife: FireworkSpark[] = [];
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -98,8 +100,8 @@ export class StadiumWorld {
     this.scene.fog = new THREE.Fog(0x7eb3e0, 70, 180);
 
     this.scoreCanvas = document.createElement("canvas");
-    this.scoreCanvas.width = 1024;
-    this.scoreCanvas.height = 448;
+    this.scoreCanvas.width = 1400;
+    this.scoreCanvas.height = 860;
     const ctx = this.scoreCanvas.getContext("2d");
     if (!ctx) throw new Error("2d context unavailable");
     this.scoreCtx = ctx;
@@ -149,10 +151,9 @@ export class StadiumWorld {
     this.sparks.frustumCulled = false;
     this.sparks.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const sparkColor = new THREE.Color();
-    const burst = ["#ffd36a", "#ff6b5a", "#7ec8ff", "#f4f1ea", "#c9a44c", "#ff8ad4"];
+    this.sparkLife = createFireworkSparks(96);
     for (let i = 0; i < 96; i++) {
-      this.sparks.setColorAt(i, sparkColor.set(burst[i % burst.length]));
-      this.sparkLife.push({ x: 0, y: -20, z: 0, vx: 0, vy: 0, vz: 0, age: 99, life: 1 });
+      this.sparks.setColorAt(i, sparkColor.set(FIREWORK_PALETTE[i % FIREWORK_PALETTE.length]));
     }
     if (this.sparks.instanceColor) this.sparks.instanceColor.needsUpdate = true;
     this.scene.add(this.sparks);
@@ -192,62 +193,15 @@ export class StadiumWorld {
   }
 
   private drawScoreboard() {
-    const ctx = this.scoreCtx;
-    const w = this.scoreCanvas.width;
-    const h = this.scoreCanvas.height;
     const clock = formatClock(this.state);
-    const game = stadiumGame(this.state);
-
-    ctx.fillStyle = "#07140a";
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = "#1f4d8c";
-    ctx.fillRect(0, 0, w, 72);
-    ctx.fillStyle = "#e8c36a";
-    ctx.font = "bold 42px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("⚾  RIVERSIDE RAVENS", w / 2, 50);
-
-    ctx.fillStyle = "#f4f7fb";
-    ctx.font = "bold 52px sans-serif";
-    if (!game) {
-      ctx.fillText("OPEN HOUSE", w / 2, 150);
-      ctx.font = "bold 36px sans-serif";
-      ctx.fillStyle = "#9fe8a8";
-      ctx.fillText(`First pitch tonight — ${GAME_HOURS_LABEL}`, w / 2, 210);
-    } else if (game.firstPitch) {
-      ctx.fillText("FIRST PITCH", w / 2, 150);
-      ctx.font = "bold 36px sans-serif";
-      ctx.fillStyle = "#9fe8a8";
-      ctx.fillText("Ravens vs. Bayville Bears", w / 2, 210);
-    } else if (!game.playing) {
-      ctx.fillText("FINAL", w / 2, 150);
-      ctx.font = "bold 36px sans-serif";
-      ctx.fillStyle = "#9fe8a8";
-      ctx.fillText(`${GAME_HOURS_LABEL}  ·  ballgame over`, w / 2, 210);
-    } else {
-      ctx.fillText(game.top ? `TOP ${game.inning}` : `BOT ${game.inning}`, w / 2, 150);
-      ctx.font = "bold 32px sans-serif";
-      ctx.fillStyle = "#9fe8a8";
-      ctx.fillText(`${game.outs} out  ·  ${GAME_HOURS_LABEL}`, w / 2, 210);
-    }
-
-    ctx.font = "32px sans-serif";
-    ctx.fillStyle = "#d7e6f0";
-    ctx.fillText(`${clock.day}  ·  ${clock.time}`, w / 2, 268);
-
-    ctx.font = "bold 48px sans-serif";
-    ctx.fillStyle = "#c0392b";
-    const ravens = game?.ravens ?? 0;
-    const visitors = game?.visitors ?? 0;
-    ctx.fillText(`RAVENS  ${ravens}     BEARS  ${visitors}`, w / 2, 348);
-    ctx.font = "28px sans-serif";
-    ctx.fillStyle = "#9fe8a8";
-    ctx.fillText(
-      game?.playing ? "Play ball" : game ? "Thanks for coming out" : "Tours through the concourse",
-      w / 2,
-      408,
+    paintRavensScoreboard(
+      this.scoreCtx,
+      this.scoreCanvas.width,
+      this.scoreCanvas.height,
+      stadiumGame(this.state),
+      clock,
+      this.time,
     );
-
     this.scoreTexture.needsUpdate = true;
   }
 
@@ -354,38 +308,21 @@ export class StadiumWorld {
   }
 
   private playFireworks(on: boolean, dt: number) {
+    stepFireworks(this.sparkLife, on, this.time, dt, {
+      spreadX: 22,
+      spreadZ: 6,
+      z0: -21,
+      height0: 18,
+      height1: 26,
+    });
     const dummy = this.sparkDummy;
-    if (on && Math.floor(this.time * 2.2) !== Math.floor((this.time - dt) * 2.2)) {
-      const ox = (Math.random() - 0.5) * 22;
-      const oz = -24 + Math.random() * 6;
-      const oy = 18 + Math.random() * 8;
-      const hue = Math.floor(Math.random() * 96);
-      for (let i = 0; i < 16; i++) {
-        const spark = this.sparkLife[(hue + i) % this.sparkLife.length];
-        const a = (i / 16) * Math.PI * 2;
-        const s = 4.5 + Math.random() * 3.5;
-        spark.x = ox;
-        spark.y = oy;
-        spark.z = oz;
-        spark.vx = Math.cos(a) * s * (0.4 + Math.random());
-        spark.vy = Math.sin(a * 1.7) * s * 0.55 + 1.2;
-        spark.vz = Math.sin(a) * s * (0.4 + Math.random());
-        spark.age = 0;
-        spark.life = 1.15 + Math.random() * 0.5;
-      }
-    }
     for (let i = 0; i < this.sparkLife.length; i++) {
       const spark = this.sparkLife[i];
-      spark.age += dt;
-      if (!on || spark.age > spark.life) {
+      const fade = sparkFade(spark);
+      if (!on || fade <= 0) {
         dummy.position.set(0, -30, 0);
         dummy.scale.set(0.001, 0.001, 0.001);
       } else {
-        spark.vy -= 7.5 * dt;
-        spark.x += spark.vx * dt;
-        spark.y += spark.vy * dt;
-        spark.z += spark.vz * dt;
-        const fade = 1 - spark.age / spark.life;
         dummy.position.set(spark.x, spark.y, spark.z);
         dummy.scale.setScalar(0.7 + fade * 1.4);
       }

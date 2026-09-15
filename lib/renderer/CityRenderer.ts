@@ -17,6 +17,14 @@ import { CityCamera, tileVisible, visibleTileRange } from "./camera";
 import { alpha, lightingFor, lit, type Lighting } from "./palette";
 import { drawDiamond } from "./drawIso";
 import { buildingDrawHeight, mastHeight } from "./pickBuilding";
+import {
+  createFireworkSparks,
+  drawStadiumFireworks,
+  stadiumFireworksOn,
+  stepFireworks,
+  type FireworkSpark,
+} from "@/lib/city/fireworks";
+import { findStadium } from "@/lib/city/stadium";
 
 interface GroundCache {
   canvas: HTMLCanvasElement;
@@ -53,6 +61,7 @@ export class CityRenderer {
   private vig: CanvasGradient | null = null;
   private vehiclesByRow = new Map<number, CityState["vehicles"]>();
   private citizensByRow = new Map<number, CityState["citizens"]>();
+  private fireworks: FireworkSpark[] = createFireworkSparks(160);
 
   resize(width: number, height: number, dpr = 1) {
     this.width = width;
@@ -164,6 +173,26 @@ export class CityRenderer {
 
     this.fillVignette(ctx, light);
     drawWeatherOverlay(ctx, state, this.width, this.height, this.time);
+    this.camera.apply(ctx, this.dpr);
+    this.drawFireworks(ctx, state, dt);
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+  }
+
+  private drawFireworks(ctx: CanvasRenderingContext2D, state: CityState, dt: number) {
+    const stadium = findStadium(state);
+    const on = stadiumFireworksOn(state);
+    stepFireworks(this.fireworks, on, this.time, dt, {
+      spreadX: 18,
+      spreadZ: 14,
+      z0: 0,
+      height0: 16,
+      height1: 28,
+      bursts: 2,
+      sparksPerBurst: 18,
+      rate: 2.3,
+    });
+    if (!stadium || !on) return;
+    drawStadiumFireworks(ctx, stadium, this.fireworks);
   }
 
   private bucketMovers(state: CityState, showPeople: boolean) {

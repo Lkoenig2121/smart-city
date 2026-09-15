@@ -138,8 +138,12 @@ export class InteriorControls {
     const { minX, maxX, minZ, maxZ } = this.bounds;
     if (x < minX + RADIUS || x > maxX - RADIUS) return false;
     if (z < minZ + RADIUS || z > maxZ - RADIUS) return false;
+    const feet = this.position.y - EYE_HEIGHT;
+    const head = this.position.y + 0.15;
     for (const b of this.blockers) {
       if (x > b.minX - RADIUS && x < b.maxX + RADIUS && z > b.minZ - RADIUS && z < b.maxZ + RADIUS) {
+        if (b.maxY != null && feet >= b.maxY) continue;
+        if (b.minY != null && head <= b.minY) continue;
         return false;
       }
     }
