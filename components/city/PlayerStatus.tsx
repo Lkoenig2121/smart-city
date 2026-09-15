@@ -2,6 +2,7 @@
 
 import {
   formatDollars,
+  BANK_RATE_LABEL,
   nextOfficeRank,
   OFFICE_TASK_COUNT,
   officeRank,
@@ -31,6 +32,7 @@ export function PlayerStatus({ player = readPlayer() }: Props) {
       <p className="text-sm font-semibold tabular-nums text-white">{formatDollars(totalBalance(player))}</p>
       <p className="text-[0.7rem] text-sky-100/80">
         Wallet {formatDollars(player.wallet)} · Bank {formatDollars(player.bank)}
+        {player.bank > 0 ? ` · ${BANK_RATE_LABEL}` : ""}
       </p>
       <p className="text-[0.7rem] text-slate-300">
         {player.career ? `Office · ${rank?.label}` : "No job yet"} · {shift}

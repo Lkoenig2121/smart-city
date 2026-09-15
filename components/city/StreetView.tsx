@@ -25,7 +25,7 @@ import {
   venueLabel,
   venueRole,
 } from "@/lib/city/venues";
-import { readPlayer, type PlayerState } from "@/lib/city/player";
+import { formatDollars, readPlayer, type PlayerState } from "@/lib/city/player";
 import type { MoveMode } from "@/lib/street/controls";
 import { StreetWorld } from "@/lib/street/StreetWorld";
 import { StadiumWorld } from "@/lib/street/StadiumWorld";
@@ -111,6 +111,7 @@ export function StreetView({
   const [sliderOpen, setSliderOpen] = useState(true);
   const [sleeping, setSleeping] = useState(false);
   const [sleepPhase, setSleepPhase] = useState<"night" | "morning">("night");
+  const [sleepInterest, setSleepInterest] = useState(0);
   const [spawn, setSpawn] = useState(entry);
   const [venueDoor, setVenueDoor] = useState<Building | null>(null);
   const [atOfficeComputer, setAtOfficeComputer] = useState(false);
@@ -335,6 +336,7 @@ export function StreetView({
     setSliderOpen(true);
     setSleeping(false);
     setSleepPhase("night");
+    setSleepInterest(0);
     atComputerRef.current = false;
     sleepingRef.current = false;
 
@@ -362,9 +364,10 @@ export function StreetView({
       if (document.pointerLockElement === canvas) document.exitPointerLock();
       timers.push(
         window.setTimeout(() => {
-          sleepUntilMorning(state);
+          const night = sleepUntilMorning(state);
           setClock(formatClock(state));
-          setPlayer(readPlayer());
+          setPlayer(night.player ?? readPlayer());
+          setSleepInterest(night.interest);
           setSleepPhase("morning");
           timers.push(
             window.setTimeout(() => {
@@ -992,6 +995,7 @@ export function StreetView({
         <VenueDesk
           building={venueBuilding}
           state={state}
+          player={player}
           onPlayerChange={setPlayer}
           onClose={() => {
             deskDismissedRef.current = true;
@@ -1109,6 +1113,11 @@ export function StreetView({
                   {clock.day} · {clock.date} · {clock.time}
                 </p>
                 <p className="mt-1 text-sm text-slate-400">8:00 AM wake-up</p>
+                {sleepInterest > 0 ? (
+                  <p className="mt-2 text-sm font-semibold text-amber-300">
+                    Bank interest {formatDollars(sleepInterest)}
+                  </p>
+                ) : null}
               </>
             ) : (
               <p className="mt-2 text-sm text-slate-400">Sleeping until 8:00 AM</p>

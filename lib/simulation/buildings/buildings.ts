@@ -389,6 +389,7 @@ export function createBuilding(
 export function kindLabel(target: Building | BuildingKind) {
   const kind = typeof target === "string" ? target : target.kind;
   const lodging = typeof target === "string" ? undefined : target.stats.extra?.lodging;
+  const venue = typeof target === "string" ? undefined : target.stats.extra?.venue;
   switch (kind) {
     case "house":
       return "Residence";
@@ -396,6 +397,8 @@ export function kindLabel(target: Building | BuildingKind) {
       if (lodging === "hotel") return "Hotel";
       return "Apartment";
     case "shop":
+      if (venue === "bank") return "Bank";
+      if (venue === "restaurant") return "Restaurant";
       return "Business";
     case "office":
       return "Office";
@@ -442,6 +445,7 @@ export function formatDaily(value: number) {
 export function kindEmoji(building: Building) {
   const lodging = building.stats.extra?.lodging;
   if (lodging === "hotel") return "🏨";
+  if (building.stats.extra?.venue === "bank") return "🏦";
   switch (building.kind) {
     case "house":
     case "apartment":

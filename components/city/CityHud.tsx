@@ -11,6 +11,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: "apartment", label: "Flats", hint: "Place apartments" },
   { id: "hotel", label: "Hotel", hint: "Place a hotel · $320K · click an existing hotel to add 4 floors · $80K" },
   { id: "shop", label: "Shops", hint: "Place a business" },
+  { id: "bank", label: "Bank", hint: "Place a bank, or click a shop to convert it · savings earn 3% a day" },
   { id: "office", label: "Offices", hint: "Place an office" },
   { id: "stadium", label: "Stadium", hint: "Ravens Ballpark · $750K · 5,000 people, road, parking" },
   { id: "park", label: "Parks", hint: "Grow a park tile" },

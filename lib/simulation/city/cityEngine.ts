@@ -17,6 +17,7 @@ import {
   markLodging,
   nextHotelName,
 } from "@/lib/city/lodging";
+import { venueRole, markBank, nextBankName } from "@/lib/city/venues";
 import { announceConstruction } from "@/lib/simulation/events/cityEvents";
 import { removeTrafficAt, startRoadWorks, toggleTrafficLight } from "@/lib/simulation/traffic/roadNetwork";
 import { createInitialCity, getBuildingAt, recountPopulation } from "./cityState";
@@ -167,6 +168,7 @@ export class CityEngine {
     }
 
     if (this.tool === "hotel") return this.placeHotel(x, y);
+    if (this.tool === "bank") return this.placeBank(x, y);
 
     const kind = toolToKind(this.tool);
     if (!kind) return false;
@@ -208,6 +210,38 @@ export class CityEngine {
     this.state.budget.treasury -= HOTEL_COST;
     this.mapRev += 1;
     announceConstruction(this.state, building);
+    return true;
+  }
+
+  placeBank(x: number, y: number) {
+    const existing = getBuildingAt(this.state, x, y);
+    if (existing) {
+      if (venueRole(existing) === "bank") {
+        this.selectedId = existing.id;
+        this.placementHint = "That's already a bank";
+        return false;
+      }
+      if (existing.kind === "shop" && !lodgingUse(existing)) {
+        markBank(existing, nextBankName(this.state));
+        this.selectedId = existing.id;
+        this.placementHint = `${existing.name} is open for deposits`;
+        this.mapRev += 1;
+        return true;
+      }
+      this.placementHint = "Needs a clear lot, or click a shop to convert it";
+      return false;
+    }
+
+    const placed = this.placeBuilding("shop", x, y);
+    if (!placed) {
+      this.placementHint = "Needs a clear lot";
+      return false;
+    }
+    const building = this.selectedId ? this.state.buildings.get(this.selectedId) : null;
+    if (!building) return false;
+    markBank(building, nextBankName(this.state));
+    this.placementHint = `${building.name} is open for deposits`;
+    this.mapRev += 1;
     return true;
   }
 

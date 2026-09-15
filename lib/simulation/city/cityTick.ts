@@ -8,7 +8,7 @@ import { tickCityEvents } from "../events/cityEvents";
 import { seedVehicle, stepVehicles } from "../traffic/vehicleMovement";
 import { tickRoadNetwork } from "../traffic/roadNetwork";
 import { SIM_MINUTES_PER_SECOND } from "../weather/weather";
-import { abandonOpenShift, syncPlayerShift } from "@/lib/city/player";
+import { abandonOpenShift, accrueBankInterest, payOvernightInterest, syncPlayerShift } from "@/lib/city/player";
 
 export function formatClock(state: CityState) {
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -45,21 +45,34 @@ export function canSleepNow(state: CityState) {
 
 /** Fast-forward overnight so the clock reads 8:00 AM. No-op if it isn't late enough. */
 export function sleepUntilMorning(state: CityState) {
-  if (!canSleepNow(state)) return false;
-  let remaining =
-    state.clock.minuteOfDay >= WAKE_MINUTE
-      ? 24 * 60 - state.clock.minuteOfDay + WAKE_MINUTE
-      : WAKE_MINUTE - state.clock.minuteOfDay;
+  if (!canSleepNow(state)) return { slept: false, interest: 0 };
+  const originYear = state.clock.year;
+  const originDay = state.clock.dayOfYear;
+  const fromNight = state.clock.minuteOfDay >= SLEEP_AFTER_MINUTE;
+  let remaining = fromNight
+    ? 24 * 60 - state.clock.minuteOfDay + WAKE_MINUTE
+    : WAKE_MINUTE - state.clock.minuteOfDay;
   const chunk = 30;
-  while (remaining > 0.5) {
-    const step = Math.min(chunk, remaining);
-    tickCity(state, step / SIM_MINUTES_PER_SECOND);
-    remaining -= step;
+  try {
+    while (remaining > 0.5) {
+      const step = Math.min(chunk, remaining);
+      tickCity(state, step / SIM_MINUTES_PER_SECOND, true, { skipInterest: true });
+      remaining -= step;
+    }
+  } catch {
+    // Still wake up and post interest if the overnight sim hiccups.
+  }
+  if (fromNight && state.clock.year === originYear && state.clock.dayOfYear === originDay) {
+    const next = advanceDay(state.clock.year, state.clock.dayOfYear);
+    state.clock.year = next.year;
+    state.clock.dayOfYear = next.dayOfYear;
+    state.clock.dayIndex = weekdayOf(state.clock.year, state.clock.dayOfYear);
   }
   state.clock.minuteOfDay = WAKE_MINUTE;
   abandonOpenShift();
-  tickCity(state, 0);
-  return true;
+  const { player, interest } = payOvernightInterest(state.clock);
+  tickCity(state, 0, true, { skipInterest: true });
+  return { slept: true, interest, player };
 }
 
 /** Advance the live city clock by a number of simulated minutes. */
@@ -68,7 +81,12 @@ export function skipCityMinutes(state: CityState, minutes: number) {
   tickCity(state, minutes / SIM_MINUTES_PER_SECOND);
 }
 
-export function tickCity(state: CityState, dtSeconds: number, seeded = true) {
+export function tickCity(
+  state: CityState,
+  dtSeconds: number,
+  seeded = true,
+  options?: { skipInterest?: boolean },
+) {
   const rand = seeded
     ? mulberry32((state.clock.dayIndex + 1) * 100000 + state.clock.minuteOfDay)
     : Math.random;
@@ -85,6 +103,7 @@ export function tickCity(state: CityState, dtSeconds: number, seeded = true) {
     for (const building of state.buildings.values()) {
       if (stadiumIsOpen(building)) state.budget.treasury += STADIUM_DAILY_REVENUE;
     }
+    if (!options?.skipInterest) accrueBankInterest(state.clock);
   }
   tickCityEvents(state, dtSeconds, rand, newDay);
   tickRoadNetwork(state, dtSeconds, rand);

@@ -3,11 +3,13 @@
 import { formatPrice, readPortfolio } from "@/lib/city/brokerage";
 import {
   applyForOffice,
+  BANK_RATE_LABEL,
   dayKey,
   depositToBank,
   endOfficeShift,
   formatDollars,
   inOfficeHours,
+  nextBankInterest,
   OFFICE_TASK_COUNT,
   officeRank,
   quitJob,
@@ -19,23 +21,24 @@ import {
 import { venueLabel, venueRole, type VenueRole } from "@/lib/city/venues";
 import type { Building, CityState } from "@/lib/city/types";
 import { formatMoney } from "@/lib/simulation/buildings/buildings";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 interface Props {
   building: Building;
   state: CityState;
+  player?: PlayerState;
   onPlayerChange?: (player: PlayerState) => void;
   onOpenWorkstation?: () => void;
   onClose?: () => void;
 }
 
-export function VenueDesk({ building, state, onPlayerChange, onOpenWorkstation, onClose }: Props) {
+export function VenueDesk({ building, state, player, onPlayerChange, onOpenWorkstation, onClose }: Props) {
   const role = venueRole(building) ?? "office";
   const body =
     role === "office" ? (
-      <OfficeDesk building={building} state={state} onPlayerChange={onPlayerChange} onOpenWorkstation={onOpenWorkstation} />
+      <OfficeDesk building={building} state={state} player={player} onPlayerChange={onPlayerChange} onOpenWorkstation={onOpenWorkstation} />
     ) : role === "bank" ? (
-      <BankDesk building={building} state={state} onPlayerChange={onPlayerChange} />
+      <BankDesk building={building} state={state} player={player} onPlayerChange={onPlayerChange} />
     ) : (
       <FlavorDesk building={building} state={state} role={role} />
     );
@@ -61,15 +64,17 @@ function DeskFrame({ onClose, children }: { onClose?: () => void; children: Reac
 function OfficeDesk({
   building,
   state,
+  player: held,
   onPlayerChange,
   onOpenWorkstation,
 }: {
   building: Building;
   state: CityState;
+  player?: PlayerState;
   onPlayerChange?: (player: PlayerState) => void;
   onOpenWorkstation?: () => void;
 }) {
-  const [player, setPlayer] = useState(readPlayer);
+  const [player, setPlayer] = useState(held ?? readPlayer);
   const [note, setNote] = useState<string | null>(null);
   const hired = player.career?.id === "office_worker";
   const otherJob = Boolean(player.career && !hired);
@@ -186,14 +191,20 @@ function OfficeDesk({
 function BankDesk({
   building,
   state,
+  player: held,
   onPlayerChange,
 }: {
   building: Building;
   state: CityState;
+  player?: PlayerState;
   onPlayerChange?: (player: PlayerState) => void;
 }) {
-  const [player, setPlayer] = useState(readPlayer);
+  const [player, setPlayer] = useState(held ?? readPlayer);
   const [note, setNote] = useState<string | null>(null);
+  const tomorrow = nextBankInterest(player.bank);
+  useEffect(() => {
+    if (held) setPlayer(held);
+  }, [held]);
   const move = (result: PlayerState | string, ok: string) => {
     if (typeof result === "string") {
       setNote(result);
@@ -203,26 +214,59 @@ function BankDesk({
     onPlayerChange?.(result);
     setNote(ok);
   };
+  const deposit = (amount: number) =>
+    move(depositToBank(amount, state.clock), `Deposited ${formatDollars(amount)}.`);
+  const withdraw = (amount: number) =>
+    move(withdrawFromBank(amount, state.clock), `${formatDollars(amount)} is in your wallet.`);
   return (
     <div className="rounded-2xl border border-amber-300/35 bg-[#14110c]/92 p-5 text-center shadow-2xl backdrop-blur">
         <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Bank</p>
         <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
-        <p className="mt-2 text-sm text-slate-300">Move cash between your wallet and account.</p>
+        <p className="mt-2 text-sm text-slate-300">
+          Savings earn {BANK_RATE_LABEL}. Sleep until morning to collect it — it also posts if you stay up past midnight.
+        </p>
         <p className="mt-2 text-sm font-semibold text-amber-200">
           Wallet {formatDollars(player.wallet)} · Bank {formatDollars(player.bank)}
         </p>
+        {player.bank > 0 ? (
+          <p className="mt-1 text-[0.7rem] text-sky-200/80">
+            {tomorrow > 0
+              ? `Tomorrow's interest about ${formatDollars(tomorrow)}`
+              : "Deposit a bit more to start earning overnight."}
+          </p>
+        ) : (
+          <p className="mt-1 text-[0.7rem] text-slate-400">Wallet cash does not earn interest.</p>
+        )}
         <div className="mt-4 grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => move(depositToBank(player.wallet, state.clock), "Deposited to the bank.")}
-            className="rounded-xl bg-amber-400 px-3 py-2.5 text-sm font-semibold text-[#1a1206]"
+            disabled={player.wallet < 100}
+            onClick={() => deposit(100)}
+            className="rounded-xl bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-40"
+          >
+            Deposit $100
+          </button>
+          <button
+            type="button"
+            disabled={player.bank < 100}
+            onClick={() => withdraw(100)}
+            className="rounded-xl bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-40"
+          >
+            Withdraw $100
+          </button>
+          <button
+            type="button"
+            disabled={player.wallet < 1}
+            onClick={() => deposit(player.wallet)}
+            className="rounded-xl bg-amber-400 px-3 py-2.5 text-sm font-semibold text-[#1a1206] disabled:opacity-40"
           >
             Deposit all
           </button>
           <button
             type="button"
-            onClick={() => move(withdrawFromBank(player.bank, state.clock), "Cash is in your wallet.")}
-            className="rounded-xl bg-white/10 px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/20"
+            disabled={player.bank < 1}
+            onClick={() => withdraw(player.bank)}
+            className="rounded-xl bg-white/10 px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-40"
           >
             Withdraw all
           </button>

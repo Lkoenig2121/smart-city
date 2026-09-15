@@ -5,6 +5,8 @@ const STORAGE = "smartcity-player";
 const STARTING_WALLET = 500;
 const LEDGER_LIMIT = 40;
 
+export const BANK_DAILY_RATE = 0.03;
+export const BANK_RATE_LABEL = "3% a day";
 export const OFFICE_SHIFT_START = 9 * 60;
 export const OFFICE_SHIFT_END = 22 * 60;
 export const OFFICE_TASK_COUNT = 10;
@@ -58,10 +60,11 @@ export interface PlayerState {
   ledger: LedgerEntry[];
   career: OfficeCareer | null;
   shift: ActiveShift | null;
+  lastInterestDay: string | null;
 }
 
 export function emptyPlayer(): PlayerState {
-  return { wallet: STARTING_WALLET, bank: 0, ledger: [], career: null, shift: null };
+  return { wallet: STARTING_WALLET, bank: 0, ledger: [], career: null, shift: null, lastInterestDay: null };
 }
 
 export function readPlayer(): PlayerState {
@@ -264,6 +267,56 @@ export function withdrawFromBank(amount: number, clock: CityClock): PlayerState 
   return player;
 }
 
+/** Posts compound interest on savings once per calendar day if the player stays up past midnight. */
+export function accrueBankInterest(clock: CityClock) {
+  if (typeof window === "undefined") return;
+  const player = readPlayer();
+  if (player.bank <= 0) return player;
+  if (hasBankInterestToday(player, clock)) return player;
+  return applyBankInterest(player, clock, 1);
+}
+
+/** Always compounds one night of savings. Sleep uses this so the balance visibly moves. */
+export function payOvernightInterest(clock: CityClock) {
+  const player = readPlayer();
+  if (player.bank <= 0) return { player, interest: 0 };
+  const before = player.bank;
+  const next = applyBankInterest(player, clock, 1);
+  return { player: next, interest: next.bank - before };
+}
+
+function applyBankInterest(player: PlayerState, clock: CityClock, nights: number) {
+  let gained = 0;
+  const rounds = Math.max(1, nights);
+  for (let i = 0; i < rounds; i++) {
+    const slice = Math.round(player.bank * BANK_DAILY_RATE);
+    if (slice < 1) break;
+    player.bank += slice;
+    gained += slice;
+  }
+  if (gained <= 0) return player;
+  const days = rounds > 1 ? ` · ${rounds} days` : "";
+  pushLedger(player, gained, "earn", `Bank interest · ${BANK_RATE_LABEL}${days}`, clock);
+  player.lastInterestDay = dayKey(clock);
+  writePlayer(player);
+  return player;
+}
+
+export function nextBankInterest(bank: number) {
+  if (bank <= 0) return 0;
+  return Math.round(bank * BANK_DAILY_RATE);
+}
+
+function hasBankInterestToday(player: PlayerState, clock: CityClock) {
+  return player.ledger.some(
+    (entry) =>
+      entry.kind === "earn" &&
+      entry.year === clock.year &&
+      entry.dayOfYear === clock.dayOfYear &&
+      entry.description.startsWith("Bank interest"),
+  );
+}
+
 function settleShift(player: PlayerState, _clock: CityClock, _payRemainder: boolean) {
   pauseShift(player);
 }
@@ -341,6 +394,7 @@ function parsePlayer(value: unknown): PlayerState {
     ledger: Array.isArray(raw.ledger) ? raw.ledger.filter(isLedgerEntry).slice(0, LEDGER_LIMIT) : [],
     career: parseCareer(raw.career),
     shift: parseShift(raw.shift),
+    lastInterestDay: typeof raw.lastInterestDay === "string" ? raw.lastInterestDay : null,
   };
 }
 
