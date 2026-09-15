@@ -1,11 +1,11 @@
-import { TILE_H, TILE_W, diamondPoints, gridToScreen } from "@/lib/city/iso";
+import { TILE_H, gridToScreen } from "@/lib/city/iso";
 import { hash2 } from "@/lib/city/rng";
 import type { Building } from "@/lib/city/types";
 import { lodgingUse } from "@/lib/city/lodging";
 import { hasExteriorBalconies } from "@/lib/city/balconies";
 import { venueRole } from "@/lib/city/venues";
 import { paintGraffiti } from "./drawBridges";
-import { drawGroundShadow, drawIsoBox, drawSlopedRoof, drawWindowGrid } from "./drawIso";
+import { drawGroundShadow, drawIsoBox, drawSlopedRoof, drawWindowGrid, isoBoxCorners } from "./drawIso";
 import { alpha, lit, mix, shade, type Lighting } from "./palette";
 
 export function drawBuilding(
@@ -71,16 +71,16 @@ export function drawBuilding(
   drawBuildingSign(ctx, building, light);
 
   if (selected) {
-    const d = diamondPoints(building.origin.x, building.origin.y);
+    const box = isoBoxCorners(building.origin.x, building.origin.y, building.width, building.depth, 0, 4);
     ctx.save();
     ctx.strokeStyle = alpha("#f4d03f", 0.95);
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 4]);
     ctx.beginPath();
-    ctx.moveTo(d.top.x, d.top.y - 8);
-    ctx.lineTo(d.right.x + 8, d.right.y);
-    ctx.lineTo(d.bottom.x, d.bottom.y + 8);
-    ctx.lineTo(d.left.x - 8, d.left.y);
+    ctx.moveTo(box.T.x, box.T.y - 8);
+    ctx.lineTo(box.R.x + 8, box.R.y);
+    ctx.lineTo(box.B.x, box.B.y + 8);
+    ctx.lineTo(box.L.x - 8, box.L.y);
     ctx.closePath();
     ctx.stroke();
     ctx.restore();
@@ -182,6 +182,10 @@ function drawApartment(ctx: CanvasRenderingContext2D, b: Building, light: Lighti
 }
 
 function drawShop(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
+  if (venueRole(b) === "mall") {
+    drawMall(ctx, b, light);
+    return;
+  }
   const h = 30;
   const left = lit(b.wallColor, light, "left");
   const right = lit(b.wallColor, light, "right");
@@ -202,6 +206,49 @@ function drawShop(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
   );
   drawSlopedRoof(ctx, box, lit(shade(b.roofColor, 0.8), light, "left"), lit(b.roofColor, light, "right"));
   tagStreetWall(ctx, b, box, light);
+}
+
+function mallDrawHeight(b: Building) {
+  return 28 + Math.max(3, b.floors) * 12;
+}
+
+function drawMall(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
+  const h = mallDrawHeight(b);
+  const glassL = lit("#9eb8c6", light, "left");
+  const glassR = lit("#b7c9d4", light, "right");
+  const gold = lit(b.accentColor, light, "right");
+  const roof = lit("#6a5640", light, "top");
+  const box = drawIsoBox(ctx, b.origin.x, b.origin.y, b.width, b.depth, h, glassL, glassR, roof, 7);
+  const cols = Math.max(8, b.width + 2);
+  const rows = Math.max(3, b.floors);
+  drawWindowGrid(ctx, box.L.x, box.L.y, box.B.x, box.B.y, box.Be.x, box.Be.y, box.Le.x, box.Le.y, cols, rows, glassColor(light, 0.55), "#7a8c98");
+  drawWindowGrid(ctx, box.B.x, box.B.y, box.R.x, box.R.y, box.Re.x, box.Re.y, box.Be.x, box.Be.y, cols, rows, glassColor(light, 0.48), "#8a9aa4");
+  ctx.beginPath();
+  ctx.moveTo(box.B.x, box.B.y - 18);
+  ctx.lineTo(box.R.x, box.R.y - 18);
+  ctx.lineTo(box.R.x + 10, box.R.y - 8);
+  ctx.lineTo(box.B.x, box.B.y - 8);
+  ctx.closePath();
+  ctx.fillStyle = gold;
+  ctx.fill();
+  fillPoly(ctx, [
+    quadPt(box.Te, box.Re, box.Be, box.Le, 0.28, 0.28),
+    quadPt(box.Te, box.Re, box.Be, box.Le, 0.72, 0.28),
+    quadPt(box.Te, box.Re, box.Be, box.Le, 0.72, 0.72),
+    quadPt(box.Te, box.Re, box.Be, box.Le, 0.28, 0.72),
+  ], lit("#d7eef8", light, "top"));
+  fillPoly(ctx, [
+    quadPt(box.Te, box.Re, box.Be, box.Le, 0.12, 0.16),
+    quadPt(box.Te, box.Re, box.Be, box.Le, 0.24, 0.16),
+    quadPt(box.Te, box.Re, box.Be, box.Le, 0.24, 0.3),
+    quadPt(box.Te, box.Re, box.Be, box.Le, 0.12, 0.3),
+  ], lit("#8a7a6a", light, "right"));
+  fillPoly(ctx, [
+    quadPt(box.Te, box.Re, box.Be, box.Le, 0.76, 0.62),
+    quadPt(box.Te, box.Re, box.Be, box.Le, 0.9, 0.62),
+    quadPt(box.Te, box.Re, box.Be, box.Le, 0.9, 0.78),
+    quadPt(box.Te, box.Re, box.Be, box.Le, 0.76, 0.78),
+  ], lit("#8a7a6a", light, "right"));
 }
 
 function drawOffice(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
@@ -389,7 +436,7 @@ function signLift(b: Building) {
     case "apartment":
       return 18 + b.floors * 14 + 12;
     case "shop":
-      return 40;
+      return venueRole(b) === "mall" ? mallDrawHeight(b) + 10 : 40;
     case "office":
       return 22 + b.floors * 13 + 12;
     case "skyscraper":
@@ -799,6 +846,3 @@ function roofProps(ctx: CanvasRenderingContext2D, box: ReturnType<typeof drawIso
   ctx.fillStyle = lit("#7b8490", light, "top");
   ctx.fillRect(box.Be.x + 4, box.Be.y - 5, 7, 5);
 }
-
-void TILE_W;
-void TILE_H;

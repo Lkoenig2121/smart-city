@@ -134,6 +134,11 @@ export class InteriorControls {
     this.position.z = nextZ;
   }
 
+  nudge(dx: number, dz: number) {
+    this.step(dx, 0);
+    this.step(0, dz);
+  }
+
   private passable(x: number, z: number) {
     const { minX, maxX, minZ, maxZ } = this.bounds;
     if (x < minX + RADIUS || x > maxX - RADIUS) return false;

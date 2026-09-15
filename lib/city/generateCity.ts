@@ -1,7 +1,7 @@
 import { createBuilding, footprintFor } from "@/lib/simulation/buildings/buildings";
 import { markLodging } from "./lodging";
 import { SUBWAY_STATIONS, markSubwayStation } from "./subway";
-import { markNotableVenues } from "./venues";
+import { markMall, markNotableVenues } from "./venues";
 import {
   RIVER_W,
   riverXAt,
@@ -189,9 +189,15 @@ export function generateCity(seed = 20260903): CityState {
 
   const place = (kind: BuildingKind, x: number, y: number) => {
     const fp = footprintFor(kind);
-    if (!canPlace(tiles, x, y, fp.w, fp.d)) return null;
+    return placeSized(kind, x, y, fp.w, fp.d);
+  };
+
+  const placeSized = (kind: BuildingKind, x: number, y: number, w: number, d: number) => {
+    if (!canPlace(tiles, x, y, w, d)) return null;
     const id = `b${buildingIndex++}`;
     const building = createBuilding(id, kind, x, y, rand, buildingIndex);
+    building.width = w;
+    building.depth = d;
     buildings.set(id, building);
     stampBuilding(tiles, building);
     return building;
@@ -226,6 +232,9 @@ export function generateCity(seed = 20260903): CityState {
   place("police", 28, 13);
   place("fire", 31, 13);
   place("park_pavilion", 17, 25);
+
+  const mall = placeSized("shop", 28, 22, 8, 8);
+  if (mall) markMall(mall, "Harbor Mall");
 
   // Downtown core: 2x2 plots that fall between the street grid lines.
   const supertall: [number, number][] = [
@@ -315,7 +324,6 @@ export function generateCity(seed = 20260903): CityState {
     [22, 33],
     [28, 21],
     [33, 21],
-    [35, 28],
     [36, 16],
   ];
   for (const [x, y] of shopStrip) place("shop", x, y);

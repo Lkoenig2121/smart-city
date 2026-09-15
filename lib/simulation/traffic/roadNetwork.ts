@@ -17,6 +17,19 @@ export function intersectionArms(state: CityState, x: number, y: number) {
   return Number(road.north) + Number(road.east) + Number(road.south) + Number(road.west);
 }
 
+/** T-junction whose missing arm is a building wall, not a real crossing. */
+export function isSignalAgainstBuilding(state: CityState, x: number, y: number) {
+  const road = state.tiles[y]?.[x]?.road;
+  if (!road || intersectionArms(state, x, y) !== 3) return false;
+  const blocked = [
+    !road.north && state.tiles[y - 1]?.[x]?.buildingId,
+    !road.east && state.tiles[y]?.[x + 1]?.buildingId,
+    !road.south && state.tiles[y + 1]?.[x]?.buildingId,
+    !road.west && state.tiles[y]?.[x - 1]?.buildingId,
+  ];
+  return blocked.some(Boolean);
+}
+
 export function lightAt(state: CityState, x: number, y: number) {
   return state.trafficLights.find((light) => light.x === x && light.y === y) ?? null;
 }
@@ -52,6 +65,7 @@ export function seedTrafficNetwork(state: CityState, rand: () => number) {
   for (let y = 1; y < state.size - 1; y++) {
     for (let x = 1; x < state.size - 1; x++) {
       if (intersectionArms(state, x, y) < 3) continue;
+      if (isSignalAgainstBuilding(state, x, y)) continue;
       if (x % 5 !== 0 && y % 5 !== 0) continue;
       state.trafficLights.push({
         x,

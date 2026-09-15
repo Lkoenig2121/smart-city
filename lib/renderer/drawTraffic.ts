@@ -1,9 +1,10 @@
 import { diamondPoints, tileCenter } from "@/lib/city/iso";
 import type { CityState, TrafficLight } from "@/lib/city/types";
-import { densityAt } from "@/lib/simulation/traffic/roadNetwork";
+import { densityAt, isSignalAgainstBuilding } from "@/lib/simulation/traffic/roadNetwork";
 import { drawVehicle } from "./drawVehicles";
 import { drawDiamond } from "./drawIso";
 import { alpha, type Lighting } from "./palette";
+import { isHiddenBehindBuilding } from "./pickBuilding";
 
 export function drawTrafficOverlay(ctx: CanvasRenderingContext2D, state: CityState, light: Lighting) {
   for (let y = 0; y < state.size; y++) {
@@ -14,9 +15,12 @@ export function drawTrafficOverlay(ctx: CanvasRenderingContext2D, state: CitySta
     }
   }
   for (const work of state.roadWorks) {
+    if (isHiddenBehindBuilding(state, work.x, work.y)) continue;
     drawWorks(ctx, work.x, work.y);
   }
   for (const lamp of state.trafficLights) {
+    if (isHiddenBehindBuilding(state, lamp.x, lamp.y)) continue;
+    if (isSignalAgainstBuilding(state, lamp.x, lamp.y)) continue;
     drawSignal(ctx, lamp, light);
   }
 }
@@ -26,12 +30,14 @@ export function drawCongestionTint(ctx: CanvasRenderingContext2D, state: CitySta
     const x = Math.round(vehicle.x);
     const y = Math.round(vehicle.y);
     if (densityAt(state, x, y) < 3) continue;
+    if (isHiddenBehindBuilding(state, x, y)) continue;
     drawDiamond(ctx, x, y, alpha("#c0392b", 0.16));
   }
 }
 
 export function drawParkedCars(ctx: CanvasRenderingContext2D, state: CityState, light: Lighting) {
   for (const car of state.parked) {
+    if (isHiddenBehindBuilding(state, car.x + car.ox, car.y + car.oy)) continue;
     drawVehicle(
       ctx,
       {

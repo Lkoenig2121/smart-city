@@ -9,6 +9,7 @@ import { subwayGateTile, subwayStationId } from "@/lib/city/subway";
 import { citizenIsOutdoors } from "@/lib/simulation/citizens/citizenBehavior";
 import type { Building, CityEvent, CityState, CityWeather, Tool } from "@/lib/city/types";
 import { officeRank, readPlayer, totalBalance } from "@/lib/city/player";
+import { findMall } from "@/lib/city/venues";
 import { parkingFill, trafficFlowScore } from "@/lib/simulation/traffic/roadNetwork";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CityHud } from "./CityHud";
@@ -47,6 +48,7 @@ interface HudSnap {
   parkingFill: number;
   wallet: number;
   careerLabel: string;
+  mallExists: boolean;
 }
 
 export function CityCanvas() {
@@ -209,6 +211,7 @@ export function CityCanvas() {
           parkingFill: parkingFill(engine.state).pct,
           wallet: totalBalance(life),
           careerLabel: life.career ? officeRank(life.career.xp).label : "",
+          mallExists: Boolean(findMall(engine.state)),
         });
       }
       frame = requestAnimationFrame(loop);
@@ -358,8 +361,22 @@ export function CityCanvas() {
           <CityHud
             {...hud}
             onTool={(tool) => {
-              if (engineRef.current) engineRef.current.setTool(tool);
-              setHud((prev) => (prev ? { ...prev, tool } : prev));
+              const engine = engineRef.current;
+              if (!engine) return;
+              engine.setTool(tool);
+              setHud((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      tool: engine.tool,
+                      selected: engine.selectedId
+                        ? (engine.state.buildings.get(engine.selectedId) ?? null)
+                        : prev.selected,
+                      hoverLabel: engine.placementHint || prev.hoverLabel,
+                      mallExists: Boolean(findMall(engine.state)),
+                    }
+                  : prev,
+              );
             }}
             onClose={() => {
               if (engineRef.current) engineRef.current.selectedId = null;

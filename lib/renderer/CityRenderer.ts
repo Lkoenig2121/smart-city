@@ -1,4 +1,4 @@
-import { TILE_H, TILE_W, diamondPoints, worldBounds } from "@/lib/city/iso";
+import { TILE_H, TILE_W, worldBounds } from "@/lib/city/iso";
 import type { Building, CityState } from "@/lib/city/types";
 import type { CityEngine } from "@/lib/simulation/city/cityEngine";
 import { citizenIsOutdoors } from "@/lib/simulation/citizens/citizenBehavior";
@@ -15,8 +15,8 @@ import { drawCongestionTint, drawParkedCars, drawTrafficOverlay } from "./drawTr
 import { drawWeatherOverlay } from "./drawWeather";
 import { CityCamera, tileVisible, visibleTileRange } from "./camera";
 import { alpha, lightingFor, lit, type Lighting } from "./palette";
-import { drawDiamond } from "./drawIso";
-import { buildingDrawHeight, mastHeight } from "./pickBuilding";
+import { drawDiamond, isoBoxCorners } from "./drawIso";
+import { buildingDrawHeight, isHiddenBehindBuilding, mastHeight } from "./pickBuilding";
 import {
   createFireworkSparks,
   drawStadiumFireworks,
@@ -128,7 +128,8 @@ export class CityRenderer {
         }
         if (tile.buildingId && !drawn.has(tile.buildingId)) {
           const building = state.buildings.get(tile.buildingId);
-          if (building && building.origin.x === x && building.origin.y === y) {
+          const paint = building ? buildingPaintCell(building, view) : null;
+          if (building && paint && paint.x === x && paint.y === y) {
             drawn.add(building.id);
             this.drawCachedBuilding(ctx, building, light, lightKey, engine.selectedId === building.id);
           }
@@ -145,12 +146,14 @@ export class CityRenderer {
       const rowVehicles = this.vehiclesByRow.get(sum);
       if (rowVehicles) {
         for (const v of rowVehicles) {
+          if (isHiddenBehindBuilding(state, v.x, v.y)) continue;
           drawVehicle(ctx, v, light, deckLift(state, v.x, v.y), state);
         }
       }
       const rowCitizens = this.citizensByRow.get(sum);
       if (rowCitizens) {
         for (const c of rowCitizens) {
+          if (isHiddenBehindBuilding(state, c.x, c.y)) continue;
           drawCitizen(ctx, c, light, deckLift(state, c.x, c.y), state);
         }
       }
@@ -236,16 +239,16 @@ export class CityRenderer {
       drawBuilding(ctx, building, light, false);
     }
     if (selected) {
-      const d = diamondPoints(building.origin.x, building.origin.y);
+      const box = isoBoxCorners(building.origin.x, building.origin.y, building.width, building.depth, 0, 4);
       ctx.save();
       ctx.strokeStyle = alpha("#f4d03f", 0.95);
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 4]);
       ctx.beginPath();
-      ctx.moveTo(d.top.x, d.top.y - 8);
-      ctx.lineTo(d.right.x + 8, d.right.y);
-      ctx.lineTo(d.bottom.x, d.bottom.y + 8);
-      ctx.lineTo(d.left.x - 8, d.left.y);
+      ctx.moveTo(box.T.x, box.T.y - 8);
+      ctx.lineTo(box.R.x + 8, box.R.y);
+      ctx.lineTo(box.B.x, box.B.y + 8);
+      ctx.lineTo(box.L.x - 8, box.L.y);
       ctx.closePath();
       ctx.stroke();
       ctx.restore();
@@ -253,7 +256,7 @@ export class CityRenderer {
   }
 
   private spriteFor(building: Building, light: Lighting, lightKey: string) {
-    const key = `${lightKey}|${Math.ceil((building.constructionLeft ?? 0) / 2)}`;
+    const key = `${lightKey}|${Math.ceil((building.constructionLeft ?? 0) / 2)}|${building.width}x${building.depth}|${building.floors}|${building.stats.extra?.venue ?? building.kind}`;
     const hit = this.sprites.get(building.id);
     if (hit && hit.key === key) return hit;
     if (this.bakedThisFrame >= BAKE_PER_FRAME) return null;
@@ -370,6 +373,19 @@ function cacheLightKey(light: Lighting, weather: string) {
   ].join("|");
 }
 
+/** Last footprint tile in painter order that is still on screen. */
+function buildingPaintCell(
+  building: Building,
+  view: { x0: number; y0: number; x1: number; y1: number },
+) {
+  const x0 = Math.max(building.origin.x, view.x0);
+  const y0 = Math.max(building.origin.y, view.y0);
+  const x1 = Math.min(building.origin.x + building.width - 1, view.x1);
+  const y1 = Math.min(building.origin.y + building.depth - 1, view.y1);
+  if (x0 > x1 || y0 > y1) return null;
+  return { x: x1, y: y1 };
+}
+
 function spriteBounds(building: Building) {
   const h = buildingDrawHeight(building) + mastHeight(building);
   const { x, y, width, depth } = {
@@ -436,6 +452,3 @@ function deckLift(state: CityState, x: number, y: number) {
   const distance = Math.min(1, Math.max(dx, dy));
   return approach.bridge.deck * (1 - distance);
 }
-
-void TILE_H;
-void diamondPoints;

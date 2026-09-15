@@ -88,7 +88,9 @@ export function announceConstruction(state: CityState, building: Building) {
     headline:
       building.stats.extra?.lodging === "hotel"
         ? "New hotel construction begins."
-        : `New ${building.kind === "skyscraper" ? "skyscraper" : building.kind.replace("_", " ")} construction begins.`,
+        : building.stats.extra?.venue === "mall"
+          ? "New mall construction begins."
+          : `New ${building.kind === "skyscraper" ? "skyscraper" : building.kind.replace("_", " ")} construction begins.`,
     detail: `${building.name} is going up.`,
     x: building.origin.x,
     y: building.origin.y,

@@ -32,6 +32,7 @@ export type Tool =
   | "apartment"
   | "hotel"
   | "shop"
+  | "mall"
   | "bank"
   | "office"
   | "park"

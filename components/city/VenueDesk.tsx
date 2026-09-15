@@ -286,7 +286,7 @@ function MallDesk({ building }: { building: Building }) {
       <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Mall</p>
       <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
       <p className="mt-2 text-sm text-slate-300">
-        Four stores open off the atrium. Walk to a rack or mannequin and press E to browse. Press I for your inventory.
+        Walk the concourse into a store, or take the atrium stairs to the overlook. Press E at a rack to browse, I for inventory.
       </p>
       <ul className="mt-3 space-y-1 text-left text-sm text-slate-200">
         {STORES.map((store) => (
@@ -410,10 +410,10 @@ function deskCopy(role: VenueRole, building: Building, state: CityState) {
       };
     case "mall":
       return {
-        body: "The atrium directory lists Fashion Avenue, Sneaker District, Luxury Boutique, and the Department Store.",
+        body: "The directory lists Fashion Avenue and Sneaker District off the concourse, Luxury Boutique and the Department Store at the north end, plus the food court by the doors.",
         stat: null,
         action: "Read the directory",
-        actionNote: "Walk into a store and press E at the racks.",
+        actionNote: "Walk into a store and press E at the racks. Stairs climb the atrium.",
       };
   }
 }

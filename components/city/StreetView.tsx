@@ -1190,7 +1190,7 @@ export function StreetView({
               {venueRole(venueDoor) === "office"
                 ? " · start work at the desk"
                 : venueRole(venueDoor) === "mall"
-                  ? " · shop the atrium"
+                  ? " · shop the concourse"
                   : ""}
             </p>
           </div>
@@ -1393,7 +1393,8 @@ export function StreetView({
               </p>
             ) : venueBuilding && venueRole(venueBuilding) === "mall" ? (
               <p className="text-xs text-slate-200">
-                Walk the atrium into a store · press <span className="font-semibold text-white">E</span> at the doors to leave
+                Walk the concourse into a store · ride the escalators · press{" "}
+                <span className="font-semibold text-white">E</span> at the doors to leave
               </p>
             ) : (
               <p className="text-xs text-slate-200">

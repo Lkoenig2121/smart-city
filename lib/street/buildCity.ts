@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { Building, BuildingKind, CityState, Terrain, Tile } from "@/lib/city/types";
 import { hasExteriorBalconies, isRiversideHotel } from "@/lib/city/balconies";
 import { lodgingUse } from "@/lib/city/lodging";
+import { venueRole } from "@/lib/city/venues";
 import { BUS_STOPS, isTramTile } from "@/lib/city/transit";
 import { MeshBuilder } from "./meshBuilder";
 import { BAY_W, FLOOR_H, asphaltTexture, facade, rippleNormal, type FacadeStyle } from "./textures";
@@ -699,6 +700,7 @@ function volumeHeight(building: Building) {
     case "house":
       return floors * FLOOR_H + 2.6;
     case "shop":
+      if (venueRole(building) === "mall") return 20;
       return Math.max(2, floors) * FLOOR_H + 0.55;
     case "park_pavilion":
       return 4.7;
@@ -808,6 +810,24 @@ function addBuilding(
     }
 
     case "shop": {
+      if (venueRole(building) === "mall") {
+        const h = Math.max(15.6, Math.max(3, floors) * FLOOR_H);
+        const glassWalls = wallsFor("glass");
+        const stone = new THREE.Color("#d8cfc4");
+        const gold = new THREE.Color("#c9a44c");
+        const glass = new THREE.Color("#9eb8c6");
+        walls.walls(x0, z0, x1, z1, 0, 1.15, stone, BAY_W, FLOOR_H);
+        glassWalls.walls(x0, z0, x1, z1, 1.15, h, glass, BAY_W, FLOOR_H);
+        trimB.walls(x0 - 0.12, z0 - 0.12, x1 + 0.12, z1 + 0.12, h, h + 0.85, gold);
+        roofB.ground(x0 + 1.2, z0 + 1.2, x1 - 1.2, z1 - 1.2, h + 0.85, roof);
+        const mx = (x0 + x1) / 2;
+        trimB.box(mx - 12, z1 - 0.15, mx + 12, z1 + 3.2, 3.35, 3.72, gold);
+        trimB.box(mx - 11.2, z1 + 0.15, mx + 11.2, z1 + 2.6, 3.72, 5.4, gold);
+        trimB.box(x0 + 6, z0 + 8, x0 + 14, z0 + 16, h + 0.85, h + 3.1, roof);
+        trimB.box(x1 - 16, z0 + 10, x1 - 7, z0 + 18, h + 0.85, h + 2.6, roof);
+        trimB.box(mx - 3.2, z1 - 18, mx + 3.2, z1 - 10, h + 0.85, h + 4.4, gold);
+        break;
+      }
       const h = Math.max(2, floors) * FLOOR_H;
       // Glazed shopfront below, solid wall above.
       walls.walls(x0, z0, x1, z1, 3.4, h, wall, BAY_W, FLOOR_H);

@@ -74,6 +74,36 @@ export function venueGateTile(building: Building) {
   };
 }
 
+export function findMall(state: CityState) {
+  for (const building of state.buildings.values()) {
+    if (venueRole(building) === "mall") return building;
+  }
+  return null;
+}
+
+export const MALL_FOOTPRINT = { w: 8, d: 8 };
+export const MALL_COST = 480_000;
+export const MALL_BUILD_SECONDS = 24;
+export const MALL_DAILY_REVENUE = 100_000;
+
+export function mallPlacementError(state: CityState, x: number, y: number): string | null {
+  if (findMall(state)) return "The city already has a mall · bulldoze it to place another";
+  const { w, d } = MALL_FOOTPRINT;
+  for (let dy = 0; dy < d; dy++) {
+    for (let dx = 0; dx < w; dx++) {
+      const tile = state.tiles[y + dy]?.[x + dx];
+      if (!tile) return "Needs a clear 8×8 plot";
+      if (tile.road || tile.buildingId || tile.terrain === "water") {
+        return "Needs a clear 8×8 plot (no road, water, or building)";
+      }
+    }
+  }
+  if (state.budget.treasury < MALL_COST) {
+    return `Costs $${(MALL_COST / 1000).toFixed(0)}K — treasury is short`;
+  }
+  return null;
+}
+
 export function markVenue(building: Building, role: VenueRole, name?: string) {
   building.stats.extra = { ...building.stats.extra, venue: role };
   if (name) building.name = name;
@@ -114,9 +144,10 @@ export function markMall(building: Building, name = "Harbor Mall") {
   building.wallColor = "#ead9c4";
   building.roofColor = "#6a3a32";
   building.accentColor = "#c9a44c";
-  building.stats.jobs = Math.max(building.stats.jobs, 48);
-  building.stats.employees = Math.max(building.stats.employees, 36);
-  building.stats.revenue = Math.max(building.stats.revenue, 9200);
+  building.floors = Math.max(building.floors, 3);
+  building.stats.jobs = Math.max(building.stats.jobs, 120);
+  building.stats.employees = Math.max(building.stats.employees, 90);
+  building.stats.revenue = Math.max(building.stats.revenue, MALL_DAILY_REVENUE);
 }
 
 export function venueLabel(role: VenueRole) {
@@ -182,17 +213,17 @@ export function markNotableVenues(buildings: Map<string, Building>) {
   const list = [...buildings.values()].sort(
     (a, b) => a.origin.y - b.origin.y || a.origin.x - b.origin.x,
   );
-  const shops = list.filter((b) => b.kind === "shop" && !b.stats.extra?.waterfront);
+  const shops = list.filter((b) => b.kind === "shop" && !b.stats.extra?.waterfront && venueRole(b) !== "mall");
   if (shops[0]) markVenue(shops[0], "shop");
   if (shops[1]) markVenue(shops[1], "restaurant");
   if (shops[2]) markBank(shops[2], "Riverside Trust");
   if (shops[3]) markVenue(shops[3], "shop");
   if (shops[4]) markVenue(shops[4], "restaurant");
-  const harborMall =
-    list.find((building) => building.kind === "shop" && building.origin.x === 3 && building.origin.y === 13) ??
-    shops.find((_, i) => i > 4);
-  if (harborMall) markMall(harborMall, "Harbor Mall");
-  const secondBank = shops.find((shop, i) => i > 4 && shop !== harborMall && venueRole(shop) !== "mall");
+  if (!list.some((building) => venueRole(building) === "mall")) {
+    const harborMall = shops.find((_, i) => i > 4);
+    if (harborMall) markMall(harborMall, "Harbor Mall");
+  }
+  const secondBank = shops.find((shop, i) => i > 4 && venueRole(shop) !== "mall");
   if (secondBank) markBank(secondBank, "Northline Savings");
 
   const offices = list.filter((b) => b.kind === "office");

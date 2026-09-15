@@ -17,7 +17,7 @@ import {
   markLodging,
   nextHotelName,
 } from "@/lib/city/lodging";
-import { venueRole, markBank, nextBankName } from "@/lib/city/venues";
+import { venueRole, markBank, markMall, nextBankName, findMall, mallPlacementError, MALL_COST, MALL_BUILD_SECONDS, MALL_FOOTPRINT } from "@/lib/city/venues";
 import { announceConstruction } from "@/lib/simulation/events/cityEvents";
 import { removeTrafficAt, startRoadWorks, toggleTrafficLight } from "@/lib/simulation/traffic/roadNetwork";
 import { createInitialCity, getBuildingAt, recountPopulation } from "./cityState";
@@ -58,7 +58,17 @@ export class CityEngine {
   }
 
   setTool(tool: Tool) {
+    if (tool === "mall") {
+      const mall = findMall(this.state);
+      if (mall) {
+        this.tool = "inspect";
+        this.selectedId = mall.id;
+        this.placementHint = "The city already has a mall · bulldoze it to place another";
+        return;
+      }
+    }
     this.tool = tool;
+    this.placementHint = "";
   }
 
   applyTool(x: number, y: number) {
@@ -169,6 +179,7 @@ export class CityEngine {
 
     if (this.tool === "hotel") return this.placeHotel(x, y);
     if (this.tool === "bank") return this.placeBank(x, y);
+    if (this.tool === "mall") return this.placeMall(x, y);
 
     const kind = toolToKind(this.tool);
     if (!kind) return false;
@@ -221,7 +232,7 @@ export class CityEngine {
         this.placementHint = "That's already a bank";
         return false;
       }
-      if (existing.kind === "shop" && !lodgingUse(existing)) {
+      if (existing.kind === "shop" && !lodgingUse(existing) && venueRole(existing) !== "mall") {
         markBank(existing, nextBankName(this.state));
         this.selectedId = existing.id;
         this.placementHint = `${existing.name} is open for deposits`;
@@ -242,6 +253,37 @@ export class CityEngine {
     markBank(building, nextBankName(this.state));
     this.placementHint = `${building.name} is open for deposits`;
     this.mapRev += 1;
+    return true;
+  }
+
+  placeMall(x: number, y: number) {
+    const existing = getBuildingAt(this.state, x, y);
+    if (existing && venueRole(existing) === "mall") {
+      this.selectedId = existing.id;
+      this.placementHint = "The city already has a mall · bulldoze it to place another";
+      return false;
+    }
+    const error = mallPlacementError(this.state, x, y);
+    if (error) {
+      const mall = findMall(this.state);
+      if (mall) this.selectedId = mall.id;
+      this.placementHint = error;
+      return false;
+    }
+    const placed = this.placeBuilding("shop", x, y, false, MALL_FOOTPRINT);
+    if (!placed) {
+      this.placementHint = "Needs a clear 8×8 plot";
+      return false;
+    }
+    const building = this.selectedId ? this.state.buildings.get(this.selectedId) : null;
+    if (!building) return false;
+    markMall(building, "Harbor Mall");
+    building.constructionLeft = MALL_BUILD_SECONDS;
+    building.stats.status = "closed";
+    this.state.budget.treasury -= MALL_COST;
+    this.placementHint = `${building.name} is under construction`;
+    this.mapRev += 1;
+    announceConstruction(this.state, building);
     return true;
   }
 
@@ -271,8 +313,8 @@ export class CityEngine {
     return true;
   }
 
-  placeBuilding(kind: BuildingKind, x: number, y: number, finish = true) {
-    const fp = footprintFor(kind);
+  placeBuilding(kind: BuildingKind, x: number, y: number, finish = true, size?: { w: number; d: number }) {
+    const fp = size ?? footprintFor(kind);
     for (let dy = 0; dy < fp.d; dy++) {
       for (let dx = 0; dx < fp.w; dx++) {
         const tile = this.state.tiles[y + dy]?.[x + dx];
@@ -281,6 +323,8 @@ export class CityEngine {
     }
     const id = `b${this.state.buildings.size + 40}-${x}-${y}`;
     const building = createBuilding(id, kind, x, y, Math.random, this.state.buildings.size);
+    building.width = fp.w;
+    building.depth = fp.d;
     this.state.buildings.set(id, building);
     for (let dy = 0; dy < building.depth; dy++) {
       for (let dx = 0; dx < building.width; dx++) {

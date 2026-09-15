@@ -399,6 +399,7 @@ export function kindLabel(target: Building | BuildingKind) {
     case "shop":
       if (venue === "bank") return "Bank";
       if (venue === "restaurant") return "Restaurant";
+      if (venue === "mall") return "Mall";
       return "Business";
     case "office":
       return "Office";
@@ -446,6 +447,7 @@ export function kindEmoji(building: Building) {
   const lodging = building.stats.extra?.lodging;
   if (lodging === "hotel") return "🏨";
   if (building.stats.extra?.venue === "bank") return "🏦";
+  if (building.stats.extra?.venue === "mall") return "🏬";
   switch (building.kind) {
     case "house":
     case "apartment":

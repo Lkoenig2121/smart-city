@@ -1,6 +1,7 @@
 import { hash2 } from "@/lib/city/rng";
 import { lodgingUse } from "@/lib/city/lodging";
 import { isGameNight } from "@/lib/city/stadium";
+import { MALL_DAILY_REVENUE, venueRole } from "@/lib/city/venues";
 import type { Building, BuildingKind, CityState } from "@/lib/city/types";
 
 export function isResidential(building: Building) {
@@ -132,7 +133,10 @@ export function tickBuildingStats(state: CityState) {
     }
 
     const rate = outputRate(building.kind, hotel);
-    if (building.kind === "baseball_stadium") {
+    if (venueRole(building) === "mall") {
+      const open = !(building.constructionLeft && building.constructionLeft > 0);
+      building.stats.revenue = open ? Math.round(MALL_DAILY_REVENUE * (occupancy > 0.35 ? 1 : 0.4)) : 0;
+    } else if (building.kind === "baseball_stadium") {
       building.stats.revenue = Math.round(15_000 * (occupancy > 0.5 ? 1 : 0.22));
     } else if (rate > 0) {
       building.stats.revenue = Math.round(building.stats.employees * rate);

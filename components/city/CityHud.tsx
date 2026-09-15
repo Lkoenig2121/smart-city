@@ -11,6 +11,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: "apartment", label: "Flats", hint: "Place apartments" },
   { id: "hotel", label: "Hotel", hint: "Place a hotel · $320K · click an existing hotel to add 4 floors · $80K" },
   { id: "shop", label: "Shops", hint: "Place a business" },
+  { id: "mall", label: "Mall", hint: "Harbor Mall · $480K · 8×8 · only one in the city" },
   { id: "bank", label: "Bank", hint: "Place a bank, or click a shop to convert it · savings earn 3% a day" },
   { id: "office", label: "Offices", hint: "Place an office" },
   { id: "stadium", label: "Stadium", hint: "Ravens Ballpark · $750K · 5,000 people, road, parking" },
@@ -41,6 +42,7 @@ interface HudProps {
   parkingFill: number;
   wallet: number;
   careerLabel: string;
+  mallExists?: boolean;
   onTool: (tool: Tool) => void;
   onClose: () => void;
   onEnterStreet: () => void;
@@ -65,6 +67,7 @@ export function CityHud({
   parkingFill,
   wallet,
   careerLabel,
+  mallExists = false,
   onTool,
   onClose,
   onEnterStreet,
@@ -142,17 +145,24 @@ export function CityHud({
         <div className="pointer-events-auto rounded-2xl border border-white/10 bg-[#101826]/78 p-2 shadow-2xl backdrop-blur-md">
           <div className="flex flex-wrap items-center justify-center gap-1.5">
             {TOOLS.map((item) => {
-              const active = tool === item.id;
+              const blocked = item.id === "mall" && mallExists;
+              const active = tool === item.id && !blocked;
               return (
                 <button
                   key={item.id}
                   type="button"
-                  title={item.hint}
+                  title={
+                    blocked
+                      ? "The city already has a mall · bulldoze it to place another"
+                      : item.hint
+                  }
                   onClick={() => onTool(item.id)}
                   className={`rounded-xl px-3 py-2 text-sm font-medium transition ${
                     active
                       ? "bg-white text-[#132033]"
-                      : "text-white/80 hover:bg-white/10"
+                      : blocked
+                        ? "text-white/35 hover:bg-white/5"
+                        : "text-white/80 hover:bg-white/10"
                   }`}
                 >
                   {item.label}

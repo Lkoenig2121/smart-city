@@ -1,5 +1,6 @@
 import { TILE_H, TILE_W, gridToScreen } from "@/lib/city/iso";
 import type { Building, CityState } from "@/lib/city/types";
+import { venueRole } from "@/lib/city/venues";
 import { isoBoxCorners } from "./drawIso";
 
 type Pt = { x: number; y: number };
@@ -11,7 +12,7 @@ export function buildingDrawHeight(b: Building) {
     case "apartment":
       return 18 + b.floors * 14;
     case "shop":
-      return 36;
+      return venueRole(b) === "mall" ? 28 + Math.max(3, b.floors) * 12 : 36;
     case "office":
       return 22 + b.floors * 13;
     case "skyscraper":
@@ -79,6 +80,26 @@ function hitsBuilding(px: number, py: number, b: Building) {
     pointInQuad(p, box.R, box.B, box.Be, box.Re) ||
     hitsMast(px, py, b, h)
   );
+}
+
+function buildingFrontSum(b: Building) {
+  return b.origin.x + b.width - 1 + (b.origin.y + b.depth - 1);
+}
+
+/** True when a world point sits inside a larger building drawn later in the iso pass. */
+export function isHiddenBehindBuilding(state: CityState, gx: number, gy: number) {
+  const p = gridToScreen(gx, gy);
+  return isHiddenBehindBuildingAt(state, p.x, p.y + TILE_H / 2, gx + gy);
+}
+
+export function isHiddenBehindBuildingAt(state: CityState, px: number, py: number, painterSum: number) {
+  for (const building of state.buildings.values()) {
+    if (building.width <= 1 && building.depth <= 1) continue;
+    if (painterSum >= buildingFrontSum(building)) continue;
+    if (!inReach(px, py, building)) continue;
+    if (hitsBuilding(px, py, building)) return true;
+  }
+  return false;
 }
 
 function frontKey(b: Building) {

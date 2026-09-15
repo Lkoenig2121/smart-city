@@ -129,7 +129,7 @@ export const WATERFRONT_PLOTS: WaterfrontPlot[] = [
   { kind: "shop", x: 1, y: 10, name: "Riverside Marina", role: "shop", district: "marina", hint: "Slips · fuel" },
   { kind: "shop", x: 3, y: 10, name: "Dockside Grill", role: "restaurant", district: "marina" },
   { kind: "shop", x: 1, y: 13, name: "Wharf Kitchen", role: "restaurant", district: "marina" },
-  { kind: "shop", x: 3, y: 13, name: "Harbor Mall", role: "mall", district: "marina", hint: "Fashion · sneakers · luxury" },
+  { kind: "shop", x: 3, y: 13, name: "Marina Outfitters", role: "shop", district: "marina", hint: "Tackle · canvas" },
   { kind: "shop", x: 1, y: 17, name: "The Landing", role: "restaurant", district: "promenade" },
   { kind: "apartment", x: 3, y: 17, name: "Quay Residences", role: "apartment", district: "promenade", floors: 7 },
   { kind: "apartment", x: 1, y: 18, name: "Bankside Flats", role: "apartment", district: "promenade", floors: 6 },
