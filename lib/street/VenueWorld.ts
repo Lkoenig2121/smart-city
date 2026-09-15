@@ -63,6 +63,10 @@ export class VenueWorld {
     return this.interior.nearExit(this.controls.position.x, this.controls.position.z);
   }
 
+  nearStore() {
+    return this.interior.nearStore?.(this.controls.position.x, this.controls.position.z) ?? null;
+  }
+
   resize(width: number, height: number) {
     this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();

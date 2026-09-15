@@ -358,6 +358,7 @@ function signSpec(b: Building): { label: string; color: string; ink: string } | 
       const role = venueRole(b);
       if (role === "restaurant") return { label: "EAT", color: "#c0392b", ink: "#fff8f2" };
       if (role === "bank") return { label: "BANK", color: "#2c3e6b", ink: "#eef3f8" };
+      if (role === "mall") return { label: "MALL", color: "#c9a44c", ink: "#1a1206" };
       return { label: "SHOP", color: b.accentColor, ink: "#fff8f2" };
     }
     case "office":

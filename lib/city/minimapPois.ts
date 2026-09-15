@@ -14,6 +14,7 @@ export type PoiKind =
   | "city_hall"
   | "stadium"
   | "bank"
+  | "mall"
   | "office"
   | "bus"
   | "marina"
@@ -30,6 +31,7 @@ export const POI_LEGEND: { kind: PoiKind; label: string }[] = [
   { kind: "city_hall", label: "Hall" },
   { kind: "stadium", label: "Stadium" },
   { kind: "bank", label: "Bank" },
+  { kind: "mall", label: "Mall" },
   { kind: "office", label: "Jobs" },
   { kind: "bus", label: "Bus" },
   { kind: "marina", label: "Marina" },
@@ -50,6 +52,7 @@ export function poiKind(building: Building): PoiKind | null {
   if (building.kind === "baseball_stadium") return "stadium";
   if (isJobBuilding(building)) return "office";
   if (building.stats.extra?.venue === "bank") return "bank";
+  if (building.stats.extra?.venue === "mall") return "mall";
   return null;
 }
 
@@ -71,6 +74,7 @@ const FILL: Record<PoiKind, string> = {
   city_hall: "#b8953a",
   stadium: "#1f4d8c",
   bank: "#2f5d4a",
+  mall: "#c9a44c",
   office: "#3d9ad1",
   bus: "#5d7384",
   marina: "#1d6a8a",
@@ -172,6 +176,10 @@ function drawGlyph(
       ctx.fillRect(cx - r * 0.06, cy - r * 0.18, r * 0.12, r * 0.4);
       ctx.fillRect(cx + r * 0.2, cy - r * 0.18, r * 0.12, r * 0.4);
       ctx.fillRect(cx - r * 0.4, cy - r * 0.3, r * 0.8, r * 0.14);
+      break;
+    case "mall":
+      ctx.fillRect(cx - r * 0.42, cy - r * 0.18, r * 0.84, r * 0.48);
+      ctx.fillRect(cx - r * 0.22, cy - r * 0.42, r * 0.44, r * 0.22);
       break;
     case "office":
       ctx.strokeStyle = "#f7f4ea";

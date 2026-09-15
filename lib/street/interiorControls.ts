@@ -24,6 +24,7 @@ export class InteriorControls {
   yaw = 0;
   pitch = 0;
   enabled = true;
+  boost = { walk: 1, run: 1, jump: 1 };
 
   private velocity = new THREE.Vector3();
   private keys = new InputKeys();
@@ -56,6 +57,7 @@ export class InteriorControls {
   }
 
   look(dx: number, dy: number) {
+    if (!this.enabled) return;
     this.yaw -= dx * LOOK_SENSITIVITY;
     this.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, this.pitch - dy * LOOK_SENSITIVITY));
   }
@@ -74,7 +76,7 @@ export class InteriorControls {
     if (this.has("KeyA", "ArrowLeft")) r -= 1;
 
     const running = this.keys.running;
-    const speed = running ? RUN_SPEED : WALK_SPEED;
+    const speed = (running ? RUN_SPEED : WALK_SPEED) * (running ? this.boost.run : this.boost.walk);
     const accel = running ? RUN_ACCEL : ACCEL;
     const sin = Math.sin(this.yaw);
     const cos = Math.cos(this.yaw);
@@ -101,7 +103,7 @@ export class InteriorControls {
 
     const floor = this.groundY(this.position.x, this.position.z) + EYE_HEIGHT;
     if (this.grounded && this.has("Space")) {
-      this.velocity.y = JUMP_SPEED;
+      this.velocity.y = JUMP_SPEED * this.boost.jump;
       this.grounded = false;
     }
     if (!this.grounded) {

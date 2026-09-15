@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Building } from "@/lib/city/types";
+import type { ClothStore } from "@/lib/city/clothing";
 import { venueRole, type VenueRole } from "@/lib/city/venues";
 import type { Blocker } from "./buildCity";
 import { MeshBuilder } from "./meshBuilder";
@@ -12,6 +13,7 @@ export interface VenueInterior {
   groundAt: (x: number, z: number) => number;
   nearDesk: (x: number, z: number) => boolean;
   nearExit: (x: number, z: number) => boolean;
+  nearStore?: (x: number, z: number) => ClothStore | null;
   dispose: () => void;
 }
 
@@ -33,12 +35,14 @@ const PALETTE: Record<VenueRole, Palette> = {
   shop: { floor: "#d9c4a8", wall: "#f6e6cf", trim: "#6a3a32", accent: "#3f4d5c", furniture: "#c4a882" },
   restaurant: { floor: "#3a2a1c", wall: "#5a3d28", trim: "#c9a44c", accent: "#7a2e2e", furniture: "#2c1c14" },
   bank: { floor: "#e8dcc8", wall: "#f4efe6", trim: "#2f5d4a", accent: "#c9a44c", furniture: "#3a322c" },
+  mall: { floor: "#d8cfc4", wall: "#f4efe6", trim: "#c9a44c", accent: "#6a3a32", furniture: "#5a3d28" },
   house: { floor: "#c4a882", wall: "#f3d7b5", trim: "#6d4c41", accent: "#4d5b3f", furniture: "#8b3d2e" },
   apartment: { floor: "#b7c3c9", wall: "#e6ddd2", trim: "#5c5348", accent: "#3d5a80", furniture: "#6e6256" },
 };
 
 export function buildVenueInterior(building: Building): VenueInterior {
   const role = venueRole(building) ?? "office";
+  if (role === "mall") return buildMallInterior();
   const pal = PALETTE[role];
   const group = new THREE.Group();
   const blockers: Blocker[] = [];
@@ -95,6 +99,128 @@ export function buildVenueInterior(building: Building): VenueInterior {
       for (const item of disposables) item.dispose();
     },
   };
+}
+
+const MALL_BAYS: { id: ClothStore; minX: number; maxX: number; minZ: number; maxZ: number; color: string }[] = [
+  { id: "fashion", minX: -15.4, maxX: -7.0, minZ: -1.8, maxZ: 9.0, color: "#c45c4a" },
+  { id: "sneaker", minX: 7.0, maxX: 15.4, minZ: -1.8, maxZ: 9.0, color: "#2aa3a0" },
+  { id: "luxury", minX: -15.4, maxX: -1.6, minZ: -11.4, maxZ: -4.2, color: "#1a1206" },
+  { id: "department", minX: 1.6, maxX: 15.4, minZ: -11.4, maxZ: -4.2, color: "#2f5d4a" },
+];
+
+function buildMallInterior(): VenueInterior {
+  const pal = PALETTE.mall;
+  const group = new THREE.Group();
+  const blockers: Blocker[] = [];
+  const disposables: Array<{ dispose: () => void }> = [];
+  const floorB = new MeshBuilder();
+  const wallB = new MeshBuilder();
+  const trimB = new MeshBuilder();
+  const minX = -16;
+  const maxX = 16;
+  const minZ = -12.2;
+  const maxZ = 16;
+  const ceilY = 5.4;
+  const floor = new THREE.Color(pal.floor);
+  const wall = new THREE.Color(pal.wall);
+  const trim = new THREE.Color(pal.trim);
+  const accent = new THREE.Color(pal.accent);
+  const marble = new THREE.Color("#ece6dc");
+  const gold = new THREE.Color("#c9a44c");
+
+  floorB.ground(minX, minZ, maxX, maxZ, 0, floor);
+  floorB.ground(-4.4, -2.4, 4.4, 10.2, 0.02, marble);
+  addCeiling(floorB, minX, minZ, maxX, maxZ, ceilY, new THREE.Color("#f7f1e8"));
+  addCeiling(floorB, -3.6, -1.6, 3.6, 8.4, ceilY - 0.08, new THREE.Color("#fff6e4"));
+
+  wallB.box(minX, minZ, minX + 0.5, maxZ, 0, ceilY, wall);
+  wallB.box(maxX - 0.5, minZ, maxX, maxZ, 0, ceilY, wall);
+  wallB.box(minX, minZ, maxX, minZ + 0.5, 0, ceilY, wall);
+  wallB.box(minX, maxZ - 0.5, -2.4, maxZ, 0, ceilY, wall);
+  wallB.box(2.4, maxZ - 0.5, maxX, maxZ, 0, ceilY, wall);
+  wallB.box(-2.4, maxZ - 0.5, 2.4, maxZ, 2.8, ceilY, wall);
+  blockers.push({ minX, maxX: minX + 0.5, minZ, maxZ });
+  blockers.push({ minX: maxX - 0.5, maxX, minZ, maxZ });
+  blockers.push({ minX, maxX, minZ, maxZ: minZ + 0.5 });
+  blockers.push({ minX, maxX: -2.4, minZ: maxZ - 0.5, maxZ });
+  blockers.push({ minX: 2.4, maxX, minZ: maxZ - 0.5, maxZ });
+
+  for (const bay of MALL_BAYS) {
+    const color = new THREE.Color(bay.color);
+    trimB.box(bay.minX, bay.minZ, bay.maxX, bay.minZ + 0.28, 2.4, 3.2, color);
+    trimB.box(bay.minX, bay.maxZ - 0.28, bay.maxX, bay.maxZ, 2.4, 3.2, color);
+    rackRow(trimB, blockers, bay.minX + 0.7, bay.minZ + 1.1, bay.maxX - 0.7, color, gold);
+    mannequin(wallB, trimB, blockers, (bay.minX + bay.maxX) / 2, (bay.minZ + bay.maxZ) / 2, color, gold);
+  }
+
+  wallB.box(-6.8, -3.4, -6.45, 9.4, 0, 3.4, wall);
+  wallB.box(6.45, -3.4, 6.8, 9.4, 0, 3.4, wall);
+  wallB.box(-15.6, -3.8, -1.2, -3.45, 0, 3.4, wall);
+  wallB.box(1.2, -3.8, 15.6, -3.45, 0, 3.4, wall);
+
+  trimB.box(-1.35, 2.4, 1.35, 5.1, 0, 0.55, gold);
+  wallB.box(-0.55, 3.1, 0.55, 4.4, 0.55, 1.35, marble);
+  blockers.push({ minX: -1.35, maxX: 1.35, minZ: 2.4, maxZ: 5.1 });
+
+  trimB.box(-1.6, 10.4, 1.6, 12.1, 0, 1.15, accent);
+  blockers.push({ minX: -1.6, maxX: 1.6, minZ: 10.4, maxZ: 12.1 });
+
+  for (const x of [9.2, 11.0, 12.8]) {
+    wallB.box(x, 10.2, x + 1.45, 12.6, 0, 2.4, wall);
+    trimB.box(x + 0.12, 10.35, x + 1.33, 12.45, 0.05, 0.12, gold);
+    blockers.push({ minX: x, maxX: x + 1.45, minZ: 10.2, maxZ: 12.6 });
+  }
+
+  assemble(group, floorB, wallB, trimB, disposables);
+
+  return {
+    group,
+    blockers,
+    spawn: { x: 0, z: 14.2, yaw: 0, pitch: -0.06 },
+    bounds: { minX, maxX, minZ, maxZ },
+    groundAt: () => 0,
+    nearDesk: (x, z) => Math.abs(x) < 2.2 && z > 9.8 && z < 12.6,
+    nearExit: (x, z) => z > 14.4 && Math.abs(x) < 2.6,
+    nearStore: (x, z) => {
+      const bay = MALL_BAYS.find((item) => x >= item.minX && x <= item.maxX && z >= item.minZ && z <= item.maxZ);
+      return bay?.id ?? null;
+    },
+    dispose: () => {
+      for (const item of disposables) item.dispose();
+    },
+  };
+}
+
+function rackRow(
+  trimB: MeshBuilder,
+  blockers: Blocker[],
+  x0: number,
+  z: number,
+  x1: number,
+  cloth: THREE.Color,
+  rail: THREE.Color,
+) {
+  const width = x1 - x0;
+  trimB.box(x0, z, x1, z + 0.55, 1.05, 1.18, rail);
+  trimB.box(x0, z + 0.08, x1, z + 0.47, 0.2, 1.05, cloth);
+  blockers.push({ minX: x0, maxX: x1, minZ: z, maxZ: z + 0.55 });
+  trimB.box(x0 + width * 0.12, z + 2.1, x1 - width * 0.12, z + 2.55, 0.2, 1.7, cloth);
+  blockers.push({ minX: x0 + width * 0.12, maxX: x1 - width * 0.12, minZ: z + 2.1, maxZ: z + 2.55 });
+}
+
+function mannequin(
+  wallB: MeshBuilder,
+  trimB: MeshBuilder,
+  blockers: Blocker[],
+  x: number,
+  z: number,
+  cloth: THREE.Color,
+  stand: THREE.Color,
+) {
+  trimB.box(x - 0.28, z - 0.28, x + 0.28, z + 0.28, 0, 0.12, stand);
+  wallB.box(x - 0.18, z - 0.14, x + 0.18, z + 0.14, 0.12, 1.05, cloth);
+  wallB.box(x - 0.16, z - 0.16, x + 0.16, z + 0.16, 1.05, 1.38, new THREE.Color("#e0c2a2"));
+  blockers.push({ minX: x - 0.32, maxX: x + 0.32, minZ: z - 0.32, maxZ: z + 0.32 });
 }
 
 function furnish(

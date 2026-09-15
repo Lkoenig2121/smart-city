@@ -55,6 +55,8 @@ export class StreetControls {
   yaw = 0;
   pitch = 0;
   mode: MoveMode = "hop";
+  enabled = true;
+  boost = { walk: 1, run: 1, jump: 1, hop: 1 };
 
   private velocity = new THREE.Vector3();
   private keys = new InputKeys();
@@ -145,6 +147,7 @@ export class StreetControls {
   }
 
   look(dx: number, dy: number) {
+    if (!this.enabled) return;
     this.yaw -= dx * LOOK_SENSITIVITY;
     this.pitch = Math.max(
       -PITCH_LIMIT,
@@ -157,6 +160,7 @@ export class StreetControls {
   }
 
   update(dt: number) {
+    if (!this.enabled) return;
     if (this.mode === "hop") this.updateHop(dt);
     else this.updateFree(dt);
     this.applyJump(dt);
@@ -248,7 +252,7 @@ export class StreetControls {
       from: this.position.clone(),
       to,
       elapsed: 0,
-      duration: Math.max(HOP_MIN_SECONDS, distance * HOP_SECONDS_PER_TILE),
+      duration: Math.max(HOP_MIN_SECONDS, distance * HOP_SECONDS_PER_TILE) / Math.max(0.5, this.boost.hop),
     };
   }
 
@@ -328,7 +332,7 @@ export class StreetControls {
     if (this.has("KeyA", "ArrowLeft")) r -= 1;
 
     const running = this.keys.running;
-    const speed = running ? RUN_SPEED : WALK_SPEED;
+    const speed = (running ? RUN_SPEED : WALK_SPEED) * (running ? this.boost.run : this.boost.walk);
     const accel = running ? RUN_ACCEL : ACCEL;
     const sin = Math.sin(this.yaw);
     const cos = Math.cos(this.yaw);
@@ -364,7 +368,7 @@ export class StreetControls {
     const floor = this.groundAt(this.position.x, this.position.z) + EYE_HEIGHT;
 
     if (this.grounded && this.has("Space")) {
-      this.velocity.y = JUMP_SPEED;
+      this.velocity.y = JUMP_SPEED * this.boost.jump;
       this.grounded = false;
     }
 

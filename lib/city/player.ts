@@ -1,5 +1,13 @@
 import type { Building, CityClock, CityState } from "@/lib/city/types";
 import { venueRole } from "@/lib/city/venues";
+import {
+  applyCashRewards,
+  characterStats,
+  emptyLife,
+  grantCharacterXp,
+  parseLife,
+  type LifeState,
+} from "./character";
 
 const STORAGE = "smartcity-player";
 const STARTING_WALLET = 500;
@@ -61,10 +69,11 @@ export interface PlayerState {
   career: OfficeCareer | null;
   shift: ActiveShift | null;
   lastInterestDay: string | null;
+  life: LifeState;
 }
 
 export function emptyPlayer(): PlayerState {
-  return { wallet: STARTING_WALLET, bank: 0, ledger: [], career: null, shift: null, lastInterestDay: null };
+  return { wallet: STARTING_WALLET, bank: 0, ledger: [], career: null, shift: null, lastInterestDay: null, life: emptyLife() };
 }
 
 export function readPlayer(): PlayerState {
@@ -208,11 +217,15 @@ export function completeShiftTask(
   const player = readPlayer();
   if (!player.shift) return "You are not on the clock.";
   if (player.shift.completedTaskIds.includes(taskId)) return "That assignment is already done.";
-  const earned = Math.max(0, Math.round(pay));
+  const stats = characterStats(player.life);
+  const earned = Math.max(0, Math.round(pay * stats.taskPay));
   player.shift.completedTaskIds.push(taskId);
   player.shift.taskEarnings += earned;
   if (player.career) player.career.xp += Math.max(0, Math.round(xp));
   credit(player, earned, description, state.clock);
+  const bump = grantCharacterXp(player.life, 24, `task:${dayKey(state.clock)}:${taskId}`, "career");
+  player.life = bump.life;
+  player.wallet = applyCashRewards(player.wallet, bump.rewards);
   writePlayer(player);
   return player;
 }
@@ -220,9 +233,12 @@ export function completeShiftTask(
 export function endOfficeShift(state: CityState): PlayerState | string {
   const player = readPlayer();
   if (!player.shift) return "You are not on the clock.";
+  const tasks = player.shift.completedTaskIds.length;
+  const key = `shift:${player.shift.dayKey}:${player.shift.batch}`;
   settleShift(player, state.clock, true);
   writePlayer(player);
-  return player;
+  if (tasks > 0) awardXp(40 + tasks * 4, key, "career");
+  return readPlayer();
 }
 
 /** Closes an open shift when the workday ends or the player sleeps through it. */
@@ -289,7 +305,7 @@ function applyBankInterest(player: PlayerState, clock: CityClock, nights: number
   let gained = 0;
   const rounds = Math.max(1, nights);
   for (let i = 0; i < rounds; i++) {
-    const slice = Math.round(player.bank * BANK_DAILY_RATE);
+    const slice = Math.round(player.bank * (BANK_DAILY_RATE + characterStats(player.life).interest));
     if (slice < 1) break;
     player.bank += slice;
     gained += slice;
@@ -302,9 +318,29 @@ function applyBankInterest(player: PlayerState, clock: CityClock, nights: number
   return player;
 }
 
-export function nextBankInterest(bank: number) {
+export function awardXp(amount: number, key: string | null, path?: import("./skills").SkillPath) {
+  const player = readPlayer();
+  const bump = grantCharacterXp(player.life, amount, key, path);
+  player.life = bump.life;
+  player.wallet = applyCashRewards(player.wallet, bump.rewards);
+  writePlayer(player);
+  return { player, ...bump };
+}
+
+export function spendWallet(amount: number, clock: CityClock, description: string): PlayerState | string {
+  const player = readPlayer();
+  const value = Math.round(amount);
+  if (value < 1) return "Nothing to buy.";
+  if (player.wallet < value) return "Not enough cash in your wallet.";
+  player.wallet -= value;
+  pushLedger(player, value, "spend", description, clock);
+  writePlayer(player);
+  return player;
+}
+
+export function nextBankInterest(bank: number, extraRate = 0) {
   if (bank <= 0) return 0;
-  return Math.round(bank * BANK_DAILY_RATE);
+  return Math.round(bank * (BANK_DAILY_RATE + extraRate));
 }
 
 function hasBankInterestToday(player: PlayerState, clock: CityClock) {
@@ -377,7 +413,7 @@ function pushLedger(
   if (player.ledger.length > LEDGER_LIMIT) player.ledger.length = LEDGER_LIMIT;
 }
 
-function writePlayer(player: PlayerState) {
+export function writePlayer(player: PlayerState) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE, JSON.stringify(player));
 }
@@ -395,6 +431,7 @@ function parsePlayer(value: unknown): PlayerState {
     career: parseCareer(raw.career),
     shift: parseShift(raw.shift),
     lastInterestDay: typeof raw.lastInterestDay === "string" ? raw.lastInterestDay : null,
+    life: parseLife(raw.life),
   };
 }
 

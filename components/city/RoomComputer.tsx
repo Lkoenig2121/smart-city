@@ -374,7 +374,7 @@ function NewsPage({
     if (!track) return;
     const startY = event.clientY;
     const startTop = thumb.top;
-    const move = (next: PointerEvent) => {
+    const move = (next: globalThis.PointerEvent) => {
       const maxTop = Math.max(0, track.clientHeight - thumb.height);
       const nextTop = Math.min(maxTop, Math.max(0, startTop + (next.clientY - startY)));
       const range = el.scrollHeight - el.clientHeight;

@@ -10,6 +10,7 @@ import {
   totalBalance,
   type PlayerState,
 } from "@/lib/city/player";
+import { characterProgress } from "@/lib/city/progression";
 
 interface Props {
   player?: PlayerState;
@@ -20,6 +21,7 @@ export function PlayerStatus({ player = readPlayer() }: Props) {
   const next = player.career ? nextOfficeRank(player.career.xp) : null;
   const xpInto = player.career && rank ? player.career.xp - rank.xp : 0;
   const xpSpan = next && rank ? next.xp - rank.xp : 1;
+  const life = characterProgress(player.life.xp);
   const shift = player.shift
     ? `On the clock · ${player.shift.completedTaskIds.length}/${OFFICE_TASK_COUNT}`
     : player.career
@@ -33,6 +35,12 @@ export function PlayerStatus({ player = readPlayer() }: Props) {
       <p className="text-[0.7rem] text-sky-100/80">
         Wallet {formatDollars(player.wallet)} · Bank {formatDollars(player.bank)}
         {player.bank > 0 ? ` · ${BANK_RATE_LABEL}` : ""}
+      </p>
+      <p className="text-[0.7rem] text-white">
+        Level {life.level}
+        <span className="text-slate-400">
+          {life.need ? ` · ${life.into}/${life.need} XP · I inventory` : " · max · I inventory"}
+        </span>
       </p>
       <p className="text-[0.7rem] text-slate-300">
         {player.career ? `Office · ${rank?.label}` : "No job yet"} · {shift}

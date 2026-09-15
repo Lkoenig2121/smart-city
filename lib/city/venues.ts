@@ -11,6 +11,7 @@ export type VenueRole =
   | "shop"
   | "restaurant"
   | "bank"
+  | "mall"
   | "house"
   | "apartment";
 
@@ -24,6 +25,7 @@ const ROLES: VenueRole[] = [
   "shop",
   "restaurant",
   "bank",
+  "mall",
   "house",
   "apartment",
 ];
@@ -107,6 +109,16 @@ export function markBank(building: Building, name?: string) {
   building.stats.revenue = Math.max(building.stats.revenue, 3800);
 }
 
+export function markMall(building: Building, name = "Harbor Mall") {
+  markVenue(building, "mall", name);
+  building.wallColor = "#ead9c4";
+  building.roofColor = "#6a3a32";
+  building.accentColor = "#c9a44c";
+  building.stats.jobs = Math.max(building.stats.jobs, 48);
+  building.stats.employees = Math.max(building.stats.employees, 36);
+  building.stats.revenue = Math.max(building.stats.revenue, 9200);
+}
+
 export function venueLabel(role: VenueRole) {
   switch (role) {
     case "hospital":
@@ -127,6 +139,8 @@ export function venueLabel(role: VenueRole) {
       return "Restaurant";
     case "bank":
       return "Bank";
+    case "mall":
+      return "Mall";
     case "house":
       return "Home";
     case "apartment":
@@ -154,6 +168,8 @@ export function venueEnterHint(role: VenueRole) {
       return "Come in to eat";
     case "bank":
       return "Enter for banking";
+    case "mall":
+      return "Enter the mall";
     case "house":
       return "Visit this home";
     case "apartment":
@@ -172,7 +188,11 @@ export function markNotableVenues(buildings: Map<string, Building>) {
   if (shops[2]) markBank(shops[2], "Riverside Trust");
   if (shops[3]) markVenue(shops[3], "shop");
   if (shops[4]) markVenue(shops[4], "restaurant");
-  const secondBank = shops.find((shop, i) => i > 4 && shop !== shops[2]);
+  const harborMall =
+    list.find((building) => building.kind === "shop" && building.origin.x === 3 && building.origin.y === 13) ??
+    shops.find((_, i) => i > 4);
+  if (harborMall) markMall(harborMall, "Harbor Mall");
+  const secondBank = shops.find((shop, i) => i > 4 && shop !== harborMall && venueRole(shop) !== "mall");
   if (secondBank) markBank(secondBank, "Northline Savings");
 
   const offices = list.filter((b) => b.kind === "office");

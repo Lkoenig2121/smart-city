@@ -19,6 +19,7 @@ import {
   type PlayerState,
 } from "@/lib/city/player";
 import { venueLabel, venueRole, type VenueRole } from "@/lib/city/venues";
+import { STORES } from "@/lib/city/clothing";
 import type { Building, CityState } from "@/lib/city/types";
 import { formatMoney } from "@/lib/simulation/buildings/buildings";
 import { useEffect, useState, type ReactNode } from "react";
@@ -39,6 +40,8 @@ export function VenueDesk({ building, state, player, onPlayerChange, onOpenWorks
       <OfficeDesk building={building} state={state} player={player} onPlayerChange={onPlayerChange} onOpenWorkstation={onOpenWorkstation} />
     ) : role === "bank" ? (
       <BankDesk building={building} state={state} player={player} onPlayerChange={onPlayerChange} />
+    ) : role === "mall" ? (
+      <MallDesk building={building} />
     ) : (
       <FlavorDesk building={building} state={state} role={role} />
     );
@@ -277,6 +280,27 @@ function BankDesk({
   );
 }
 
+function MallDesk({ building }: { building: Building }) {
+  return (
+    <div className="rounded-2xl border border-amber-300/35 bg-[#14110c]/92 p-5 text-center shadow-2xl backdrop-blur">
+      <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Mall</p>
+      <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
+      <p className="mt-2 text-sm text-slate-300">
+        Four stores open off the atrium. Walk to a rack or mannequin and press E to browse. Press I for your inventory.
+      </p>
+      <ul className="mt-3 space-y-1 text-left text-sm text-slate-200">
+        {STORES.map((store) => (
+          <li key={store.id} className="rounded-lg bg-black/30 px-3 py-1.5">
+            <span className="font-semibold text-amber-200">{store.name}</span>
+            <span className="text-slate-400"> · {store.blurb}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-[0.65rem] text-slate-500">Walk back to the doors and press E to leave</p>
+    </div>
+  );
+}
+
 function FlavorDesk({ building, state, role }: { building: Building; state: CityState; role: VenueRole }) {
   const [note, setNote] = useState<string | null>(null);
   const copy = deskCopy(role, building, state);
@@ -383,6 +407,13 @@ function deskCopy(role: VenueRole, building: Building, state: CityState) {
         stat: residents.length ? `${residents.length} residents in` : null,
         action: "Visit residents",
         actionNote: "You say hello at a doorway and head back toward the stairs.",
+      };
+    case "mall":
+      return {
+        body: "The atrium directory lists Fashion Avenue, Sneaker District, Luxury Boutique, and the Department Store.",
+        stat: null,
+        action: "Read the directory",
+        actionNote: "Walk into a store and press E at the racks.",
       };
   }
 }
