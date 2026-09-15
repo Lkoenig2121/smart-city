@@ -8,6 +8,7 @@ import { InteriorControls } from "./interiorControls";
 import { buildLodgingInterior, type LodgingInterior } from "./lodgingInterior";
 import { lodgingWindowDir } from "./StreetWorld";
 import { StreetFireworks } from "./streetFireworks";
+import { HeldItemView } from "./heldItem";
 import { FLOOR_H } from "./textures";
 
 /**
@@ -33,6 +34,7 @@ export class LodgingWorld {
   private borrowedCity: THREE.Group | null = null;
   private fireworks: StreetFireworks | null = null;
   private fireworkOrigin = new THREE.Vector3();
+  private heldView = new HeldItemView();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -56,6 +58,8 @@ export class LodgingWorld {
     this.renderer.shadowMap.enabled = true;
 
     this.camera = new THREE.PerspectiveCamera(74, 1, 0.1, zone === "lobby" ? 80 : 900);
+    this.scene.add(this.camera);
+    this.heldView.attach(this.camera);
     this.interior = buildLodgingInterior(building, zone, state, room);
     this.scene.add(this.interior.group);
 
@@ -205,9 +209,18 @@ export class LodgingWorld {
     this.renderer.setSize(width, height, false);
   }
 
+  setHeld(id: string | null, sips = 0) {
+    this.heldView.setHeld(id, sips);
+  }
+
+  playSip() {
+    this.heldView.playSip();
+  }
+
   render(dt: number) {
     this.controls.update(dt);
     this.controls.applyTo(this.camera);
+    this.heldView.update(dt);
     const night = this.isNight();
     this.sun.intensity = this.zone === "pool" ? (night ? 0.35 : 2.0) : night ? 0.55 : 1.35;
     this.hemi.intensity = night ? 0.7 : 1.15;
@@ -274,6 +287,7 @@ export class LodgingWorld {
 
   dispose() {
     this.detachCity();
+    this.heldView.dispose();
     this.fireworks?.dispose();
     this.interior.dispose();
     this.deskTexture?.dispose();

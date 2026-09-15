@@ -11,6 +11,7 @@ import {
   type PlayerState,
 } from "@/lib/city/player";
 import { characterProgress } from "@/lib/city/progression";
+import { consumableById, CONSUME_BITES } from "@/lib/city/consumables";
 
 interface Props {
   player?: PlayerState;
@@ -45,6 +46,16 @@ export function PlayerStatus({ player = readPlayer() }: Props) {
       <p className="text-[0.7rem] text-slate-300">
         {player.career ? `Office · ${rank?.label}` : "No job yet"} · {shift}
       </p>
+      {player.life.held ? (
+        <p className="mt-0.5 truncate text-[0.65rem] text-teal-200">
+          Holding {consumableById(player.life.held)?.name ?? "a snack"}
+          {(() => {
+            const held = consumableById(player.life.held);
+            const verb = held?.kind === "drink" ? "drink" : "eat";
+            return ` · click to ${verb}${player.life.heldSips ? ` · ${player.life.heldSips}/${CONSUME_BITES}` : ""}`;
+          })()}
+        </p>
+      ) : null}
       {player.ledger[0] ? (
         <p className="mt-0.5 truncate text-[0.65rem] text-slate-400">
           {player.ledger[0].kind === "earn" ? "+" : player.ledger[0].kind === "spend" ? "−" : ""}

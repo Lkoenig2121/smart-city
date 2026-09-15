@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { Building, CityState } from "@/lib/city/types";
 import { InteriorControls } from "./interiorControls";
 import { buildVenueInterior, type VenueInterior } from "./venueInterior";
+import { HeldItemView } from "./heldItem";
 
 export class VenueWorld {
   readonly camera: THREE.PerspectiveCamera;
@@ -14,6 +15,7 @@ export class VenueWorld {
   private hemi: THREE.HemisphereLight;
   private sun: THREE.DirectionalLight;
   private fill: THREE.PointLight;
+  private heldView = new HeldItemView();
 
   constructor(canvas: HTMLCanvasElement, private state: CityState, building: Building) {
     this.building = building;
@@ -29,6 +31,8 @@ export class VenueWorld {
     this.renderer.shadowMap.enabled = true;
 
     this.camera = new THREE.PerspectiveCamera(74, 1, 0.1, 80);
+    this.scene.add(this.camera);
+    this.heldView.attach(this.camera);
     this.interior = buildVenueInterior(building);
     this.scene.add(this.interior.group);
 
@@ -73,14 +77,22 @@ export class VenueWorld {
     this.renderer.setSize(width, height, false);
   }
 
+  setHeld(id: string | null, sips = 0) {
+    this.heldView.setHeld(id, sips);
+  }
+
+  playSip() {
+    this.heldView.playSip();
+  }
+
   render(dt: number) {
     this.controls.update(dt);
     this.controls.applyTo(this.camera);
+    this.heldView.update(dt);
     const night = this.isNight();
     this.sun.intensity = night ? 0.45 : 1.25;
     this.hemi.intensity = night ? 0.75 : 1.15;
     this.renderer.render(this.scene, this.camera);
-    void dt;
   }
 
   private isNight() {
@@ -89,6 +101,7 @@ export class VenueWorld {
   }
 
   dispose() {
+    this.heldView.dispose();
     this.interior.dispose();
     this.renderer.dispose();
   }

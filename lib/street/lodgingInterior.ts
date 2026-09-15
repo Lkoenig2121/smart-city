@@ -1080,11 +1080,35 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
     blockers.push({ minX: x + 0.35, maxX: x + 3.0, minZ: z + 0.35, maxZ: z + 2.2 });
   }
 
-  // Cabana bar.
-  wallB.box(-15.6, -8.4, -8.4, -4.8, 0, 3.2, cream);
-  trimB.box(-15.4, -8.2, -8.6, -7.9, 3.2, 3.45, dark);
-  trimB.box(-15.2, -6.2, -8.8, -5.1, 1.05, 1.2, dark);
-  blockers.push({ minX: -15.6, maxX: -8.4, minZ: -8.4, maxZ: -4.8 });
+  // Open cabana bar — walk up to the counter for food and drinks.
+  const barX0 = -16.2;
+  const barX1 = -11.7;
+  const barZ0 = -9.4;
+  const barZ1 = -4.55;
+  const teal = new THREE.Color("#1a6b6b");
+  const wood = new THREE.Color("#6b4a32");
+  const bottle = ["#1f4d8c", "#c0392b", "#e8c36a", "#2aa8c4", "#f4f1ea"];
+  wallB.box(barX0, barZ0, barX0 + 0.42, barZ1, 0, 3.15, cream);
+  wallB.box(barX0, barZ0, barX1, barZ0 + 0.38, 0, 3.15, cream);
+  wallB.box(barX0, barZ1 - 0.38, barX1, barZ1, 0, 3.15, cream);
+  trimB.box(barX0 - 0.12, barZ0 - 0.2, barX1 + 0.9, barZ1 + 0.2, 3.08, 3.32, teal);
+  trimB.box(barX1 - 0.5, barZ0 + 0.28, barX1 + 0.18, barZ1 - 0.28, 1.02, 1.2, wood);
+  trimB.box(barX0 + 0.42, barZ0 + 0.45, barX0 + 0.92, barZ1 - 0.45, 1.35, 2.55, wood);
+  blockers.push({ minX: barX0, maxX: barX1, minZ: barZ0, maxZ: barZ1 });
+  for (let i = 0; i < 5; i++) {
+    const z = barZ0 + 0.85 + i * 0.85;
+    const color = new THREE.Color(bottle[i]);
+    trimB.box(barX0 + 0.5, z, barX0 + 0.78, z + 0.22, 1.55, 2.05, color);
+  }
+  for (let i = 0; i < 4; i++) {
+    const z = barZ0 + 1.1 + i * 1.05;
+    trimB.box(barX1 - 0.42, z, barX1 - 0.08, z + 0.32, 1.2, 1.42, new THREE.Color(i % 2 ? "#e8c36a" : "#c0392b"));
+  }
+  for (const z of [-8.35, -7.15, -5.95]) {
+    trimB.box(-11.35, z, -10.88, z + 0.42, 0, 0.7, navy);
+    blockers.push({ minX: -11.35, maxX: -10.88, minZ: z, maxZ: z + 0.42 });
+  }
+  addBarSign(group, disposables, "CABANA", "Food · Drinks", "#1a6b6b", barX1 + 0.22, 2.42, (barZ0 + barZ1) / 2, -Math.PI / 2, 3.6);
 
   // Giant chess.
   for (let i = 0; i < 4; i++) {
@@ -1120,7 +1144,7 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
       if (x > px0 && x < px1 && z > shelfZ0 && z < shelfZ1) return 0.12;
       return 0;
     },
-    nearDesk: () => false,
+    nearDesk: (x, z) => x > -12.05 && x < -8.7 && z > -9.35 && z < -4.6,
     nearComputer: () => false,
     nearBed: () => false,
     nearExit: (_x, z) => z > 12.8,
@@ -1132,6 +1156,53 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
       for (const item of disposables) item.dispose();
     },
   };
+}
+
+function addBarSign(
+  group: THREE.Group,
+  disposables: Array<{ dispose: () => void }>,
+  title: string,
+  subtitle: string,
+  bg: string,
+  x: number,
+  y: number,
+  z: number,
+  rotY: number,
+  width: number,
+) {
+  const el = document.createElement("canvas");
+  el.width = 512;
+  el.height = 160;
+  const ctx = el.getContext("2d");
+  if (!ctx) return;
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 512, 160);
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.fillRect(0, 0, 512, 14);
+  ctx.fillRect(0, 146, 512, 14);
+  ctx.fillStyle = "#fff8e8";
+  ctx.font = "bold 54px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(title, 256, 62);
+  ctx.font = "22px sans-serif";
+  ctx.fillStyle = "#b8f0e8";
+  ctx.fillText(subtitle, 256, 118);
+  const tex = new THREE.CanvasTexture(el);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshStandardMaterial({
+    map: tex,
+    emissiveMap: tex,
+    emissive: new THREE.Color("#ffffff"),
+    emissiveIntensity: 0.45,
+    roughness: 0.5,
+  });
+  const geo = new THREE.PlaneGeometry(width, 0.9);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+  mesh.rotation.y = rotY;
+  group.add(mesh);
+  disposables.push(geo, tex, mat);
 }
 
 function inkColor() {

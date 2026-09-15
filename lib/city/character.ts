@@ -1,5 +1,6 @@
 import type { CityClock } from "./types";
 import { clothingById, EMPTY_SLOTS, STARTER_CLOTHING, type ClothSlot, type OutfitSlots, type SavedOutfit } from "./clothing";
+import { bagCount, consumableById } from "./consumables";
 import { characterProgress } from "./progression";
 import { LEVEL_REWARDS, rewardForLevel, type LevelReward } from "./rewards";
 import {
@@ -22,6 +23,9 @@ export interface LifeState {
   discovered: string[];
   xpKeys: string[];
   grantedLevels: number[];
+  bag: Record<string, number>;
+  held: string | null;
+  heldSips: number;
 }
 
 export interface CharacterStats {
@@ -59,6 +63,9 @@ export function emptyLife(): LifeState {
     discovered: [],
     xpKeys: [],
     grantedLevels: [1],
+    bag: {},
+    held: null,
+    heldSips: 0,
   };
 }
 
@@ -82,6 +89,16 @@ export function parseLife(value: unknown): LifeState {
       equipped[slot] = typeof id === "string" && owned.includes(id) ? id : null;
     }
   }
+  const bag: Record<string, number> = {};
+  if (raw.bag && typeof raw.bag === "object" && !Array.isArray(raw.bag)) {
+    for (const [id, n] of Object.entries(raw.bag as Record<string, unknown>)) {
+      const count = Number(n);
+      if (consumableById(id) && Number.isFinite(count) && count > 0) bag[id] = Math.min(99, Math.floor(count));
+    }
+  }
+  const heldRaw = typeof raw.held === "string" ? raw.held : null;
+  const held = heldRaw && bagCount(bag, heldRaw) > 0 ? heldRaw : null;
+  const sips = Number(raw.heldSips);
   return {
     xp: Number.isFinite(xp) && xp >= 0 ? xp : 0,
     skills,
@@ -97,6 +114,9 @@ export function parseLife(value: unknown): LifeState {
     grantedLevels: Array.isArray(raw.grantedLevels)
       ? raw.grantedLevels.filter((n) => typeof n === "number")
       : fallback.grantedLevels,
+    bag,
+    held,
+    heldSips: held && Number.isFinite(sips) ? Math.max(0, Math.min(2, Math.floor(sips))) : 0,
   };
 }
 

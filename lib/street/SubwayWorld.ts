@@ -3,6 +3,7 @@ import type { CityState } from "@/lib/city/types";
 import { stationIndex } from "@/lib/city/subway";
 import { EYE_HEIGHT, InteriorControls } from "./interiorControls";
 import { TRACK_Z, buildSubwayInterior, type SubwayInterior } from "./subwayInterior";
+import { HeldItemView } from "./heldItem";
 
 type Phase = "away" | "arriving" | "dwell" | "departing" | "riding";
 
@@ -25,6 +26,7 @@ export class SubwayWorld {
   private rideDest: string | null = null;
   private onArrive: ((id: string) => void) | null = null;
   private arrived: boolean;
+  private heldView = new HeldItemView();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -46,6 +48,8 @@ export class SubwayWorld {
     this.renderer.shadowMap.enabled = true;
 
     this.camera = new THREE.PerspectiveCamera(72, 1, 0.12, 180);
+    this.scene.add(this.camera);
+    this.heldView.attach(this.camera);
     this.interior = buildSubwayInterior(stationId);
     this.scene.add(this.interior.group);
 
@@ -137,6 +141,14 @@ export class SubwayWorld {
     this.renderer.setSize(width, height, false);
   }
 
+  setHeld(id: string | null, sips = 0) {
+    this.heldView.setHeld(id, sips);
+  }
+
+  playSip() {
+    this.heldView.playSip();
+  }
+
   render(dt: number) {
     this.stepTrain(dt);
     this.interior.train.position.x = this.trainX;
@@ -155,6 +167,7 @@ export class SubwayWorld {
       }
     }
 
+    this.heldView.update(dt);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -205,6 +218,7 @@ export class SubwayWorld {
   }
 
   dispose() {
+    this.heldView.dispose();
     this.interior.dispose();
     this.renderer.dispose();
   }

@@ -13,6 +13,7 @@ import { StreetControls, type MoveMode } from "./controls";
 import { skyTexture } from "./textures";
 import { StreetWeatherFx } from "./weatherFx";
 import { StreetFireworks } from "./streetFireworks";
+import { HeldItemView } from "./heldItem";
 
 /** Field of view at rest, and how far it narrows mid-hop. */
 const BASE_FOV = 72;
@@ -47,6 +48,7 @@ export class StreetWorld {
   private weatherFx = new StreetWeatherFx();
   private fireworks = new StreetFireworks();
   private fireworkOrigin = new THREE.Vector3();
+  private heldView = new HeldItemView();
   private glow = new BuildingGlow();
   private pinnedId: string | null = null;
   private aimedId: string | null = null;
@@ -74,6 +76,8 @@ export class StreetWorld {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 1400);
+    this.scene.add(this.camera);
+    this.heldView.attach(this.camera);
 
     this.city = buildCity(state);
     this.scene.add(this.city.group);
@@ -328,10 +332,19 @@ export class StreetWorld {
     this.controls.setMode(mode);
   }
 
+  setHeld(id: string | null, sips = 0) {
+    this.heldView.setHeld(id, sips);
+  }
+
+  playSip() {
+    this.heldView.playSip();
+  }
+
   render(dt: number) {
     this.time += dt;
     this.controls.update(dt);
     this.controls.applyTo(this.camera);
+    this.heldView.update(dt);
 
     // Narrow the lens slightly as a hop travels, the way Street View pushes in
     // between panoramas. Skipped in free-walk mode, where it would feel odd.
@@ -470,6 +483,7 @@ export class StreetWorld {
   }
 
   dispose() {
+    this.heldView.dispose();
     this.agents.dispose();
     this.glow.dispose();
     this.weatherFx.dispose();

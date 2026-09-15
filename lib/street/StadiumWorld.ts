@@ -6,6 +6,7 @@ import { createFireworkSparks, FIREWORK_PALETTE, sparkFade, stepFireworks, type 
 import { paintRavensScoreboard } from "./ravensScoreboard";
 import { InteriorControls } from "./interiorControls";
 import { buildStadiumInterior, type StadiumInterior } from "./stadiumInterior";
+import { HeldItemView } from "./heldItem";
 
 const DEFENSE: { x: number; z: number }[] = [
   { x: 0, z: 8.7 },
@@ -48,6 +49,7 @@ export class StadiumWorld {
   private sparks: THREE.InstancedMesh;
   private sparkDummy = new THREE.Object3D();
   private sparkLife: FireworkSpark[] = [];
+  private heldView = new HeldItemView();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -65,6 +67,8 @@ export class StadiumWorld {
     this.renderer.shadowMap.enabled = true;
 
     this.camera = new THREE.PerspectiveCamera(78, 1, 0.1, 400);
+    this.scene.add(this.camera);
+    this.heldView.attach(this.camera);
     this.interior = buildStadiumInterior();
     this.scene.add(this.interior.group);
 
@@ -165,10 +169,19 @@ export class StadiumWorld {
     this.renderer.setSize(width, height, false);
   }
 
+  setHeld(id: string | null, sips = 0) {
+    this.heldView.setHeld(id, sips);
+  }
+
+  playSip() {
+    this.heldView.playSip();
+  }
+
   render(dt: number) {
     this.time += dt;
     this.controls.update(dt);
     this.controls.applyTo(this.camera);
+    this.heldView.update(dt);
 
     const hour = this.state.clock.minuteOfDay / 60;
     const game = isGameNight(this.state);
@@ -333,6 +346,7 @@ export class StadiumWorld {
   }
 
   dispose() {
+    this.heldView.dispose();
     this.interior.dispose();
     this.scoreTexture.dispose();
     this.players.geometry.dispose();

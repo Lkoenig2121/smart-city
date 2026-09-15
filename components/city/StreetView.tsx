@@ -26,7 +26,9 @@ import {
   venueRole,
 } from "@/lib/city/venues";
 import { formatDollars, readPlayer, awardXp, type PlayerState } from "@/lib/city/player";
+import { consumeHeld } from "@/lib/city/bag";
 import { characterStats } from "@/lib/city/character";
+import { consumableById } from "@/lib/city/consumables";
 import { isTypingTarget } from "@/lib/city/input";
 import { discoverPlace } from "@/lib/city/wardrobe";
 import { STORES, type ClothStore } from "@/lib/city/clothing";
@@ -43,6 +45,7 @@ import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "re
 import { CharacterMenu, type CharacterTab } from "./CharacterMenu";
 import { ClothingShop } from "./ClothingShop";
 import { LodgingDesk } from "./LodgingDesk";
+import { PoolBar } from "./PoolBar";
 import { OfficeComputer } from "./OfficeComputer";
 import { PlayerStatus } from "./PlayerStatus";
 import { RoomComputer } from "./RoomComputer";
@@ -96,6 +99,7 @@ export function StreetView({
   const sleepingRef = useRef(false);
   const characterMenuRef = useRef<CharacterTab | null>(null);
   const mallShopRef = useRef<ClothStore | null>(null);
+  const barMenuRef = useRef(false);
   const tickRef = useRef(onTick);
   tickRef.current = onTick;
 
@@ -104,6 +108,8 @@ export function StreetView({
   const [failed, setFailed] = useState<string | null>(null);
   const [mode, setMode] = useState<MoveMode>("hop");
   const [interior, setInterior] = useState<Interior | null>(startInterior);
+  const interiorRef = useRef(interior);
+  interiorRef.current = interior;
   const [atGate, setAtGate] = useState(false);
   const [lodgingDoor, setLodgingDoor] = useState<Building | null>(null);
   const [subwayDoor, setSubwayDoor] = useState<Building | null>(null);
@@ -126,9 +132,16 @@ export function StreetView({
   const [venueDoor, setVenueDoor] = useState<Building | null>(null);
   const [atOfficeComputer, setAtOfficeComputer] = useState(false);
   const [player, setPlayer] = useState<PlayerState>(() => readPlayer());
+  const heldRef = useRef(player.life.held);
+  heldRef.current = player.life.held;
+  const sipsRef = useRef(player.life.heldSips ?? 0);
+  sipsRef.current = player.life.heldSips ?? 0;
+  const sippingRef = useRef(false);
+  const sipTimerRef = useRef(0);
   const [characterMenu, setCharacterMenu] = useState<CharacterTab | null>(null);
   const [mallShop, setMallShop] = useState<ClothStore | null>(null);
   const [mallStore, setMallStore] = useState<ClothStore | null>(null);
+  const [barMenu, setBarMenu] = useState(false);
 
   const inside = interior !== null;
   const lodgingBuilding =
@@ -140,6 +153,7 @@ export function StreetView({
   const busyUi =
     Boolean(characterMenu) ||
     Boolean(mallShop) ||
+    barMenu ||
     sleeping ||
     atComputer ||
     atOfficeComputer ||
@@ -150,7 +164,8 @@ export function StreetView({
   useEffect(() => {
     characterMenuRef.current = characterMenu;
     mallShopRef.current = mallShop;
-  }, [characterMenu, mallShop]);
+    barMenuRef.current = barMenu;
+  }, [characterMenu, mallShop, barMenu]);
 
   useEffect(() => {
     const paused = busyUi;
@@ -176,6 +191,15 @@ export function StreetView({
     if (lodgingRef.current) lodgingRef.current.controls.boost = indoor;
     if (subwayRef.current) subwayRef.current.controls.boost = indoor;
     if (venueRef.current) venueRef.current.controls.boost = indoor;
+    const held = player.life.held;
+    const sips = player.life.heldSips ?? 0;
+    if (!sippingRef.current) {
+      worldRef.current?.setHeld(held, sips);
+      stadiumRef.current?.setHeld(held, sips);
+      lodgingRef.current?.setHeld(held, sips);
+      subwayRef.current?.setHeld(held, sips);
+      venueRef.current?.setHeld(held, sips);
+    }
   }, [player, interior]);
 
   useEffect(() => {
@@ -194,6 +218,14 @@ export function StreetView({
           event.preventDefault();
           characterMenuRef.current = null;
           setCharacterMenu(null);
+          return;
+        }
+        if (barMenuRef.current || (interiorRef.current?.kind === "lodging" && interiorRef.current.zone === "pool" && atDeskRef.current)) {
+          event.preventDefault();
+          barMenuRef.current = false;
+          setBarMenu(false);
+          setAtDesk(false);
+          deskDismissedRef.current = true;
         }
         return;
       }
@@ -202,11 +234,34 @@ export function StreetView({
         if (atComputerRef.current || atOfficeComputerRef.current) return;
         if (pickingStop || pickingRoom || riding) return;
         if (mallShopRef.current) return;
-        if (atDesk && !characterMenuRef.current) return;
         event.preventDefault();
         const next = characterMenuRef.current ? null : "inventory";
         characterMenuRef.current = next;
         setCharacterMenu(next);
+        return;
+      }
+      if (event.code === "KeyP") {
+        if (sleepingRef.current) return;
+        if (atComputerRef.current || atOfficeComputerRef.current) return;
+        if (pickingStop || pickingRoom || riding) return;
+        if (mallShopRef.current) return;
+        if (interiorRef.current?.kind !== "lodging" || interiorRef.current.zone !== "pool") return;
+        event.preventDefault();
+        if (characterMenuRef.current) {
+          characterMenuRef.current = null;
+          setCharacterMenu(null);
+        }
+        if (barMenuRef.current || atDeskRef.current) {
+          barMenuRef.current = false;
+          setBarMenu(false);
+          setAtDesk(false);
+          deskDismissedRef.current = true;
+        } else {
+          barMenuRef.current = true;
+          setBarMenu(true);
+          setAtDesk(true);
+          if (document.pointerLockElement) document.exitPointerLock();
+        }
         return;
       }
       if (!characterMenuRef.current) return;
@@ -226,6 +281,36 @@ export function StreetView({
   }, [active, atDesk, pickingStop, pickingRoom, riding]);
 
   useEffect(() => {
+    if (!active) return;
+    const onDown = (event: globalThis.MouseEvent) => {
+      if (event.button !== 0) return;
+      if (!document.pointerLockElement) return;
+      if (sleepingRef.current || characterMenuRef.current || mallShopRef.current) return;
+      if (atComputerRef.current || atOfficeComputerRef.current || atDeskRef.current) return;
+      const item = consumableById(heldRef.current ?? "");
+      if (!item) return;
+      if (sippingRef.current) return;
+      sippingRef.current = true;
+      worldRef.current?.playSip();
+      stadiumRef.current?.playSip();
+      lodgingRef.current?.playSip();
+      subwayRef.current?.playSip();
+      venueRef.current?.playSip();
+      const result = consumeHeld();
+      window.clearTimeout(sipTimerRef.current);
+      sipTimerRef.current = window.setTimeout(() => {
+        sippingRef.current = false;
+        if (typeof result !== "string") setPlayer(result);
+      }, 720);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.clearTimeout(sipTimerRef.current);
+    };
+  }, [active]);
+
+  useEffect(() => {
     const canvas = outdoorCanvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
@@ -241,6 +326,7 @@ export function StreetView({
     }
 
     worldRef.current = world;
+    if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
       world.resize(rect.width, rect.height);
@@ -314,6 +400,7 @@ export function StreetView({
       last = now;
       tickRef.current(dt);
       world.setPinnedSelection(selectedBuildingId?.current ?? null);
+      if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
       world.render(dt);
       positionRef.current = world.tilePosition;
       const gate = world.nearStadiumGate();
@@ -360,6 +447,7 @@ export function StreetView({
       return;
     }
     stadiumRef.current = world;
+    if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
 
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
@@ -396,6 +484,7 @@ export function StreetView({
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       tickRef.current(dt);
+      if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
       world.render(dt);
       clockAcc += dt;
       if (clockAcc > 0.25) {
@@ -438,8 +527,11 @@ export function StreetView({
       return;
     }
     lodgingRef.current = world;
+    if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
     setHasKey(hasLodgingKey(building.id) || lodgingUse(building) === "residences");
     setPlayer(discoverPlace(building.id, 40));
+    barMenuRef.current = false;
+    setBarMenu(false);
     setAtDesk(false);
     setAtComputer(false);
     setAimComputer(false);
@@ -514,6 +606,9 @@ export function StreetView({
           beginSleep();
           return true;
         }
+        if (interior.zone === "pool" && world.nearDesk()) {
+          return true;
+        }
         if (interior.zone !== "lobby") {
           setInterior({
             kind: "lodging",
@@ -535,9 +630,16 @@ export function StreetView({
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       if (!sleepingRef.current) tickRef.current(dt);
+      if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
       world.render(dt);
       worldRef.current?.tickFireworks(dt);
-      const desk = interior.zone === "lobby" && world.nearDesk();
+      const desk =
+        interior.zone === "lobby"
+          ? world.nearDesk()
+          : interior.zone === "pool"
+            ? barMenuRef.current || (world.nearDesk() && !deskDismissedRef.current)
+            : false;
+      if (interior.zone === "pool" && !world.nearDesk()) deskDismissedRef.current = false;
       atDeskRef.current = desk;
       setAtDesk((prev) => (prev === desk ? prev : desk));
       if (desk && document.pointerLockElement === canvas) document.exitPointerLock();
@@ -592,6 +694,7 @@ export function StreetView({
       return;
     }
     venueRef.current = world;
+    if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
     setAtDesk(false);
     deskDismissedRef.current = false;
     setAtOfficeComputer(false);
@@ -645,6 +748,7 @@ export function StreetView({
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       tickRef.current(dt);
+      if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
       world.render(dt);
       const desk = world.nearDesk();
       if (!desk) deskDismissedRef.current = false;
@@ -689,6 +793,7 @@ export function StreetView({
       return;
     }
     subwayRef.current = world;
+    if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
     setAtSubwayExit(false);
     setAtTrain(false);
     setPickingStop(false);
@@ -739,6 +844,7 @@ export function StreetView({
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       tickRef.current(dt);
+      if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
       world.render(dt);
       const exit = world.nearExit();
       setAtSubwayExit((prev) => (prev === exit ? prev : exit));
@@ -1195,7 +1301,7 @@ export function StreetView({
         />
       ) : null}
 
-      {(atDesk || pickingRoom) && lodgingBuilding && interior?.kind === "lodging" ? (
+      {(atDesk || pickingRoom) && lodgingBuilding && interior?.kind === "lodging" && (interior.zone === "lobby" || pickingRoom) ? (
         <LodgingDesk
           building={lodgingBuilding}
           hasKey={hasKey}
@@ -1207,6 +1313,28 @@ export function StreetView({
           onEnterRoom={enterLodgingRoom}
           onPool={() => goLodgingZone("pool", stayRoomId)}
           onClose={pickingRoom ? () => setPickingRoom(false) : undefined}
+        />
+      ) : null}
+
+      {atDesk && lodgingBuilding && interior?.kind === "lodging" && interior.zone === "pool" ? (
+        <PoolBar
+          clock={state.clock}
+          player={player}
+          onPlayerChange={setPlayer}
+          onClose={() => {
+            barMenuRef.current = false;
+            setBarMenu(false);
+            setAtDesk(false);
+            deskDismissedRef.current = true;
+          }}
+          onInventory={() => {
+            barMenuRef.current = false;
+            setBarMenu(false);
+            setAtDesk(false);
+            deskDismissedRef.current = true;
+            characterMenuRef.current = "inventory";
+            setCharacterMenu("inventory");
+          }}
         />
       ) : null}
 
@@ -1276,7 +1404,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer && !pickingRoom && !sleeping && !atBed && !atSlider ? (
+      {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer && !pickingRoom && !sleeping && !atBed && !atSlider && !atDesk ? (
         <div className="pointer-events-auto absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="flex flex-col items-center gap-2">
             {interior.zone === "room" ? (
@@ -1298,7 +1426,23 @@ export function StreetView({
             ) : null}
             <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
               <p className="text-xs text-slate-200">
-                Press <span className="font-semibold text-white">E</span> to return to the lobby
+                {interior.zone === "pool" ? (
+                  <>
+                    {player.life.held
+                      ? `Holding ${consumableById(player.life.held)?.name ?? "a snack"}${
+                          consumableById(player.life.held)?.kind === "drink"
+                            ? " · click to drink"
+                            : " · click to eat"
+                        } · `
+                      : null}
+                    press <span className="font-semibold text-white">P</span> for the cabana ·{" "}
+                    <span className="font-semibold text-white">E</span> for the lobby
+                  </>
+                ) : (
+                  <>
+                    Press <span className="font-semibold text-white">E</span> to return to the lobby
+                  </>
+                )}
               </p>
             </div>
           </div>

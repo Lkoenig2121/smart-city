@@ -18,6 +18,8 @@ import {
   unequipSlot,
   wearOutfit,
 } from "@/lib/city/wardrobe";
+import { equipHeld } from "@/lib/city/bag";
+import { bagList } from "@/lib/city/consumables";
 import { useMemo, useState } from "react";
 
 export type CharacterTab = "outfit" | "skills" | "inventory";
@@ -258,6 +260,7 @@ function InventoryPane({ life, onPlayer }: { life: LifeState; onPlayer: (player:
       accessories: clothing.filter((item) => item && item.category === "accessories"),
     };
   }, [life.owned]);
+  const snacks = useMemo(() => bagList(life.bag ?? {}), [life.bag]);
   return (
     <div className="space-y-4">
       {(["clothing", "accessories"] as const).map((group) => (
@@ -296,7 +299,37 @@ function InventoryPane({ life, onPlayer }: { life: LifeState; onPlayer: (player:
       </div>
       <div>
         <p className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-amber-300/80">Consumables</p>
-        <p className="text-xs text-slate-400">No consumables yet.</p>
+        {snacks.length ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {snacks.map((item) => {
+              const count = life.bag[item.id] ?? 0;
+              const equipped = life.held === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    const next = equipHeld(item.id);
+                    if (typeof next !== "string") onPlayer(next);
+                  }}
+                  className={`rounded-xl border px-3 py-2 text-left ${
+                    equipped ? "border-amber-300/50 bg-amber-400/10" : "border-white/10 bg-black/30 hover:border-amber-300/40"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-white">{item.name}</p>
+                  <p className="text-[0.7rem] text-slate-400">{item.detail}</p>
+                  <p className="mt-1 text-[0.65rem] text-amber-200/80">
+                    {item.kind}
+                    {count > 1 ? ` · ×${count}` : ""}
+                    {equipped ? ` · equipped · click in view to ${item.kind === "drink" ? "drink" : "eat"}` : " · click to hold"}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400">Buy drinks and food at the roof-deck cabana, then equip them here.</p>
+        )}
       </div>
       <div>
         <p className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-amber-300/80">Special items</p>
