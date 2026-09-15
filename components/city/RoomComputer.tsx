@@ -44,8 +44,15 @@ export function RoomComputer({ minuteOfDay, onClose }: Props) {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.05rem] bg-[#101826] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
             <div className="flex items-center justify-between border-b border-white/10 bg-[#0b1422] px-3 py-2">
               <div className="flex items-center gap-2">
-                <span className="flex gap-1.5 pl-1">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+                <span className="flex items-center gap-1.5 pl-1">
+                  <button
+                    type="button"
+                    aria-label="Close laptop"
+                    onClick={onClose}
+                    className="-m-1 flex h-4 w-4 items-center justify-center"
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.15)]" />
+                  </button>
                   <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
                   <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
                 </span>
