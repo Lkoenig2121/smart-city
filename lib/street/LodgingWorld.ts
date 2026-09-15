@@ -122,6 +122,9 @@ export class LodgingWorld {
     holder.rotation.y = Math.atan2(dir.sx, -dir.sz);
     city.position.set(-fx, -fy, -fz);
     city.rotation.set(0, 0, 0);
+    city.traverse((obj) => {
+      if (obj.userData.facadeBalconies) obj.visible = false;
+    });
     holder.add(city);
     this.scene.add(holder);
     this.cityHolder = holder;
@@ -137,6 +140,9 @@ export class LodgingWorld {
     if (city) {
       city.position.set(0, 0, 0);
       city.rotation.set(0, 0, 0);
+      city.traverse((obj) => {
+        if (obj.userData.facadeBalconies) obj.visible = true;
+      });
     }
     return city;
   }
@@ -151,6 +157,24 @@ export class LodgingWorld {
 
   nearBed() {
     return this.interior.nearBed(this.controls.position.x, this.controls.position.z);
+  }
+
+  nearSlider() {
+    return Boolean(this.interior.slider?.near(this.controls.position.x, this.controls.position.z));
+  }
+
+  sliderOpen() {
+    return this.interior.slider?.open ?? false;
+  }
+
+  toggleSlider() {
+    const slider = this.interior.slider;
+    if (!slider) return false;
+    if (slider.open && slider.blockingClose(this.controls.position.x, this.controls.position.z)) {
+      return false;
+    }
+    slider.toggle();
+    return true;
   }
 
   aimedAtComputer(ndcX = 0, ndcY = 0) {
@@ -185,6 +209,7 @@ export class LodgingWorld {
     }
     if (this.deskCtx && this.deskTexture) this.drawDesk();
     this.interior.tv?.update(dt, this.state);
+    this.interior.slider?.update(dt);
     this.renderer.render(this.scene, this.camera);
   }
 

@@ -2,6 +2,7 @@ import { TILE_H, TILE_W, diamondPoints, gridToScreen } from "@/lib/city/iso";
 import { hash2 } from "@/lib/city/rng";
 import type { Building } from "@/lib/city/types";
 import { lodgingUse } from "@/lib/city/lodging";
+import { hasExteriorBalconies } from "@/lib/city/balconies";
 import { venueRole } from "@/lib/city/venues";
 import { paintGraffiti } from "./drawBridges";
 import { drawGroundShadow, drawIsoBox, drawSlopedRoof, drawWindowGrid } from "./drawIso";
@@ -173,6 +174,9 @@ function drawApartment(ctx: CanvasRenderingContext2D, b: Building, light: Lighti
     box.B.x, box.B.y, box.R.x, box.R.y, box.Re.x, box.Re.y, box.Be.x, box.Be.y,
     3, b.floors, glassColor(light, seed + 0.1), shade(right, 0.7),
   );
+  if (hasExteriorBalconies(b)) {
+    drawIsoBalconies(ctx, box, b.floors, light, lodgingUse(b) === "hotel");
+  }
   roofProps(ctx, box, light);
   tagStreetWall(ctx, b, box, light);
 }
@@ -259,6 +263,9 @@ function drawStackedShaft(
       box.B.x, box.B.y, box.R.x, box.R.y, box.Re.x, box.Re.y, box.Be.x, box.Be.y,
       stage.cols, rows, glassColor(light, hash2(b.origin.y, b.origin.x + i, 7)), "#546b7d",
     );
+    if (hasExteriorBalconies(b)) {
+      drawIsoBalconies(ctx, box, Math.max(4, Math.round(rows * 0.7)), light, true);
+    }
 
     // Cornice band marking each setback.
     ctx.beginPath();
@@ -720,6 +727,68 @@ function drawStadium(ctx: CanvasRenderingContext2D, b: Building, light: Lighting
     ctx.fillStyle = "#1a1206";
     ctx.font = "bold 8px sans-serif";
     ctx.fillText("UNDER CONSTRUCTION", bowl.Be.x, bowl.Be.y);
+  }
+}
+
+function faceLerp(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  x3: number,
+  y3: number,
+  u: number,
+  v: number,
+) {
+  const ax = x0 + (x1 - x0) * u;
+  const ay = y0 + (y1 - y0) * u;
+  const bx = x3 + (x2 - x3) * u;
+  const by = y3 + (y2 - y3) * u;
+  return { x: ax + (bx - ax) * v, y: ay + (by - ay) * v };
+}
+
+function drawIsoBalconies(
+  ctx: CanvasRenderingContext2D,
+  box: ReturnType<typeof drawIsoBox>,
+  floors: number,
+  light: Lighting,
+  dense: boolean,
+) {
+  const slab = lit("#9a948c", light, "right");
+  const rail = lit("#e4ddd2", light, "top");
+  const step = dense ? 1 : 2;
+  const cols = dense ? 3 : 2;
+  for (let r = 1; r < floors; r += step) {
+    const v = (r + 0.12) / Math.max(1, floors);
+    const v1 = v + 0.055 / Math.max(4, floors);
+    for (let c = 0; c < cols; c++) {
+      const u0 = 0.1 + (c * 0.78) / cols;
+      const u1 = u0 + 0.2;
+      const p00 = faceLerp(box.B.x, box.B.y, box.R.x, box.R.y, box.Re.x, box.Re.y, box.Be.x, box.Be.y, u0, v);
+      const p10 = faceLerp(box.B.x, box.B.y, box.R.x, box.R.y, box.Re.x, box.Re.y, box.Be.x, box.Be.y, u1, v);
+      const p11 = faceLerp(box.B.x, box.B.y, box.R.x, box.R.y, box.Re.x, box.Re.y, box.Be.x, box.Be.y, u1, v1);
+      const p01 = faceLerp(box.B.x, box.B.y, box.R.x, box.R.y, box.Re.x, box.Re.y, box.Be.x, box.Be.y, u0, v1);
+      const ox = 5.5;
+      const oy = 3.2;
+      ctx.beginPath();
+      ctx.moveTo(p00.x, p00.y);
+      ctx.lineTo(p10.x, p10.y);
+      ctx.lineTo(p10.x + ox, p10.y + oy);
+      ctx.lineTo(p00.x + ox, p00.y + oy);
+      ctx.closePath();
+      ctx.fillStyle = slab;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(p00.x + ox, p00.y + oy);
+      ctx.lineTo(p10.x + ox, p10.y + oy);
+      ctx.lineTo(p11.x + ox, p11.y + oy);
+      ctx.lineTo(p01.x + ox, p01.y + oy);
+      ctx.closePath();
+      ctx.fillStyle = rail;
+      ctx.fill();
+    }
   }
 }
 

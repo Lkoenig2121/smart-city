@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Building, BuildingKind, CityState, Terrain, Tile } from "@/lib/city/types";
+import { hasExteriorBalconies, isRiversideHotel } from "@/lib/city/balconies";
 import { lodgingUse } from "@/lib/city/lodging";
 import { BUS_STOPS, isTramTile } from "@/lib/city/transit";
 import { MeshBuilder } from "./meshBuilder";
@@ -112,6 +113,7 @@ export function buildCity(state: CityState): CityMeshes {
   const concreteB = new MeshBuilder();
   const roofB = new MeshBuilder();
   const trimB = new MeshBuilder();
+  const balconyB = new MeshBuilder();
   const lampHeadB = new MeshBuilder();
   const wallB: Partial<Record<FacadeStyle, MeshBuilder>> = {};
 
@@ -203,7 +205,7 @@ export function buildCity(state: CityState): CityMeshes {
 
   // ─── Buildings ─────────────────────────────────────────────────────────────
   for (const building of state.buildings.values()) {
-    addBuilding(building, wallsFor, roofB, trimB, blockers);
+    addBuilding(building, wallsFor, roofB, trimB, balconyB, blockers);
   }
 
   for (const stop of BUS_STOPS) {
@@ -274,6 +276,21 @@ export function buildCity(state: CityState): CityMeshes {
     new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.25 }),
     { cast: true, receive: true },
   );
+
+  if (!balconyB.empty) {
+    const balconyMat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.55,
+      metalness: 0.22,
+    });
+    const balconyGeo = balconyB.build();
+    const balconyMesh = new THREE.Mesh(balconyGeo, balconyMat);
+    balconyMesh.castShadow = true;
+    balconyMesh.receiveShadow = true;
+    balconyMesh.userData.facadeBalconies = true;
+    group.add(balconyMesh);
+    disposables.push(balconyGeo, balconyMat);
+  }
 
   let lampGlow: THREE.MeshStandardMaterial | null = null;
   if (!lampHeadB.empty) {
@@ -558,11 +575,106 @@ export function updateTrafficSignals(signals: StreetSignal[], state: CityState) 
   }
 }
 
+function addFacadeBalconies(
+  building: Building,
+  trimB: MeshBuilder,
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  y0: number,
+  y1: number,
+  accent: THREE.Color,
+) {
+  void accent;
+  if (!hasExteriorBalconies(building)) return;
+
+  const hotel = lodgingUse(building) === "hotel" || isRiversideHotel(building);
+  const dense = hotel;
+  const slab = new THREE.Color("#b8b4ad");
+  const rail = new THREE.Color("#2c3036");
+  const plant = new THREE.Color("#3d6b45");
+  const depth = hotel ? 1.22 : 1.05;
+  const first = Math.max(1, Math.ceil(y0 / FLOOR_H + 0.02));
+  const last = Math.floor((y1 - 0.55) / FLOOR_H);
+  const spanX = x1 - x0;
+  const spanZ = z1 - z0;
+  const baysX = Math.max(1, Math.round(spanX / BAY_W));
+  const baysZ = Math.max(1, Math.round(spanZ / BAY_W));
+  const step = dense ? 1 : 2;
+  const west = hotel || building.origin.x <= 20;
+  const east = building.width >= 2;
+  const south = true;
+
+  for (let f = first; f < last; f += step) {
+    const y = f * FLOOR_H;
+    if (south && f >= 2) {
+      const bay = spanX / baysX;
+      for (let i = 0; i < baysX; i++) {
+        if (!dense && i % 2 === 1) continue;
+        const bx0 = x0 + i * bay + 0.38;
+        const bx1 = x0 + (i + 1) * bay - 0.38;
+        if (bx1 - bx0 < 1.15) continue;
+        addBalconyDeck(trimB, bx0, z1, bx1, z1 + depth, y, slab, rail, plant, i % 3 === 0, "n");
+      }
+    }
+    if (west) {
+      const bay = spanZ / baysZ;
+      for (let i = 0; i < baysZ; i++) {
+        if (!dense && i % 2 === 0) continue;
+        const bz0 = z0 + i * bay + 0.38;
+        const bz1 = z0 + (i + 1) * bay - 0.38;
+        if (bz1 - bz0 < 1.15) continue;
+        addBalconyDeck(trimB, x0 - depth, bz0, x0, bz1, y, slab, rail, plant, i % 3 === 1, "e");
+      }
+    }
+    if (east && hotel) {
+      const bay = spanZ / baysZ;
+      for (let i = 0; i < baysZ; i++) {
+        if (i % 2 === 1) continue;
+        const bz0 = z0 + i * bay + 0.38;
+        const bz1 = z0 + (i + 1) * bay - 0.38;
+        if (bz1 - bz0 < 1.15) continue;
+        addBalconyDeck(trimB, x1, bz0, x1 + depth, bz1, y, slab, rail, plant, false, "w");
+      }
+    }
+  }
+}
+
+function addBalconyDeck(
+  trimB: MeshBuilder,
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  y: number,
+  slab: THREE.Color,
+  rail: THREE.Color,
+  plant: THREE.Color,
+  greenery: boolean,
+  open: "n" | "s" | "e" | "w",
+) {
+  const top = y + 0.09;
+  const railY = y + 1.08;
+  trimB.box(x0, z0, x1, z1, y, top, slab);
+  const t = 0.055;
+  if (open !== "w") trimB.box(x0, z0, x0 + t, z1, top, railY, rail);
+  if (open !== "e") trimB.box(x1 - t, z0, x1, z1, top, railY, rail);
+  if (open !== "n") trimB.box(x0, z0, x1, z0 + t, top, railY, rail);
+  if (open !== "s") trimB.box(x0, z1 - t, x1, z1, top, railY, rail);
+  if (greenery) {
+    const mx = (x0 + x1) / 2;
+    const mz = (z0 + z1) / 2;
+    trimB.box(mx - 0.22, mz - 0.18, mx + 0.22, mz + 0.18, top, top + 0.28, plant);
+  }
+}
+
 function addBuilding(
   building: Building,
   wallsFor: (style: FacadeStyle) => MeshBuilder,
   roofB: MeshBuilder,
   trimB: MeshBuilder,
+  balconyB: MeshBuilder,
   blockers: Blocker[],
 ) {
   const x0 = building.origin.x * TILE + WALL_INSET;
@@ -610,6 +722,7 @@ function addBuilding(
         walls.walls(bx0, bz0, bx1, bz1, base, h, wall, BAY_W, FLOOR_H);
         // Banding at each setback catches the light.
         trimB.box(bx0 - 0.2, bz0 - 0.2, bx1 + 0.2, bz1 + 0.2, h - 0.5, h, accent);
+        addFacadeBalconies(building, balconyB, bx0, bz0, bx1, bz1, base, h, accent);
         base = h;
         const inset = (Math.min(bx1 - bx0, bz1 - bz0) * 0.16) / 2;
         bx0 += inset;
@@ -643,6 +756,7 @@ function addBuilding(
       trimB.box(x0 + 1.5, z0 + 1.5, x0 + 4, z0 + 3.6, h, h + 1.6, accent);
       // Ground-floor entrance canopy.
       trimB.box(x0 + 1, z1 - 0.1, x0 + 5, z1 + 1.4, 3.1, 3.4, accent);
+      addFacadeBalconies(building, balconyB, x0, z0, x1, z1, FLOOR_H, h, accent);
       break;
     }
 

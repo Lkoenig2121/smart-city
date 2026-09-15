@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { roomHasInteriorBalcony } from "@/lib/city/balconies";
 import type { Building, CityState } from "@/lib/city/types";
 import { lodgingUse, type LodgingRoom, type LodgingZone } from "@/lib/city/lodging";
 import type { Blocker } from "./buildCity";
@@ -20,7 +21,16 @@ export interface LodgingInterior {
   computerHit: THREE.Object3D | null;
   windowMesh: THREE.Mesh | null;
   windowAnchor: { x: number; y: number; z: number } | null;
+  slider: SliderDoor | null;
   dispose: () => void;
+}
+
+export interface SliderDoor {
+  open: boolean;
+  near: (x: number, z: number) => boolean;
+  blockingClose: (x: number, z: number) => boolean;
+  toggle: () => void;
+  update: (dt: number) => void;
 }
 
 const MARBLE = "#e8dcc8";
@@ -189,6 +199,7 @@ function buildLobby(building: Building): LodgingInterior {
     computerHit: null,
     windowMesh: null,
     windowAnchor: null,
+    slider: null,
     dispose: () => {
       for (const item of disposables) item.dispose();
       deskMat.dispose();
@@ -206,16 +217,20 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
   const trimB = new MeshBuilder();
   const hotel = lodgingUse(building) === "hotel";
   const club = Boolean(room && hotel && room.floor >= Math.max(2, building.floors - 2));
+  const balcony = roomHasInteriorBalcony(building, room);
 
   const minX = -7.5;
   const maxX = 7.5;
   const minZ = -6.5;
   const maxZ = 8.5;
+  const balDepth = balcony ? 2.05 : 0;
+  const balZ0 = minZ - balDepth;
   const ceilY = 4.35;
-  const winX0 = -2.85;
-  const winX1 = 3.25;
+  const winX0 = balcony ? -2.35 : -2.85;
+  const winX1 = balcony ? 2.35 : 3.25;
   const winY0 = 1.05;
   const winY1 = 3.55;
+  const doorH = 3.18;
   const carpet = new THREE.Color(club ? "#3d3a48" : hotel ? "#d8d0c4" : "#cfc4b4");
   const goldWall = new THREE.Color(club ? "#2c3344" : hotel ? "#c9b17a" : "#d4c4a8");
   const wood = new THREE.Color(club ? "#2a2420" : "#5a3d28");
@@ -232,43 +247,59 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
   wallB.box(maxX - 0.4, minZ, maxX, maxZ, 0, ceilY, goldWall);
   wallB.box(minX, maxZ - 0.4, maxX, maxZ, 0, ceilY, goldWall);
 
-  // Window wall with an opening onto the city.
+  // Window wall: a sealed grid, or a floor-to-header opening for the slider.
   wallB.box(minX, minZ, winX0, minZ + 0.4, 0, ceilY, goldWall);
   wallB.box(winX1, minZ, maxX, minZ + 0.4, 0, ceilY, goldWall);
-  wallB.box(winX0, minZ, winX1, minZ + 0.4, 0, winY0, goldWall);
-  wallB.box(winX0, minZ, winX1, minZ + 0.4, winY1, ceilY, goldWall);
+  if (!balcony) {
+    wallB.box(winX0, minZ, winX1, minZ + 0.4, 0, winY0, goldWall);
+    wallB.box(winX0, minZ, winX1, minZ + 0.4, winY1, ceilY, goldWall);
+  } else {
+    wallB.box(winX0, minZ, winX1, minZ + 0.4, doorH, ceilY, goldWall);
+  }
 
   blockers.push({ minX, maxX: minX + 0.4, minZ, maxZ });
   blockers.push({ minX: maxX - 0.4, maxX, minZ, maxZ });
-  blockers.push({ minX, maxX, minZ, maxZ: minZ + 0.4 });
+  blockers.push({ minX, maxX: winX0, minZ, maxZ: minZ + 0.4 });
+  blockers.push({ minX: winX1, maxX, minZ, maxZ: minZ + 0.4 });
+  if (!balcony) {
+    blockers.push({ minX: winX0, maxX: winX1, minZ, maxZ: minZ + 0.4 });
+  }
   blockers.push({ minX, maxX, minZ: maxZ - 0.4, maxZ });
 
-  trimB.box(winX0 - 0.12, minZ + 0.18, winX0 + 0.12, minZ + 0.48, winY0 - 0.12, winY1 + 0.12, charcoal);
-  trimB.box(winX1 - 0.12, minZ + 0.18, winX1 + 0.12, minZ + 0.48, winY0 - 0.12, winY1 + 0.12, charcoal);
-  trimB.box(winX0, minZ + 0.18, winX1, minZ + 0.48, winY0 - 0.12, winY0 + 0.1, charcoal);
-  trimB.box(winX0, minZ + 0.18, winX1, minZ + 0.48, winY1 - 0.1, winY1 + 0.12, charcoal);
-  trimB.box((winX0 + winX1) / 2 - 0.05, minZ + 0.2, (winX0 + winX1) / 2 + 0.05, minZ + 0.42, winY0, winY1, charcoal);
-  trimB.box(winX0, minZ + 0.2, winX1, minZ + 0.42, (winY0 + winY1) / 2 - 0.05, (winY0 + winY1) / 2 + 0.05, charcoal);
+  let glass: THREE.Mesh | null = null;
+  let slider: SliderDoor | null = null;
+  if (!balcony) {
+    trimB.box(winX0 - 0.12, minZ + 0.18, winX0 + 0.12, minZ + 0.48, winY0 - 0.12, winY1 + 0.12, charcoal);
+    trimB.box(winX1 - 0.12, minZ + 0.18, winX1 + 0.12, minZ + 0.48, winY0 - 0.12, winY1 + 0.12, charcoal);
+    trimB.box(winX0, minZ + 0.18, winX1, minZ + 0.48, winY0 - 0.12, winY0 + 0.1, charcoal);
+    trimB.box(winX0, minZ + 0.18, winX1, minZ + 0.48, winY1 - 0.1, winY1 + 0.12, charcoal);
+    trimB.box((winX0 + winX1) / 2 - 0.05, minZ + 0.2, (winX0 + winX1) / 2 + 0.05, minZ + 0.42, winY0, winY1, charcoal);
+    trimB.box(winX0, minZ + 0.2, winX1, minZ + 0.42, (winY0 + winY1) / 2 - 0.05, (winY0 + winY1) / 2 + 0.05, charcoal);
 
-  const curtain = new THREE.Color("#2a2a2e");
-  wallB.box(winX0 - 0.85, minZ + 0.45, winX0 - 0.15, minZ + 0.7, 0.7, ceilY - 0.15, curtain);
-  wallB.box(winX1 + 0.15, minZ + 0.45, winX1 + 0.85, minZ + 0.7, 0.7, ceilY - 0.15, curtain);
+    const curtain = new THREE.Color("#2a2a2e");
+    wallB.box(winX0 - 0.85, minZ + 0.45, winX0 - 0.15, minZ + 0.7, 0.7, ceilY - 0.15, curtain);
+    wallB.box(winX1 + 0.15, minZ + 0.45, winX1 + 0.85, minZ + 0.7, 0.7, ceilY - 0.15, curtain);
 
-  const glassW = winX1 - winX0 - 0.04;
-  const glassH = winY1 - winY0 - 0.04;
-  const glassGeo = new THREE.PlaneGeometry(glassW, glassH);
-  const glassMat = new THREE.MeshStandardMaterial({
-    color: "#d7eef8",
-    transparent: true,
-    opacity: 0.07,
-    roughness: 0.04,
-    metalness: 0.12,
-    depthWrite: false,
-  });
-  const glass = new THREE.Mesh(glassGeo, glassMat);
-  glass.position.set((winX0 + winX1) / 2, (winY0 + winY1) / 2, minZ + 0.28);
-  group.add(glass);
-  disposables.push(glassGeo, glassMat);
+    const glassW = winX1 - winX0 - 0.04;
+    const glassH = winY1 - winY0 - 0.04;
+    const glassGeo = new THREE.PlaneGeometry(glassW, glassH);
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: "#d7eef8",
+      transparent: true,
+      opacity: 0.07,
+      roughness: 0.04,
+      metalness: 0.12,
+      depthWrite: false,
+    });
+    glass = new THREE.Mesh(glassGeo, glassMat);
+    glass.position.set((winX0 + winX1) / 2, (winY0 + winY1) / 2, minZ + 0.28);
+    group.add(glass);
+    disposables.push(glassGeo, glassMat);
+  } else {
+    addSliderCurtains(trimB, wallB, winX0, winX1, minZ, doorH);
+    slider = addSlidingDoors(group, disposables, blockers, winX0, winX1, minZ, doorH);
+    addRoomBalcony(floorB, trimB, blockers, winX0, winX1, minX, maxX, minZ, balZ0);
+  }
 
   // Bed.
   trimB.box(-6.6, -1.4, -1.1, 5.2, 0, 0.55, wood);
@@ -318,7 +349,7 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
       yaw: 0,
       pitch: -0.1 - Math.min(0.2, (room?.floor ?? 8) * 0.014),
     },
-    bounds: { minX, maxX, minZ, maxZ },
+    bounds: { minX, maxX, minZ: balcony ? balZ0 + 0.2 : minZ, maxZ },
     deskMat: null,
     tv,
     groundAt: () => 0,
@@ -330,11 +361,266 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
     nearExit: (_x, z) => z > 6.6,
     computerHit: computer,
     windowMesh: glass,
-    windowAnchor: { x: (winX0 + winX1) / 2, y: 1.7, z: minZ },
+    windowAnchor: { x: (winX0 + winX1) / 2, y: 1.7, z: balcony ? balZ0 : minZ },
+    slider,
     dispose: () => {
       for (const item of disposables) item.dispose();
     },
   };
+}
+
+function addSliderCurtains(
+  trimB: MeshBuilder,
+  wallB: MeshBuilder,
+  winX0: number,
+  winX1: number,
+  wallZ: number,
+  doorH: number,
+) {
+  const rod = new THREE.Color("#3d342c");
+  const cloth = new THREE.Color("#efe6d6");
+  const z = wallZ + 0.52;
+  trimB.box(winX0 - 0.85, z - 0.04, winX1 + 0.85, z + 0.04, doorH + 0.12, doorH + 0.2, rod);
+  wallB.box(winX0 - 0.78, z - 0.08, winX0 + 0.08, z + 0.12, 0.08, doorH + 0.1, cloth);
+  wallB.box(winX1 - 0.08, z - 0.08, winX1 + 0.78, z + 0.12, 0.08, doorH + 0.1, cloth);
+}
+
+function addSlidingDoors(
+  group: THREE.Group,
+  disposables: Array<{ dispose: () => void }>,
+  blockers: Blocker[],
+  x0: number,
+  x1: number,
+  wallZ: number,
+  doorH: number,
+): SliderDoor {
+  const frameMat = new THREE.MeshStandardMaterial({
+    color: "#e8eaee",
+    roughness: 0.28,
+    metalness: 0.58,
+  });
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: "#c4d8e6",
+    transparent: true,
+    opacity: 0.22,
+    roughness: 0.05,
+    metalness: 0.12,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const handleMat = new THREE.MeshStandardMaterial({
+    color: "#9aa3ad",
+    roughness: 0.25,
+    metalness: 0.7,
+  });
+  disposables.push(frameMat, glassMat, handleMat);
+
+  const addBox = (
+    parent: THREE.Object3D,
+    mat: THREE.MeshStandardMaterial,
+    w: number,
+    h: number,
+    d: number,
+    x: number,
+    y: number,
+    zz: number,
+  ) => {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, zz);
+    mesh.castShadow = true;
+    parent.add(mesh);
+    disposables.push(geo);
+  };
+
+  const addPanel = (parent: THREE.Object3D, w: number) => {
+    const t = 0.055;
+    const glassW = w - t * 2.2;
+    const glassH = doorH - 0.18;
+    addBox(parent, frameMat, w, t, 0.07, 0, t * 0.5, 0);
+    addBox(parent, frameMat, w, t, 0.07, 0, doorH - t * 0.5, 0);
+    addBox(parent, frameMat, t, doorH, 0.07, -w / 2 + t / 2, doorH / 2, 0);
+    addBox(parent, frameMat, t, doorH, 0.07, w / 2 - t / 2, doorH / 2, 0);
+    addBox(parent, frameMat, t * 0.7, doorH - 0.12, 0.05, 0, doorH / 2, 0);
+    const glassGeo = new THREE.PlaneGeometry(glassW * 0.46, glassH);
+    const left = new THREE.Mesh(glassGeo, glassMat);
+    left.position.set(-glassW * 0.25, doorH / 2, 0);
+    const right = new THREE.Mesh(glassGeo, glassMat);
+    right.position.set(glassW * 0.25, doorH / 2, 0);
+    parent.add(left, right);
+    disposables.push(glassGeo);
+  };
+
+  const mid = (x0 + x1) / 2;
+  const panelW = (x1 - x0) / 2 + 0.04;
+  const trackZ = wallZ + 0.16;
+  const closedX = mid - panelW / 2;
+  const openX = mid + panelW / 2;
+
+  addBox(group, frameMat, x1 - x0 + 0.12, 0.05, 0.16, mid, 0.03, trackZ);
+  addBox(group, frameMat, x1 - x0 + 0.12, 0.08, 0.14, mid, doorH + 0.04, trackZ);
+  addBox(group, frameMat, 0.08, doorH + 0.08, 0.14, x0 - 0.02, doorH / 2, trackZ);
+  addBox(group, frameMat, 0.08, doorH + 0.08, 0.14, x1 + 0.02, doorH / 2, trackZ);
+
+  const fixed = new THREE.Group();
+  fixed.position.set(openX, 0, trackZ - 0.02);
+  addPanel(fixed, panelW);
+  group.add(fixed);
+
+  const moving = new THREE.Group();
+  moving.position.set(openX, 0, trackZ + 0.07);
+  addPanel(moving, panelW);
+  addBox(moving, handleMat, 0.04, 0.42, 0.05, -panelW / 2 + 0.1, 1.05, 0.06);
+  group.add(moving);
+
+  const leaf = {
+    minX: mid - 0.08,
+    maxX: x1 + 0.1,
+    minZ: wallZ - 0.05,
+    maxZ: wallZ + 0.28,
+  };
+  blockers.push(leaf);
+
+  const applyBlocker = (amount: number) => {
+    const leftEdge = closedX - panelW / 2 + amount * (openX - closedX);
+    leaf.minX = leftEdge - 0.06;
+    leaf.maxX = x1 + 0.1;
+  };
+
+  let amount = 1;
+  let target = 1;
+  applyBlocker(amount);
+
+  const slider: SliderDoor = {
+    get open() {
+      return target > 0.5;
+    },
+    near: (x, z) => x > x0 - 0.7 && x < x1 + 0.7 && z > wallZ - 1.6 && z < wallZ + 2.2,
+    blockingClose: (x, z) => x > x0 - 0.15 && x < mid + 0.2 && z > wallZ - 0.4 && z < wallZ + 0.55,
+    toggle() {
+      target = target > 0.5 ? 0 : 1;
+    },
+    update(dt: number) {
+      if (Math.abs(amount - target) < 0.001) {
+        amount = target;
+        moving.position.x = closedX + amount * (openX - closedX);
+        applyBlocker(amount);
+        return;
+      }
+      const dir = Math.sign(target - amount);
+      amount = THREE.MathUtils.clamp(amount + dir * dt * 1.35, 0, 1);
+      moving.position.x = closedX + amount * (openX - closedX);
+      applyBlocker(amount);
+    },
+  };
+
+  return slider;
+}
+
+function addRoomBalcony(
+  floorB: MeshBuilder,
+  trimB: MeshBuilder,
+  blockers: Blocker[],
+  winX0: number,
+  winX1: number,
+  roomMinX: number,
+  roomMaxX: number,
+  wallZ: number,
+  balZ0: number,
+) {
+  const tileA = new THREE.Color("#e4dccf");
+  const tileB = new THREE.Color("#d5ccbe");
+  const metal = new THREE.Color("#2c3036");
+  const pad = 0.28;
+  const x0 = winX0 - pad;
+  const x1 = winX1 + pad;
+  const railH = 1.12;
+  const post = 0.035;
+
+  floorB.ground(winX0, wallZ, winX1, wallZ + 0.45, 0.012, tileA);
+  const tilesX = 6;
+  const tilesZ = 3;
+  for (let i = 0; i < tilesX; i++) {
+    for (let j = 0; j < tilesZ; j++) {
+      const tx0 = x0 + ((x1 - x0) * i) / tilesX;
+      const tx1 = x0 + ((x1 - x0) * (i + 1)) / tilesX;
+      const tz0 = balZ0 + ((wallZ - balZ0) * j) / tilesZ;
+      const tz1 = balZ0 + ((wallZ - balZ0) * (j + 1)) / tilesZ;
+      floorB.ground(tx0, tz0, tx1, tz1, 0, (i + j) % 2 === 0 ? tileA : tileB);
+    }
+  }
+
+  const postsX = 10;
+  for (let i = 0; i <= postsX; i++) {
+    const x = x0 + ((x1 - x0) * i) / postsX;
+    trimB.box(x - post / 2, balZ0, x + post / 2, balZ0 + post, 0.04, railH, metal);
+  }
+  const postsZ = 4;
+  for (let i = 1; i < postsZ; i++) {
+    const z = balZ0 + ((wallZ - balZ0) * i) / postsZ;
+    trimB.box(x0, z - post / 2, x0 + post, z + post / 2, 0.04, railH, metal);
+    trimB.box(x1 - post, z - post / 2, x1, z + post / 2, 0.04, railH, metal);
+  }
+  trimB.box(x0, balZ0, x1, balZ0 + post, railH - 0.04, railH, metal);
+  trimB.box(x0, balZ0, x0 + post, wallZ, railH - 0.04, railH, metal);
+  trimB.box(x1 - post, balZ0, x1, wallZ, railH - 0.04, railH, metal);
+  trimB.box(x0, balZ0, x1, balZ0 + post, 0.48, 0.54, metal);
+
+  blockers.push({ minX: x0, maxX: x1, minZ: balZ0, maxZ: balZ0 + 0.1 });
+  blockers.push({ minX: x0, maxX: x0 + 0.1, minZ: balZ0, maxZ: wallZ });
+  blockers.push({ minX: x1 - 0.1, maxX: x1, minZ: balZ0, maxZ: wallZ });
+  blockers.push({ minX: roomMinX, maxX: x0, minZ: balZ0, maxZ: wallZ });
+  blockers.push({ minX: x1, maxX: roomMaxX, minZ: balZ0, maxZ: wallZ });
+
+  addPatioSeating(trimB, blockers, (winX0 + winX1) / 2 - 0.85, balZ0 + 0.55);
+}
+
+function addPatioSeating(
+  trimB: MeshBuilder,
+  blockers: Blocker[],
+  cx: number,
+  cz: number,
+) {
+  const metal = new THREE.Color("#3a3d42");
+  const seat = new THREE.Color("#2f3238");
+  const top = new THREE.Color("#d8d2c8");
+
+  const tw = 0.78;
+  const td = 0.78;
+  trimB.box(cx - tw / 2, cz - td / 2, cx + tw / 2, cz + td / 2, 0.7, 0.76, top);
+  for (const [lx, lz] of [
+    [-0.3, -0.3],
+    [0.3, -0.3],
+    [-0.3, 0.3],
+    [0.3, 0.3],
+  ] as const) {
+    trimB.box(cx + lx - 0.03, cz + lz - 0.03, cx + lx + 0.03, cz + lz + 0.03, 0, 0.7, metal);
+  }
+
+  addPatioChair(trimB, cx - 0.85, cz, metal, seat);
+  addPatioChair(trimB, cx + 0.85, cz, metal, seat);
+  blockers.push({ minX: cx - 1.25, maxX: cx + 1.25, minZ: cz - 0.55, maxZ: cz + 0.55 });
+}
+
+function addPatioChair(
+  trimB: MeshBuilder,
+  x: number,
+  z: number,
+  metal: THREE.Color,
+  seat: THREE.Color,
+) {
+  const w = 0.48;
+  const d = 0.5;
+  trimB.box(x - w / 2, z - d / 2, x + w / 2, z + d / 2, 0.42, 0.48, seat);
+  trimB.box(x - w / 2, z - d / 2, x + w / 2, z - d / 2 + 0.07, 0.48, 0.92, seat);
+  for (const [lx, lz] of [
+    [-0.18, -0.18],
+    [0.18, -0.18],
+    [-0.18, 0.18],
+    [0.18, 0.18],
+  ] as const) {
+    trimB.box(x + lx - 0.025, z + lz - 0.025, x + lx + 0.025, z + lz + 0.025, 0, 0.42, metal);
+  }
 }
 
 function addRoomPlaque(
@@ -841,6 +1127,7 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
     computerHit: null,
     windowMesh: null,
     windowAnchor: null,
+    slider: null,
     dispose: () => {
       for (const item of disposables) item.dispose();
     },

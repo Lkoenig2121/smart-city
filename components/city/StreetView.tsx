@@ -107,6 +107,8 @@ export function StreetView({
   const [hasKey, setHasKey] = useState(false);
   const [pickingRoom, setPickingRoom] = useState(false);
   const [atBed, setAtBed] = useState(false);
+  const [atSlider, setAtSlider] = useState(false);
+  const [sliderOpen, setSliderOpen] = useState(true);
   const [sleeping, setSleeping] = useState(false);
   const [sleepPhase, setSleepPhase] = useState<"night" | "morning">("night");
   const [spawn, setSpawn] = useState(entry);
@@ -329,6 +331,8 @@ export function StreetView({
     setAimComputer(false);
     setPickingRoom(false);
     setAtBed(false);
+    setAtSlider(false);
+    setSliderOpen(true);
     setSleeping(false);
     setSleepPhase("night");
     atComputerRef.current = false;
@@ -383,6 +387,11 @@ export function StreetView({
           setAtComputer(false);
           return true;
         }
+        if (interior.zone === "room" && world.nearSlider()) {
+          world.toggleSlider();
+          setSliderOpen(world.sliderOpen());
+          return true;
+        }
         if (interior.zone === "room" && world.nearBed() && canSleepNow(state)) {
           beginSleep();
           return true;
@@ -410,6 +419,9 @@ export function StreetView({
       if (desk && document.pointerLockElement === canvas) document.exitPointerLock();
       const bed = interior.zone === "room" && !atComputerRef.current && world.nearBed();
       setAtBed((prev) => (prev === bed ? prev : bed));
+      const slider = interior.zone === "room" && !atComputerRef.current && world.nearSlider();
+      setAtSlider((prev) => (prev === slider ? prev : slider));
+      setSliderOpen(world.sliderOpen());
       const aiming = interior.zone === "room" && !atComputerRef.current && !sleepingRef.current && world.aimedAtComputer();
       setAimComputer((prev) => (prev === aiming ? prev : aiming));
       clockAcc += dt;
@@ -1040,6 +1052,17 @@ export function StreetView({
         </div>
       ) : null}
 
+      {atSlider && !atBed && !sleeping && !atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-xl border border-sky-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
+            <p className="text-xs text-slate-200">
+              Press <span className="font-semibold text-white">E</span> to{" "}
+              {sliderOpen ? "close" : "open"} the door
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {atBed && !sleeping && !atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-amber-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
@@ -1064,7 +1087,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer && !pickingRoom && !sleeping && !atBed ? (
+      {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer && !pickingRoom && !sleeping && !atBed && !atSlider ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
