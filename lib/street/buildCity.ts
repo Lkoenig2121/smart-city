@@ -63,6 +63,8 @@ export interface CityMeshes {
   group: THREE.Group;
   water: THREE.Mesh | null;
   blockers: Blocker[];
+  /** Axis-aligned bounds for each building, used to highlight a selection. */
+  volumes: BuildingVolume[];
   /** Lamp head positions, used to place a rolling pool of point lights. */
   lamps: THREE.Vector3[];
   /** Materials whose emissive strength tracks the time of day. */
@@ -86,6 +88,11 @@ export interface StreetSignal {
   nsRed: THREE.MeshBasicMaterial;
   ewGreen: THREE.MeshBasicMaterial;
   ewRed: THREE.MeshBasicMaterial;
+}
+
+export interface BuildingVolume {
+  id: string;
+  box: THREE.Box3;
 }
 
 function terrainColorOf(tile: Tile) {
@@ -204,8 +211,10 @@ export function buildCity(state: CityState): CityMeshes {
   }
 
   // ─── Buildings ─────────────────────────────────────────────────────────────
+  const volumes: BuildingVolume[] = [];
   for (const building of state.buildings.values()) {
     addBuilding(building, wallsFor, roofB, trimB, balconyB, blockers);
+    volumes.push(volumeFor(building));
   }
 
   for (const stop of BUS_STOPS) {
@@ -340,6 +349,7 @@ export function buildCity(state: CityState): CityMeshes {
     group,
     water,
     blockers,
+    volumes,
     lamps,
     emissiveMaterials,
     lampGlow,
@@ -666,6 +676,40 @@ function addBalconyDeck(
     const mx = (x0 + x1) / 2;
     const mz = (z0 + z1) / 2;
     trimB.box(mx - 0.22, mz - 0.18, mx + 0.22, mz + 0.18, top, top + 0.28, plant);
+  }
+}
+
+function volumeFor(building: Building): BuildingVolume {
+  const x0 = building.origin.x * TILE + WALL_INSET;
+  const z0 = building.origin.y * TILE + WALL_INSET;
+  const x1 = (building.origin.x + building.width) * TILE - WALL_INSET;
+  const z1 = (building.origin.y + building.depth) * TILE - WALL_INSET;
+  return {
+    id: building.id,
+    box: new THREE.Box3(new THREE.Vector3(x0, 0, z0), new THREE.Vector3(x1, volumeHeight(building), z1)),
+  };
+}
+
+function volumeHeight(building: Building) {
+  const floors = Math.max(1, building.floors);
+  switch (building.kind) {
+    case "house":
+      return floors * FLOOR_H + 2.6;
+    case "shop":
+      return Math.max(2, floors) * FLOOR_H + 0.55;
+    case "park_pavilion":
+      return 4.7;
+    case "baseball_stadium":
+      return 13;
+    case "subway_station":
+      return 4.6;
+    case "skyscraper":
+    case "tower":
+      return floors * FLOOR_H + 14;
+    case "city_hall":
+      return floors * FLOOR_H + 5.4;
+    default:
+      return floors * FLOOR_H + 0.8;
   }
 }
 

@@ -35,7 +35,7 @@ import { VenueWorld } from "@/lib/street/VenueWorld";
 import { attachPointerInput } from "@/lib/street/keys";
 import { canSleepNow, formatClock, sleepUntilMorning } from "@/lib/simulation/city/cityTick";
 import { weatherEmoji } from "@/lib/simulation/weather/weather";
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
 import { LodgingDesk } from "./LodgingDesk";
 import { OfficeComputer } from "./OfficeComputer";
 import { PlayerStatus } from "./PlayerStatus";
@@ -56,6 +56,7 @@ interface Props {
   startInterior?: Interior | null;
   /** False while the overlay is hiding so the isometric view can paint first. */
   active?: boolean;
+  selectedBuildingId?: RefObject<string | null>;
   onTick: (dt: number) => void;
   onExit: () => void;
 }
@@ -65,6 +66,7 @@ export function StreetView({
   entry,
   startInterior = null,
   active = true,
+  selectedBuildingId,
   onTick,
   onExit,
 }: Props) {
@@ -207,6 +209,7 @@ export function StreetView({
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       tickRef.current(dt);
+      world.setPinnedSelection(selectedBuildingId?.current ?? null);
       world.render(dt);
       positionRef.current = world.tilePosition;
       const gate = world.nearStadiumGate();

@@ -74,6 +74,7 @@ export function CityCanvas() {
     pointerId: -1,
   });
   const pickAt = useRef({ t: 0, x: 0, y: 0 });
+  const selectedIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -171,6 +172,7 @@ export function CityCanvas() {
 
       engine.tick(dt);
       renderer.render(engine, dt);
+      selectedIdRef.current = engine.selectedId;
       hudAcc += dt;
       if (hudAcc > 0.12) {
         hudAcc = 0;
@@ -236,6 +238,7 @@ export function CityCanvas() {
       y: Math.max(0, Math.min(engine.state.size - 1, centre.y)),
     };
     setStreet({ state: engine.state, entry: clamped });
+    selectedIdRef.current = engine.selectedId;
     setStreetOpen(true);
   }, []);
 
@@ -251,6 +254,7 @@ export function CityCanvas() {
       entry: subwayGateTile(selected),
       startInterior: { kind: "subway", stationId: id },
     });
+    selectedIdRef.current = selected.id;
     setStreetOpen(true);
   }, []);
 
@@ -373,6 +377,7 @@ export function CityCanvas() {
             entry={street.entry}
             startInterior={street.startInterior}
             active={streetOpen}
+            selectedBuildingId={selectedIdRef}
             onTick={tickFromStreet}
             onExit={leaveStreet}
           />

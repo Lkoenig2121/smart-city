@@ -1,12 +1,12 @@
 import * as THREE from "three";
 import type { Building, CityState } from "@/lib/city/types";
 import { findStadium, stadiumIsOpen } from "@/lib/city/stadium";
-import { lodgingBuildings } from "@/lib/city/lodging";
-import { subwayStations } from "@/lib/city/subway";
-import { enterableVenues } from "@/lib/city/venues";
+import { lodgingUse } from "@/lib/city/lodging";
+import { isEnterableVenue } from "@/lib/city/venues";
 import { lightingFor, type Lighting } from "@/lib/renderer/palette";
 import { AgentLayer } from "./agents";
 import { buildCity, TILE, updateTrafficSignals, type CityMeshes } from "./buildCity";
+import { BuildingGlow } from "./buildingGlow";
 import { FLOOR_H } from "./textures";
 import { StreetControls, type MoveMode } from "./controls";
 import { skyTexture } from "./textures";
@@ -43,6 +43,12 @@ export class StreetWorld {
   private skyKey = "";
   private time = 0;
   private weatherFx = new StreetWeatherFx();
+  private glow = new BuildingGlow();
+  private pinnedId: string | null = null;
+  private aimedId: string | null = null;
+  private aimRay = new THREE.Ray();
+  private aimDir = new THREE.Vector3();
+  private aimHit = new THREE.Vector3();
   private windowRT: THREE.WebGLRenderTarget | null = null;
   private windowCam = new THREE.PerspectiveCamera(48, 1.6, 0.35, 700);
   private windowBuf: Uint8Array | null = null;
@@ -67,6 +73,7 @@ export class StreetWorld {
 
     this.city = buildCity(state);
     this.scene.add(this.city.group);
+    this.scene.add(this.glow.group);
 
     this.controls = new StreetControls(state, this.city.blockers);
     this.agents = new AgentLayer(state, (x, z) => this.controls.groundAt(x, z));
@@ -131,67 +138,33 @@ export class StreetWorld {
   nearStadiumGate() {
     const stadium = findStadium(this.state);
     if (!stadium || !stadiumIsOpen(stadium)) return false;
-    const range = TILE * 3.5;
-    if (this.distanceToBuilding(stadium, this.controls.position.x, this.controls.position.z) < range) {
-      return true;
-    }
-    const hop = this.controls.hopEnds;
-    if (!hop) return false;
-    return (
-      this.distanceToBuilding(stadium, hop.from.x, hop.from.z) < range ||
-      this.distanceToBuilding(stadium, hop.to.x, hop.to.z) < range
-    );
+    return this.aimedWithin(stadium, TILE * 4.2);
   }
 
   nearLodgingEntrance() {
-    const range = TILE * 3.5;
-    let best: Building | null = null;
-    let bestDist = range;
-    for (const building of lodgingBuildings(this.state)) {
-      const here = this.distanceToBuilding(building, this.controls.position.x, this.controls.position.z);
-      const hop = this.controls.hopEnds;
-      const hopDist = hop
-        ? Math.min(
-            this.distanceToBuilding(building, hop.from.x, hop.from.z),
-            this.distanceToBuilding(building, hop.to.x, hop.to.z),
-          )
-        : Infinity;
-      const dist = Math.min(here, hopDist);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = building;
-      }
-    }
-    return best;
+    const building = this.aimedBuilding();
+    if (!building || !lodgingUse(building)) return null;
+    return this.aimedWithin(building, TILE * 2.2) ? building : null;
   }
 
   nearSubwayEntrance() {
-    return this.nearestOf(subwayStations(this.state), TILE * 3.5);
+    const building = this.aimedBuilding();
+    if (!building || building.kind !== "subway_station") return null;
+    return this.aimedWithin(building, TILE * 2.2) ? building : null;
   }
 
   nearVenueEntrance() {
-    return this.nearestOf(enterableVenues(this.state), TILE * 3.5);
+    const building = this.aimedBuilding();
+    if (!building || lodgingUse(building) || !isEnterableVenue(building)) return null;
+    return this.aimedWithin(building, TILE * 2.2) ? building : null;
   }
 
-  private nearestOf(buildings: Building[], range: number) {
-    let best: Building | null = null;
-    let bestDist = range;
-    for (const building of buildings) {
-      const here = this.distanceToBuilding(building, this.controls.position.x, this.controls.position.z);
-      const hop = this.controls.hopEnds;
-      const hopDist = hop
-        ? Math.min(
-            this.distanceToBuilding(building, hop.from.x, hop.from.z),
-            this.distanceToBuilding(building, hop.to.x, hop.to.z),
-          )
-        : Infinity;
-      const dist = Math.min(here, hopDist);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = building;
-      }
-    }
-    return best;
+  aimedBuilding() {
+    return this.aimedId ? (this.state.buildings.get(this.aimedId) ?? null) : null;
+  }
+
+  private aimedWithin(building: Building, range: number) {
+    return this.distanceToBuilding(building, this.controls.position.x, this.controls.position.z) < range;
   }
 
   private distanceToBuilding(building: Building, x: number, z: number) {
@@ -342,6 +315,10 @@ export class StreetWorld {
     }
   }
 
+  setPinnedSelection(id: string | null) {
+    this.pinnedId = id;
+  }
+
   setMoveMode(mode: MoveMode) {
     this.controls.setMode(mode);
   }
@@ -393,7 +370,24 @@ export class StreetWorld {
     }
 
     this.weatherFx.update(dt, this.camera, this.state.weather?.kind ?? "clear");
+    this.updateGlow(dt);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private updateGlow(dt: number) {
+    if (this.city.group.parent !== this.scene) {
+      this.aimedId = null;
+      this.glow.hide();
+      return;
+    }
+    this.camera.getWorldDirection(this.aimDir);
+    this.aimRay.set(this.camera.position, this.aimDir);
+    const aimed = this.glow.pick(this.aimRay, this.city.volumes, this.aimHit);
+    this.aimedId = aimed?.id ?? null;
+    const pinned = aimed
+      ? null
+      : (this.city.volumes.find((volume) => volume.id === this.pinnedId) ?? null);
+    this.glow.show(aimed ?? pinned ?? null, dt);
   }
 
   /**
@@ -420,12 +414,15 @@ export class StreetWorld {
     this.controls.position.copy(saved);
 
     const prevShadow = this.renderer.shadowMap.enabled;
+    const glowWasVisible = this.glow.group.visible;
+    this.glow.hide();
     this.renderer.shadowMap.enabled = false;
     this.renderer.setRenderTarget(this.windowRT);
     this.renderer.render(this.scene, this.windowCam);
     this.renderer.readRenderTargetPixels(this.windowRT, 0, 0, width, height, this.windowBuf!);
     this.renderer.setRenderTarget(null);
     this.renderer.shadowMap.enabled = prevShadow;
+    this.glow.group.visible = glowWasVisible;
 
     const ctx = dest.getContext("2d");
     const buf = this.windowBuf;
@@ -450,6 +447,7 @@ export class StreetWorld {
   dispose() {
     this.agents.dispose();
     this.city.dispose();
+    this.glow.dispose();
     this.weatherFx.dispose();
     this.sky?.dispose();
     this.windowRT?.dispose();
