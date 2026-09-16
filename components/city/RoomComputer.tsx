@@ -8,14 +8,15 @@ import {
   type Portfolio,
   type StockQuote,
 } from "@/lib/city/brokerage";
-import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
+import { YoutubeApp } from "./YoutubeApp";
+import { useEffect, useRef, useState, type FormEvent, type PointerEvent, type ReactNode } from "react";
 
 interface Props {
   minuteOfDay: number;
   onClose: () => void;
 }
 
-type Tab = "web" | "stocks";
+type AppId = "desktop" | "web" | "stocks" | "youtube";
 
 interface SearchHit {
   title: string;
@@ -25,7 +26,7 @@ interface SearchHit {
 }
 
 export function RoomComputer({ minuteOfDay, onClose }: Props) {
-  const [tab, setTab] = useState<Tab>("web");
+  const [app, setApp] = useState<AppId>("desktop");
   const clock = formatMinutes(minuteOfDay);
 
   return (
@@ -56,14 +57,23 @@ export function RoomComputer({ minuteOfDay, onClose }: Props) {
                   <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
                   <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
                 </span>
-                <p className="ml-2 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-sky-200/80">
-                  Riverside OS
-                </p>
+                {app === "desktop" ? (
+                  <p className="ml-2 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-sky-200/80">
+                    Riverside OS
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setApp("desktop")}
+                    className="ml-2 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-sky-200/80 hover:text-white"
+                  >
+                    ← Apps
+                  </button>
+                )}
               </div>
-              <div className="flex gap-1 rounded-full bg-white/5 p-0.5 ring-1 ring-white/10">
-                <TabButton active={tab === "web"} onClick={() => setTab("web")} label="Web" />
-                <TabButton active={tab === "stocks"} onClick={() => setTab("stocks")} label="Stocks" />
-              </div>
+              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {app === "youtube" ? "YouTube" : app === "stocks" ? "Stocks" : app === "web" ? "Web" : "Home"}
+              </p>
               <div className="flex items-center gap-3">
                 <p className="text-[0.65rem] tabular-nums text-amber-200/90">{clock}</p>
                 <button
@@ -75,7 +85,15 @@ export function RoomComputer({ minuteOfDay, onClose }: Props) {
                 </button>
               </div>
             </div>
-            {tab === "web" ? <WebApp minuteOfDay={minuteOfDay} /> : <StockApp minuteOfDay={minuteOfDay} />}
+            {app === "desktop" ? (
+              <Desktop onOpen={setApp} />
+            ) : app === "web" ? (
+              <WebApp minuteOfDay={minuteOfDay} />
+            ) : app === "stocks" ? (
+              <StockApp minuteOfDay={minuteOfDay} />
+            ) : (
+              <YoutubeApp minuteOfDay={minuteOfDay} />
+            )}
           </div>
           <p className="mt-2.5 text-center text-[0.58rem] font-semibold tracking-[0.42em] text-zinc-400">
             RIVERSIDE
@@ -94,18 +112,69 @@ function formatMinutes(minuteOfDay: number) {
   return `${hour12}:${minute.toString().padStart(2, "0")} ${suffix}`;
 }
 
-function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function Desktop({ onOpen }: { onOpen: (app: AppId) => void }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top,_#1b3350,_#0b1422_58%)] px-6 py-8">
+      <p className="text-[0.65rem] uppercase tracking-[0.22em] text-sky-200/70">Applications</p>
+      <p className="mt-1 text-sm text-slate-300">Open an app on this laptop.</p>
+      <div className="mt-8 grid grid-cols-3 gap-4">
+        <AppIcon
+          label="Web"
+          hint="News & search"
+          onClick={() => onOpen("web")}
+          icon={
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-300 to-emerald-400 text-lg font-bold text-[#0a1a22]">
+              W
+            </span>
+          }
+        />
+        <AppIcon
+          label="Stocks"
+          hint="Riverside Brokerage"
+          onClick={() => onOpen("stocks")}
+          icon={
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/90 text-lg font-bold text-[#082012]">
+              $
+            </span>
+          }
+        />
+        <AppIcon
+          label="YouTube"
+          hint="Watch & search"
+          onClick={() => onOpen("youtube")}
+          icon={
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#ff0000]">
+              <svg viewBox="0 0 24 24" className="h-6 w-6 fill-white" aria-hidden>
+                <path d="M8 5.14v13.72L19.5 12 8 5.14z" />
+              </svg>
+            </span>
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+function AppIcon({
+  label,
+  hint,
+  icon,
+  onClick,
+}: {
+  label: string;
+  hint: string;
+  icon: ReactNode;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-3.5 py-1 text-xs font-semibold transition ${
-        active
-          ? "bg-gradient-to-br from-sky-300 to-emerald-400 text-[#0a1a22] shadow"
-          : "text-slate-300 hover:bg-white/10"
-      }`}
+      className="flex flex-col items-center gap-2 rounded-2xl bg-white/5 px-3 py-4 hover:bg-white/10"
     >
-      {label}
+      {icon}
+      <span className="text-sm font-semibold text-white">{label}</span>
+      <span className="text-[0.65rem] text-slate-400">{hint}</span>
     </button>
   );
 }

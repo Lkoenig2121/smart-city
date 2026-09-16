@@ -1,3 +1,5 @@
+import { isTypingTarget } from "@/lib/city/input";
+
 /** WASD / look input plus a Shift flag that mouse events are not allowed to clear. */
 export class InputKeys {
   private pressed = new Set<string>();
@@ -73,8 +75,10 @@ export function attachPointerInput(
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.code === "Escape") return;
-    if (event.code.startsWith("Arrow") || event.code === "Space") event.preventDefault();
+    const typing = isTypingTarget(event.target);
+    if (!typing && (event.code.startsWith("Arrow") || event.code === "Space")) event.preventDefault();
     if (handlers.consumeKey?.(event)) return;
+    if (typing) return;
     controls.keyDown(event);
   };
   const onKeyUp = (event: KeyboardEvent) => controls.keyUp(event);

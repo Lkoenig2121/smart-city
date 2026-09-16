@@ -590,13 +590,10 @@ export function StreetView({
     const detachInput = attachPointerInput(canvas, world.controls, {
       setLocked,
       consumeKey: (event) => {
+        if (atComputerRef.current) return true;
         if (event.code !== "KeyE") return false;
         event.preventDefault();
         if (sleepingRef.current) return true;
-        if (atComputerRef.current) {
-          setAtComputer(false);
-          return true;
-        }
         if (interior.zone === "room" && world.nearSlider()) {
           world.toggleSlider();
           setSliderOpen(world.sliderOpen());
@@ -604,6 +601,12 @@ export function StreetView({
         }
         if (interior.zone === "room" && world.nearBed() && canSleepNow(state)) {
           beginSleep();
+          return true;
+        }
+        if (interior.zone === "room" && (world.aimedAtComputer() || world.nearComputer())) {
+          atComputerRef.current = true;
+          setAtComputer(true);
+          if (document.pointerLockElement === canvas) document.exitPointerLock();
           return true;
         }
         if (interior.zone === "pool" && world.nearDesk()) {
@@ -720,14 +723,10 @@ export function StreetView({
     const detachInput = attachPointerInput(canvas, world.controls, {
       setLocked,
       consumeKey: (event) => {
+        if (atOfficeComputerRef.current) return true;
         if (event.code !== "KeyE") return false;
         event.preventDefault();
         if (characterMenuRef.current || mallShopRef.current) return true;
-        if (atOfficeComputerRef.current) {
-          atOfficeComputerRef.current = false;
-          setAtOfficeComputer(false);
-          return true;
-        }
         if (world.nearExit()) leaveStreet();
         else {
           const store = world.nearStore();
@@ -1352,7 +1351,7 @@ export function StreetView({
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-sky-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
-              <span className="font-semibold text-white">Click</span> to use the computer
+              Press <span className="font-semibold text-white">E</span> to use the computer
             </p>
           </div>
         </div>
