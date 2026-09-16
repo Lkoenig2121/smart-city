@@ -22,6 +22,7 @@ export interface LodgingInterior {
   windowMesh: THREE.Mesh | null;
   windowAnchor: { x: number; y: number; z: number } | null;
   slider: SliderDoor | null;
+  update?: (dt: number, ctx?: { fireworks?: boolean }) => void;
   dispose: () => void;
 }
 
@@ -1003,6 +1004,288 @@ function addCityFlank(
   }
 }
 
+const POOL_SKIN = ["#e8c4a0", "#c9956c", "#8d5a3b", "#f1d0b0", "#6b3f2a"];
+const POOL_HAIR = ["#1a1410", "#4a2c12", "#c9a44c", "#2c1810", "#f4f1ea"];
+const POOL_SWIM = ["#c0392b", "#1f4d8c", "#e8c36a", "#1a6b6b", "#f4f1ea", "#2aa8c4"];
+const POOL_CASUAL = ["#1c1c1c", "#ece6da", "#3a3a3a", "#6b4a32", "#1a6b6b"];
+
+type PoolPose = "sit" | "lie" | "swim" | "tread" | "stand";
+
+interface PoolGuest {
+  root: THREE.Group;
+  pose: PoolPose;
+  phase: number;
+  baseY: number;
+  baseYaw: number;
+}
+
+interface PoolStop {
+  x: number;
+  z: number;
+  wait?: number;
+  yaw?: number;
+  hide?: boolean;
+}
+
+interface PoolWalker {
+  root: THREE.Group;
+  figure: THREE.Group;
+  path: PoolStop[];
+  lookout: PoolStop;
+  index: number;
+  waitLeft: number;
+  speed: number;
+  phase: number;
+  watching: boolean;
+}
+
+function addPoolGuests(
+  group: THREE.Group,
+  blockers: Blocker[],
+  disposables: Array<{ dispose: () => void }>,
+): { guests: PoolGuest[]; walkers: PoolWalker[] } {
+  const bodyGeo = new THREE.CapsuleGeometry(0.2, 0.62, 4, 8);
+  const headGeo = new THREE.SphereGeometry(0.14, 10, 8);
+  const hairGeo = new THREE.SphereGeometry(0.155, 10, 8);
+  const limbGeo = new THREE.BoxGeometry(1, 1, 1);
+  disposables.push(bodyGeo, headGeo, hairGeo, limbGeo);
+
+  const mats = new Map<string, THREE.MeshStandardMaterial>();
+  const mat = (hex: string, roughness: number) => {
+    const key = `${hex}:${roughness}`;
+    let material = mats.get(key);
+    if (!material) {
+      material = new THREE.MeshStandardMaterial({ color: hex, roughness });
+      mats.set(key, material);
+      disposables.push(material);
+    }
+    return material;
+  };
+
+  const figureOf = (pose: PoolPose, cloth: string, i: number) => {
+    const clothMat = mat(cloth, 0.78);
+    const skinMat = mat(POOL_SKIN[i % POOL_SKIN.length], 0.72);
+    const hairMat = mat(POOL_HAIR[i % POOL_HAIR.length], 0.86);
+    const pivot = new THREE.Group();
+    const figure = new THREE.Group();
+    const body = new THREE.Mesh(bodyGeo, clothMat);
+    const head = new THREE.Mesh(headGeo, skinMat);
+    const hairMesh = new THREE.Mesh(hairGeo, hairMat);
+    body.castShadow = true;
+    head.castShadow = true;
+    hairMesh.castShadow = true;
+    hairMesh.scale.set(1.1, 0.64, 1.08);
+
+    if (pose === "sit") {
+      body.scale.set(1, 0.7, 0.92);
+      body.position.set(0, 1.0, 0.02);
+      head.position.set(0, 1.44, 0.05);
+      hairMesh.position.set(0, 1.52, 0.03);
+      const thighs = new THREE.Mesh(limbGeo, clothMat);
+      thighs.scale.set(0.42, 0.14, 0.46);
+      thighs.position.set(0, 0.73, 0.22);
+      const shins = new THREE.Mesh(limbGeo, clothMat);
+      shins.scale.set(0.34, 0.44, 0.12);
+      shins.position.set(0, 0.4, 0.42);
+      figure.add(body, head, hairMesh, thighs, shins);
+    } else if (pose === "lie" || pose === "swim") {
+      body.position.y = 0.54;
+      head.position.y = 1.18;
+      hairMesh.position.set(0, 1.28, 0.02);
+      const arms = new THREE.Mesh(limbGeo, skinMat);
+      arms.scale.set(0.78, 0.09, 0.09);
+      arms.position.set(0, 0.92, 0);
+      figure.add(body, head, hairMesh, arms);
+      figure.rotation.z = -Math.PI / 2;
+    } else if (pose === "tread") {
+      body.scale.set(1.04, 0.82, 1.04);
+      body.position.y = 0.48;
+      head.position.y = 1.04;
+      hairMesh.position.set(0, 1.12, 0);
+      figure.add(body, head, hairMesh);
+    } else {
+      body.position.y = 0.58;
+      head.position.y = 1.22;
+      hairMesh.position.set(0, 1.32, 0);
+      figure.add(body, head, hairMesh);
+    }
+
+    pivot.add(figure);
+    group.add(pivot);
+    return { pivot, figure };
+  };
+
+  const guests: PoolGuest[] = [];
+  const add = (
+    pose: PoolPose,
+    x: number,
+    y: number,
+    z: number,
+    yaw: number,
+    cloth: string,
+    i: number,
+    block = true,
+  ) => {
+    const { pivot } = figureOf(pose, cloth, i);
+    pivot.position.set(x, y, z);
+    pivot.rotation.y = yaw;
+    guests.push({ root: pivot, pose, phase: i * 1.17, baseY: y, baseYaw: yaw });
+    if (block) {
+      const r = pose === "sit" ? 0.38 : pose === "stand" ? 0.32 : 0.55;
+      blockers.push({ minX: x - r, maxX: x + r, minZ: z - r, maxZ: z + r });
+    }
+  };
+
+  // Cabana: bartender plus three guests on the stools.
+  add("stand", -13.45, 0, -6.95, Math.PI / 2, "#ece6da", 0, false);
+  add("sit", -11.12, 0, -8.14, -Math.PI / 2, POOL_CASUAL[0], 1);
+  add("sit", -11.12, 0, -6.94, -Math.PI / 2, POOL_CASUAL[1], 2);
+  add("sit", -11.12, 0, -5.74, -Math.PI / 2, POOL_CASUAL[2], 3);
+
+  // Grass loungers — lie along the chair, head toward the pool.
+  add("lie", -14.7, 0.48, 5.47, 0, POOL_SWIM[0], 4);
+  add("lie", -14.7, 0.48, 9.87, 0, POOL_CASUAL[3], 5);
+  add("lie", 14.85, 0.48, 5.47, Math.PI, POOL_SWIM[1], 6);
+  add("lie", 14.85, 0.48, 9.87, Math.PI, POOL_SWIM[2], 7);
+
+  // Submerged shelf loungers.
+  add("lie", -5.05, 0.38, -4.1, 0, POOL_SWIM[3], 8);
+  add("lie", -1.45, 0.38, -4.1, 0, POOL_SWIM[4], 9);
+  add("lie", 2.15, 0.38, -4.1, 0, POOL_SWIM[5], 10);
+
+  // Deep water: floaters on their backs and people treading.
+  add("swim", 5.6, 0.08, 0.9, 0.15, POOL_SWIM[0], 11);
+  add("swim", -6.1, 0.08, 2.6, Math.PI - 0.2, POOL_SWIM[1], 12);
+  add("swim", 4.9, 0.08, 5.8, Math.PI / 2, POOL_SWIM[4], 13);
+  add("tread", -5.9, -0.62, 6.5, 0.5, POOL_SWIM[2], 14);
+  add("tread", 6.5, -0.62, 3.4, -1.2, POOL_SWIM[3], 15);
+  add("tread", -2.6, -0.58, 4.9, 2.1, POOL_SWIM[5], 16);
+
+  const door: PoolStop = { x: 1.2, z: -14.55 };
+  const elevator: PoolStop = { x: 0.2, z: 14.45 };
+  const plaza: PoolStop = { x: 0, z: -8.4 };
+  const cabana: PoolStop = { x: -10.05, z: -4.15, wait: 5.2, yaw: -Math.PI / 2 };
+  const westLane: PoolStop = { x: -9.5, z: 2.6 };
+  const westNorth: PoolStop = { x: -9.5, z: 10.4 };
+  const northMid: PoolStop = { x: 0, z: 12.35, wait: 6.5, yaw: 0 };
+  const northWest: PoolStop = { x: -10.2, z: 12.35, wait: 5, yaw: 0 };
+  const northEast: PoolStop = { x: 8.2, z: 12.35, wait: 5.5, yaw: 0 };
+  const eastLane: PoolStop = { x: 10.2, z: 6.1 };
+  const eastSouth: PoolStop = { x: 10.2, z: 1.15 };
+  const eastRail: PoolStop = { x: 16.55, z: 7.7, wait: 5.4, yaw: Math.PI / 2 };
+  const westRail: PoolStop = { x: -16.55, z: 1.9, wait: 5, yaw: -Math.PI / 2 };
+  const westCorner: PoolStop = { x: -16.5, z: 12.2 };
+  const poolWest: PoolStop = { x: -8.7, z: 0.7, wait: 2.8, yaw: Math.PI / 2 };
+  const poolEast: PoolStop = { x: 8.7, z: 1.8, wait: 2.4, yaw: -Math.PI / 2 };
+
+  const routes: Array<{ cloth: string; speed: number; lookout: PoolStop; path: PoolStop[] }> = [
+    {
+      cloth: POOL_CASUAL[0],
+      speed: 1.12,
+      lookout: northMid,
+      path: [
+        { ...door, hide: true, wait: 4.5 },
+        door,
+        plaza,
+        cabana,
+        westLane,
+        northMid,
+        plaza,
+        door,
+        { ...door, hide: true, wait: 9 },
+      ],
+    },
+    {
+      cloth: POOL_CASUAL[1],
+      speed: 1.05,
+      lookout: northEast,
+      path: [
+        { ...elevator, hide: true, wait: 5.5 },
+        elevator,
+        northEast,
+        eastLane,
+        poolEast,
+        eastSouth,
+        plaza,
+        door,
+        { ...door, hide: true, wait: 8 },
+      ],
+    },
+    {
+      cloth: POOL_SWIM[1],
+      speed: 1.18,
+      lookout: northEast,
+      path: [eastLane, eastSouth, plaza, cabana, plaza, eastSouth, eastLane, eastRail],
+    },
+    {
+      cloth: POOL_SWIM[0],
+      speed: 1.08,
+      lookout: northMid,
+      path: [poolWest, westLane, westNorth, northMid, northWest, westCorner, westRail, westLane],
+    },
+    {
+      cloth: POOL_SWIM[4],
+      speed: 1.22,
+      lookout: northEast,
+      path: [poolEast, eastLane, eastRail, northEast, northMid, westNorth, cabana, westLane],
+    },
+    {
+      cloth: POOL_CASUAL[3],
+      speed: 1.15,
+      lookout: northWest,
+      path: [
+        { ...elevator, hide: true, wait: 6.2 },
+        elevator,
+        northWest,
+        westLane,
+        cabana,
+        plaza,
+        elevator,
+        { ...elevator, hide: true, wait: 7.5 },
+      ],
+    },
+    {
+      cloth: POOL_CASUAL[2],
+      speed: 0.98,
+      lookout: { x: -4.2, z: 12.35, wait: 7, yaw: 0 },
+      path: [
+        { x: 6.2, z: -8.4 },
+        plaza,
+        door,
+        { ...door, hide: true, wait: 6.5 },
+        door,
+        plaza,
+        eastSouth,
+        eastLane,
+        northMid,
+        plaza,
+      ],
+    },
+  ];
+
+  const walkers: PoolWalker[] = routes.map((route, i) => {
+    const { pivot, figure } = figureOf("stand", route.cloth, 20 + i);
+    const startAt = i % route.path.length;
+    const start = route.path[startAt];
+    pivot.position.set(start.x, 0, start.z);
+    pivot.visible = !start.hide;
+    if (start.yaw != null) pivot.rotation.y = start.yaw;
+    return {
+      root: pivot,
+      figure,
+      path: route.path,
+      lookout: route.lookout,
+      index: startAt,
+      waitLeft: start.hide ? start.wait ?? 3 : 0.4 + i * 0.35,
+      speed: route.speed,
+      phase: i * 1.7,
+      watching: false,
+    };
+  });
+
+  return { guests, walkers };
+}
+
 function buildPool(building: Building, state: CityState): LodgingInterior {
   const group = new THREE.Group();
   const blockers: Blocker[] = [];
@@ -1131,6 +1414,48 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
   addCityFlank(floorB, wallB, trimB, building, state, minX, -1, roofFloor);
 
   assemble(group, floorB, wallB, trimB, disposables);
+  const { guests, walkers } = addPoolGuests(group, blockers, disposables);
+  let guestTime = 0;
+
+  const stepWalker = (walker: PoolWalker, dt: number, fireworks: boolean) => {
+    const dest = walker.watching ? walker.lookout : walker.path[walker.index];
+    if (walker.waitLeft > 0) {
+      walker.waitLeft -= dt;
+      walker.figure.position.y = 0;
+      if (dest.yaw != null && !dest.hide) {
+        walker.root.rotation.y += (dest.yaw - walker.root.rotation.y) * Math.min(1, dt * 4);
+      }
+      if (walker.waitLeft > 0) return;
+      if (walker.watching) {
+        walker.watching = false;
+      } else {
+        walker.index = (walker.index + 1) % walker.path.length;
+        if (fireworks) walker.watching = true;
+      }
+      return;
+    }
+
+    const target = walker.watching ? walker.lookout : walker.path[walker.index];
+    const dx = target.x - walker.root.position.x;
+    const dz = target.z - walker.root.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.14) {
+      walker.root.position.x = target.x;
+      walker.root.position.z = target.z;
+      walker.figure.position.y = 0;
+      walker.root.visible = !target.hide;
+      walker.waitLeft = target.wait ?? (target.hide ? 4 : 0.35);
+      if (target.yaw != null && !target.hide) walker.root.rotation.y = target.yaw;
+      return;
+    }
+
+    walker.root.visible = true;
+    const step = Math.min(dist, walker.speed * dt);
+    walker.root.position.x += (dx / dist) * step;
+    walker.root.position.z += (dz / dist) * step;
+    walker.root.rotation.y = Math.atan2(dx, dz);
+    walker.figure.position.y = Math.sin(guestTime * 10.5 + walker.phase) * 0.045;
+  };
 
   return {
     group,
@@ -1152,6 +1477,20 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
     windowMesh: null,
     windowAnchor: null,
     slider: null,
+    update: (dt, ctx) => {
+      guestTime += dt;
+      for (const guest of guests) {
+        if (guest.pose !== "swim" && guest.pose !== "tread") continue;
+        const bob =
+          Math.sin(guestTime * (guest.pose === "tread" ? 1.7 : 1.15) + guest.phase) *
+          (guest.pose === "tread" ? 0.07 : 0.04);
+        guest.root.position.y = guest.baseY + bob;
+        guest.root.rotation.y =
+          guest.baseYaw + Math.sin(guestTime * 0.45 + guest.phase) * (guest.pose === "tread" ? 0.22 : 0.08);
+      }
+      const fireworks = Boolean(ctx?.fireworks);
+      for (const walker of walkers) stepWalker(walker, dt, fireworks);
+    },
     dispose: () => {
       for (const item of disposables) item.dispose();
     },

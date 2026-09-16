@@ -232,6 +232,9 @@ export class LodgingWorld {
     if (this.deskCtx && this.deskTexture) this.drawDesk();
     this.interior.tv?.update(dt, this.state);
     this.interior.slider?.update(dt);
+    this.interior.update?.(dt, {
+      fireworks: this.zone === "pool" && stadiumFireworksOn(this.state),
+    });
     this.updateFireworks(dt);
     this.renderer.render(this.scene, this.camera);
   }
