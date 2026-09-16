@@ -32,12 +32,12 @@ export class InteriorControls {
 
   constructor(
     private blockers: Blocker[],
-    private groundY: (x: number, z: number) => number,
+    private groundY: (x: number, z: number, feetY?: number) => number,
     private bounds: { minX: number; maxX: number; minZ: number; maxZ: number },
   ) {}
 
   spawn(x: number, z: number, yaw: number, pitch = 0) {
-    this.position.set(x, this.groundY(x, z) + EYE_HEIGHT, z);
+    this.position.set(x, this.groundY(x, z, 0) + EYE_HEIGHT, z);
     this.yaw = yaw;
     this.pitch = pitch;
     this.velocity.set(0, 0, 0);
@@ -101,7 +101,7 @@ export class InteriorControls {
     this.step(this.velocity.x * dt, 0);
     this.step(0, this.velocity.z * dt);
 
-    const floor = this.groundY(this.position.x, this.position.z) + EYE_HEIGHT;
+    const floor = this.groundY(this.position.x, this.position.z, this.position.y - EYE_HEIGHT) + EYE_HEIGHT;
     if (this.grounded && this.has("Space")) {
       this.velocity.y = JUMP_SPEED * this.boost.jump;
       this.grounded = false;

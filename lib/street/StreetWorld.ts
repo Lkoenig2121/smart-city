@@ -125,6 +125,10 @@ export class StreetWorld {
     if (group.parent) group.parent.remove(group);
     group.position.set(0, 0, 0);
     group.rotation.set(0, 0, 0);
+    group.scale.set(1, 1, 1);
+    group.traverse((obj) => {
+      if (obj.userData.mallShell) obj.visible = true;
+    });
     this.scene.add(group);
   }
 
@@ -433,6 +437,20 @@ export class StreetWorld {
    * show the real streets, trees, and buildings outside.
    */
   renderWindowView(building: Building, floor: number, dest: HTMLCanvasElement, peekX = 0) {
+    const pose = windowPose(this.state, building, floor, peekX);
+    this.captureView(pose.x, pose.y, pose.z, pose.lookX, pose.lookY, pose.lookZ, dest, 48);
+  }
+
+  private captureView(
+    x: number,
+    y: number,
+    z: number,
+    lookX: number,
+    lookY: number,
+    lookZ: number,
+    dest: HTMLCanvasElement,
+    fov: number,
+  ) {
     const width = dest.width;
     const height = dest.height;
     if (!this.windowRT || this.windowRT.width !== width || this.windowRT.height !== height) {
@@ -440,14 +458,14 @@ export class StreetWorld {
       this.windowRT = new THREE.WebGLRenderTarget(width, height);
       this.windowBuf = new Uint8Array(width * height * 4);
     }
-    const pose = windowPose(this.state, building, floor, peekX);
+    this.windowCam.fov = fov;
     this.windowCam.aspect = width / Math.max(1, height);
-    this.windowCam.position.set(pose.x, pose.y, pose.z);
-    this.windowCam.lookAt(pose.lookX, pose.lookY, pose.lookZ);
+    this.windowCam.position.set(x, y, z);
+    this.windowCam.lookAt(lookX, lookY, lookZ);
     this.windowCam.updateProjectionMatrix();
 
     const saved = this.controls.position.clone();
-    this.controls.position.set(pose.x, pose.y, pose.z);
+    this.controls.position.set(x, y, z);
     this.applyLighting(lightingFor(this.state));
     this.controls.position.copy(saved);
 
@@ -466,9 +484,9 @@ export class StreetWorld {
     const buf = this.windowBuf;
     if (!ctx || !buf) return;
     const image = ctx.createImageData(width, height);
-    for (let y = 0; y < height; y++) {
-      const src = (height - 1 - y) * width * 4;
-      image.data.set(buf.subarray(src, src + width * 4), y * width * 4);
+    for (let row = 0; row < height; row++) {
+      const src = (height - 1 - row) * width * 4;
+      image.data.set(buf.subarray(src, src + width * 4), row * width * 4);
     }
     ctx.putImageData(image, 0, 0);
   }

@@ -6,22 +6,42 @@ import { formatDollars, type PlayerState } from "@/lib/city/player";
 import type { CityClock } from "@/lib/city/types";
 import { useState } from "react";
 
-const DRINKS = CONSUMABLES.filter((item) => item.kind === "drink");
-const FOOD = CONSUMABLES.filter((item) => item.kind === "food");
-
 interface Props {
   clock: CityClock;
   player: PlayerState;
   onPlayerChange: (player: PlayerState) => void;
   onClose?: () => void;
   onInventory?: () => void;
+  eyebrow?: string;
+  title?: string;
+  blurb?: string;
+  source?: string;
+  closeHint?: string;
+  itemIds?: string[];
 }
 
-export function PoolBar({ clock, player, onPlayerChange, onClose, onInventory }: Props) {
+export function PoolBar({
+  clock,
+  player,
+  onPlayerChange,
+  onClose,
+  onInventory,
+  eyebrow = "Roof deck",
+  title = "Cabana bar",
+  blurb = "Food and drinks at the pool.",
+  source = "Cabana bar",
+  closeHint = "P or Esc to close",
+  itemIds,
+}: Props) {
   const [note, setNote] = useState<string | null>(null);
+  const catalog = itemIds?.length
+    ? CONSUMABLES.filter((item) => itemIds.includes(item.id))
+    : CONSUMABLES;
+  const drinks = catalog.filter((item) => item.kind === "drink");
+  const food = catalog.filter((item) => item.kind === "food");
 
   const buy = (item: ConsumableItem) => {
-    const result = buyConsumable(item.id, clock);
+    const result = buyConsumable(item.id, clock, source);
     if (typeof result === "string") {
       setNote(result);
       return;
@@ -42,12 +62,12 @@ export function PoolBar({ clock, player, onPlayerChange, onClose, onInventory }:
         className="w-[min(26rem,calc(100%-2rem))] rounded-2xl border border-teal-300/35 bg-[#10201f]/94 p-5 shadow-2xl backdrop-blur"
         onClick={(event) => event.stopPropagation()}
       >
-        <p className="text-center text-[0.65rem] uppercase tracking-[0.28em] text-teal-200">Roof deck</p>
-        <p className="mt-1 text-center text-lg font-semibold text-white">Cabana bar</p>
-        <p className="mt-1 text-center text-sm text-slate-300">Food and drinks at the pool. Wallet {formatDollars(player.wallet)}</p>
+        <p className="text-center text-[0.65rem] uppercase tracking-[0.28em] text-teal-200">{eyebrow}</p>
+        <p className="mt-1 text-center text-lg font-semibold text-white">{title}</p>
+        <p className="mt-1 text-center text-sm text-slate-300">{blurb} Wallet {formatDollars(player.wallet)}</p>
 
-        <Section title="Drinks" items={DRINKS} wallet={player.wallet} bag={player.life.bag ?? {}} onBuy={buy} />
-        <Section title="Food" items={FOOD} wallet={player.wallet} bag={player.life.bag ?? {}} onBuy={buy} />
+        {drinks.length ? <Section title="Drinks" items={drinks} wallet={player.wallet} bag={player.life.bag ?? {}} onBuy={buy} /> : null}
+        {food.length ? <Section title="Food" items={food} wallet={player.wallet} bag={player.life.bag ?? {}} onBuy={buy} /> : null}
 
         {note ? <p className="mt-3 text-center text-sm text-teal-100">{note}</p> : null}
         <div className="mt-3 flex items-center justify-center gap-2">
@@ -60,7 +80,7 @@ export function PoolBar({ clock, player, onPlayerChange, onClose, onInventory }:
               Inventory
             </button>
           ) : null}
-          <p className="text-[0.65rem] text-slate-500">P or Esc to close</p>
+          <p className="text-[0.65rem] text-slate-500">{closeHint}</p>
         </div>
       </div>
     </div>

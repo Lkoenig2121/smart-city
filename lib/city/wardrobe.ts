@@ -1,23 +1,10 @@
-import { characterProgress } from "./progression";
 import { clothingById, type ClothSlot, type OutfitSlots, type SavedOutfit } from "./clothing";
-import { characterStats, collectionOpen, type LifeState } from "./character";
+import { characterStats, type LifeState } from "./character";
 import { awardXp, readPlayer, spendWallet, writePlayer, type PlayerState } from "./player";
-import { skillProgress } from "./skills";
 import type { CityClock } from "./types";
 
-export function itemLocked(life: LifeState, itemId: string) {
-  const item = clothingById(itemId);
-  if (!item) return "Unknown item.";
-  if (!collectionOpen(life, item.collection)) {
-    return `Unlocks with the ${item.collection} collection (character level ${item.level}).`;
-  }
-  if (characterProgress(life.xp).level < item.level) {
-    return `Requires character level ${item.level}.`;
-  }
-  if (item.skill) {
-    const have = skillProgress(life.skills[item.skill.path]).level;
-    if (have < item.skill.level) return `Requires ${item.skill.path} skill ${item.skill.level}.`;
-  }
+export function itemLocked(_life: LifeState, itemId: string) {
+  if (!clothingById(itemId)) return "Unknown item.";
   return null;
 }
 

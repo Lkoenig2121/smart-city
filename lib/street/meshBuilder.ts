@@ -89,6 +89,28 @@ export class MeshBuilder {
     );
   }
 
+  /** A flat horizontal quad, facing down, used as a slab soffit. */
+  soffit(
+    x0: number,
+    z0: number,
+    x1: number,
+    z1: number,
+    y: number,
+    color: THREE.Color,
+    uMax = 1,
+    vMax = 1,
+  ) {
+    this.quad(
+      { x: x0, y, z: z0 },
+      { x: x1, y, z: z0 },
+      { x: x1, y, z: z1 },
+      { x: x0, y, z: z1 },
+      color,
+      uMax,
+      vMax,
+    );
+  }
+
   /**
    * Four upright walls of a box. UVs tile by `bay` horizontally and `storey`
    * vertically so window grids line up regardless of the box proportions.

@@ -120,6 +120,7 @@ export function buildCity(state: CityState): CityMeshes {
   const disposables: Array<{ dispose: () => void }> = [];
 
   const groundB = new MeshBuilder();
+  const mallGroundB = new MeshBuilder();
   const roadB = new MeshBuilder();
   const concreteB = new MeshBuilder();
   const roofB = new MeshBuilder();
@@ -127,6 +128,9 @@ export function buildCity(state: CityState): CityMeshes {
   const balconyB = new MeshBuilder();
   const lampHeadB = new MeshBuilder();
   const wallB: Partial<Record<FacadeStyle, MeshBuilder>> = {};
+  const mallIds = new Set(
+    [...state.buildings.values()].filter((building) => venueRole(building) === "mall").map((building) => building.id),
+  );
 
   const wallsFor = (style: FacadeStyle) => {
     let builder = wallB[style];
@@ -210,14 +214,35 @@ export function buildCity(state: CityState): CityMeshes {
       }
 
       scratch.set(terrainColorOf(tile));
-      groundB.ground(x0, z0, x1, z1, 0, scratch, 1, 1);
+      if (tile.buildingId && mallIds.has(tile.buildingId)) {
+        mallGroundB.ground(x0, z0, x1, z1, 0, scratch, 1, 1);
+      } else {
+        groundB.ground(x0, z0, x1, z1, 0, scratch, 1, 1);
+      }
     }
   }
 
   // ─── Buildings ─────────────────────────────────────────────────────────────
+  const mallRoofB = new MeshBuilder();
+  const mallTrimB = new MeshBuilder();
+  const mallBalconyB = new MeshBuilder();
+  const mallWallB: Partial<Record<FacadeStyle, MeshBuilder>> = {};
+  const mallWallsFor = (style: FacadeStyle) => {
+    let builder = mallWallB[style];
+    if (!builder) {
+      builder = new MeshBuilder();
+      mallWallB[style] = builder;
+    }
+    return builder;
+  };
+
   const volumes: BuildingVolume[] = [];
   for (const building of state.buildings.values()) {
-    addBuilding(building, wallsFor, roofB, trimB, balconyB, blockers);
+    if (venueRole(building) === "mall") {
+      addBuilding(building, mallWallsFor, mallRoofB, mallTrimB, mallBalconyB, blockers);
+    } else {
+      addBuilding(building, wallsFor, roofB, trimB, balconyB, blockers);
+    }
     volumes.push(volumeFor(building));
   }
 
@@ -317,21 +342,74 @@ export function buildCity(state: CityState): CityMeshes {
     addMesh(lampHeadB, lampGlow, { cast: false, receive: false });
   }
 
-  for (const [style, builder] of Object.entries(wallB) as Array<[FacadeStyle, MeshBuilder]>) {
-    if (!builder || builder.empty) continue;
-    const art = facade(style);
-    const material = new THREE.MeshStandardMaterial({
+  const addFacadeMesh = (
+    builders: Partial<Record<FacadeStyle, MeshBuilder>>,
+    target: THREE.Group,
+  ) => {
+    for (const [style, builder] of Object.entries(builders) as Array<[FacadeStyle, MeshBuilder]>) {
+      if (!builder || builder.empty) continue;
+      const art = facade(style);
+      const material = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        map: art.map,
+        emissiveMap: art.emissive,
+        emissive: new THREE.Color("#ffd9a0"),
+        emissiveIntensity: 0,
+        roughness: style === "glass" ? 0.22 : 0.72,
+        metalness: style === "glass" ? 0.35 : 0.05,
+      });
+      emissiveMaterials.push(material);
+      const geometry = builder.build();
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      target.add(mesh);
+      disposables.push(geometry, material);
+    }
+  };
+
+  addFacadeMesh(wallB, group);
+
+  const mallShell = new THREE.Group();
+  mallShell.userData.mallShell = true;
+  const addMallMesh = (
+    builder: MeshBuilder,
+    material: THREE.Material,
+    shadows: { cast: boolean; receive: boolean },
+  ) => {
+    if (builder.empty) return;
+    const geometry = builder.build();
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = shadows.cast;
+    mesh.receiveShadow = shadows.receive;
+    mallShell.add(mesh);
+    disposables.push(geometry, material);
+  };
+  addMallMesh(
+    mallGroundB,
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }),
+    { cast: false, receive: true },
+  );
+  addMallMesh(
+    mallRoofB,
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0.05 }),
+    { cast: true, receive: true },
+  );
+  addMallMesh(
+    mallTrimB,
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.25 }),
+    { cast: true, receive: true },
+  );
+  if (!mallBalconyB.empty) {
+    const balconyMat = new THREE.MeshStandardMaterial({
       vertexColors: true,
-      map: art.map,
-      emissiveMap: art.emissive,
-      emissive: new THREE.Color("#ffd9a0"),
-      emissiveIntensity: 0,
-      roughness: style === "glass" ? 0.22 : 0.72,
-      metalness: style === "glass" ? 0.35 : 0.05,
+      roughness: 0.55,
+      metalness: 0.22,
     });
-    emissiveMaterials.push(material);
-    addMesh(builder, material, { cast: true, receive: true });
+    addMallMesh(mallBalconyB, balconyMat, { cast: true, receive: true });
   }
+  addFacadeMesh(mallWallB, mallShell);
+  if (mallShell.children.length) group.add(mallShell);
 
   // ─── River surface ─────────────────────────────────────────────────────────
   const water = buildWater(state);

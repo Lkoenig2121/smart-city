@@ -2,10 +2,10 @@ import { consumableById, CONSUME_BITES } from "./consumables";
 import { readPlayer, spendWallet, writePlayer, type PlayerState } from "./player";
 import type { CityClock } from "./types";
 
-export function buyConsumable(itemId: string, clock: CityClock): PlayerState | string {
+export function buyConsumable(itemId: string, clock: CityClock, source = "Cabana bar"): PlayerState | string {
   const item = consumableById(itemId);
   if (!item) return "Unknown item.";
-  const spent = spendWallet(item.price, clock, `Cabana bar · ${item.name}`);
+  const spent = spendWallet(item.price, clock, `${source} · ${item.name}`);
   if (typeof spent === "string") return spent;
   const player = addConsumable(itemId);
   if (typeof player === "string") return player;
@@ -19,6 +19,7 @@ export function addConsumable(itemId: string, count = 1): PlayerState | string {
   const item = consumableById(itemId);
   if (!item) return "Unknown item.";
   const player = readPlayer();
+  player.life.bag = player.life.bag ?? {};
   const next = (player.life.bag[itemId] ?? 0) + Math.max(1, Math.floor(count));
   player.life.bag[itemId] = Math.min(99, next);
   writePlayer(player);

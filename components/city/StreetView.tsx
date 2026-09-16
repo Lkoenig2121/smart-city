@@ -99,6 +99,7 @@ export function StreetView({
   const sleepingRef = useRef(false);
   const characterMenuRef = useRef<CharacterTab | null>(null);
   const mallShopRef = useRef<ClothStore | null>(null);
+  const mallSnackRef = useRef<{ name: string; items: string[] } | null>(null);
   const barMenuRef = useRef(false);
   const tickRef = useRef(onTick);
   tickRef.current = onTick;
@@ -141,6 +142,8 @@ export function StreetView({
   const [characterMenu, setCharacterMenu] = useState<CharacterTab | null>(null);
   const [mallShop, setMallShop] = useState<ClothStore | null>(null);
   const [mallStore, setMallStore] = useState<ClothStore | null>(null);
+  const [mallHut, setMallHut] = useState<string | null>(null);
+  const [mallSnack, setMallSnack] = useState<{ name: string; items: string[] } | null>(null);
   const [barMenu, setBarMenu] = useState(false);
 
   const inside = interior !== null;
@@ -153,6 +156,7 @@ export function StreetView({
   const busyUi =
     Boolean(characterMenu) ||
     Boolean(mallShop) ||
+    Boolean(mallSnack) ||
     barMenu ||
     sleeping ||
     atComputer ||
@@ -164,8 +168,9 @@ export function StreetView({
   useEffect(() => {
     characterMenuRef.current = characterMenu;
     mallShopRef.current = mallShop;
+    mallSnackRef.current = mallSnack;
     barMenuRef.current = barMenu;
-  }, [characterMenu, mallShop, barMenu]);
+  }, [characterMenu, mallShop, mallSnack, barMenu]);
 
   useEffect(() => {
     const paused = busyUi;
@@ -214,6 +219,12 @@ export function StreetView({
           setMallShop(null);
           return;
         }
+        if (mallSnackRef.current) {
+          event.preventDefault();
+          mallSnackRef.current = null;
+          setMallSnack(null);
+          return;
+        }
         if (characterMenuRef.current) {
           event.preventDefault();
           characterMenuRef.current = null;
@@ -233,7 +244,7 @@ export function StreetView({
         if (sleepingRef.current) return;
         if (atComputerRef.current || atOfficeComputerRef.current) return;
         if (pickingStop || pickingRoom || riding) return;
-        if (mallShopRef.current) return;
+        if (mallShopRef.current || mallSnackRef.current) return;
         event.preventDefault();
         const next = characterMenuRef.current ? null : "inventory";
         characterMenuRef.current = next;
@@ -244,7 +255,7 @@ export function StreetView({
         if (sleepingRef.current) return;
         if (atComputerRef.current || atOfficeComputerRef.current) return;
         if (pickingStop || pickingRoom || riding) return;
-        if (mallShopRef.current) return;
+        if (mallShopRef.current || mallSnackRef.current) return;
         if (interiorRef.current?.kind !== "lodging" || interiorRef.current.zone !== "pool") return;
         event.preventDefault();
         if (characterMenuRef.current) {
@@ -285,7 +296,7 @@ export function StreetView({
     const onDown = (event: globalThis.MouseEvent) => {
       if (event.button !== 0) return;
       if (!document.pointerLockElement) return;
-      if (sleepingRef.current || characterMenuRef.current || mallShopRef.current) return;
+      if (sleepingRef.current || characterMenuRef.current || mallShopRef.current || mallSnackRef.current) return;
       if (atComputerRef.current || atOfficeComputerRef.current || atDeskRef.current) return;
       const item = consumableById(heldRef.current ?? "");
       if (!item) return;
@@ -688,10 +699,14 @@ export function StreetView({
       return;
     }
 
+    const street = worldRef.current;
+    const city = venueRole(building) === "mall" ? street?.borrowCity() ?? null : null;
     let world: VenueWorld;
     try {
       world = new VenueWorld(canvas, state, building);
+      if (city) world.attachCity(city);
     } catch (error) {
+      if (city) street?.returnCity(city);
       setFailed(error instanceof Error ? error.message : "WebGL is unavailable in this browser.");
       setInterior(null);
       return;
@@ -716,8 +731,12 @@ export function StreetView({
       setInterior(null);
       setAtDesk(false);
       setAtOfficeComputer(false);
+      mallShopRef.current = null;
+      mallSnackRef.current = null;
       setMallShop(null);
       setMallStore(null);
+      setMallHut(null);
+      setMallSnack(null);
     };
     setPlayer(discoverPlace(building.id, venueRole(building) === "mall" ? 52 : 36));
     const detachInput = attachPointerInput(canvas, world.controls, {
@@ -726,14 +745,22 @@ export function StreetView({
         if (atOfficeComputerRef.current) return true;
         if (event.code !== "KeyE") return false;
         event.preventDefault();
-        if (characterMenuRef.current || mallShopRef.current) return true;
+        if (characterMenuRef.current || mallShopRef.current || mallSnackRef.current) return true;
         if (world.nearExit()) leaveStreet();
         else {
-          const store = world.nearStore();
-          if (store) {
-            mallShopRef.current = store;
-            setMallShop(store);
+          const hut = world.nearSnack();
+          if (hut) {
+            const menu = { name: hut.name, items: hut.items };
+            mallSnackRef.current = menu;
+            setMallSnack(menu);
             if (document.pointerLockElement === canvas) document.exitPointerLock();
+          } else {
+            const store = world.nearStore();
+            if (store) {
+              mallShopRef.current = store;
+              setMallShop(store);
+              if (document.pointerLockElement === canvas) document.exitPointerLock();
+            }
           }
         }
         return true;
@@ -751,12 +778,14 @@ export function StreetView({
       world.render(dt);
       const desk = world.nearDesk();
       if (!desk) deskDismissedRef.current = false;
-      const showDesk = desk && !deskDismissedRef.current && !mallShopRef.current && !characterMenuRef.current;
+      const showDesk = desk && !deskDismissedRef.current && !mallShopRef.current && !mallSnackRef.current && !characterMenuRef.current;
       atDeskRef.current = showDesk;
       setAtDesk((prev) => (prev === showDesk ? prev : showDesk));
       if (showDesk && document.pointerLockElement === canvas) document.exitPointerLock();
       const store = world.nearStore();
       setMallStore((prev) => (prev === store ? prev : store));
+      const hut = world.nearSnack();
+      setMallHut((prev) => (prev === (hut?.name ?? null) ? prev : hut?.name ?? null));
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
@@ -772,6 +801,8 @@ export function StreetView({
       ro.disconnect();
       detachInput();
       if (document.pointerLockElement === canvas) document.exitPointerLock();
+      const borrowed = world.detachCity();
+      if (borrowed) worldRef.current?.returnCity(borrowed);
       world.dispose();
       venueRef.current = null;
     };
@@ -871,14 +902,14 @@ export function StreetView({
   }, [active, interior, state]);
 
   const requestLock = () => {
-    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop) return;
+    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallSnack) return;
     const canvas = inside ? canvasRef.current : outdoorCanvasRef.current;
     if (!canvas) return;
     void canvas.requestPointerLock();
   };
 
   const onCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop) return;
+    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallSnack) return;
     const canvas = canvasRef.current;
     const world = lodgingRef.current;
     if (canvas && world && interior?.kind === "lodging" && interior.zone === "room") {
@@ -1096,7 +1127,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom && !sleeping && !atOfficeComputer && !characterMenu && !mallShop ? (
+      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom && !sleeping && !atOfficeComputer && !characterMenu && !mallShop && !mallSnack ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
           <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
             <p className="text-xs font-semibold text-white">Click to look around</p>
@@ -1382,10 +1413,14 @@ export function StreetView({
         </div>
       ) : null}
 
-      {interior?.kind === "venue" && !atDesk && !atOfficeComputer && !mallShop && !characterMenu ? (
+      {interior?.kind === "venue" && !atDesk && !atOfficeComputer && !mallShop && !mallSnack && !characterMenu ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
-            {mallStore ? (
+            {mallHut ? (
+              <p className="text-xs text-slate-200">
+                {mallHut} · press <span className="font-semibold text-white">E</span> to order
+              </p>
+            ) : mallStore ? (
               <p className="text-xs text-slate-200">
                 {STORES.find((item) => item.id === mallStore)?.name} · press{" "}
                 <span className="font-semibold text-white">E</span> to browse
@@ -1447,6 +1482,30 @@ export function StreetView({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {mallSnack && venueBuilding && interior?.kind === "venue" ? (
+        <PoolBar
+          clock={state.clock}
+          player={player}
+          onPlayerChange={setPlayer}
+          eyebrow="Harbor Mall"
+          title={mallSnack.name}
+          blurb="Tap an item to buy it. Hamburgers, hot dogs, nachos, pizza, fries, and drinks go in your bag and into your hand."
+          source={mallSnack.name}
+          itemIds={mallSnack.items}
+          closeHint="Esc to close"
+          onClose={() => {
+            mallSnackRef.current = null;
+            setMallSnack(null);
+          }}
+          onInventory={() => {
+            mallSnackRef.current = null;
+            setMallSnack(null);
+            characterMenuRef.current = "inventory";
+            setCharacterMenu("inventory");
+          }}
+        />
       ) : null}
 
       {mallShop && venueBuilding && interior?.kind === "venue" ? (

@@ -4,7 +4,7 @@ import { CharacterPreview } from "./CharacterPreview";
 import { CLOTHING, STORES, clothingInStore, type ClothStore } from "@/lib/city/clothing";
 import { formatDollars, type PlayerState } from "@/lib/city/player";
 import type { CityClock } from "@/lib/city/types";
-import { buyClothing, clothingPrice, equipOwned, itemLocked } from "@/lib/city/wardrobe";
+import { buyClothing, clothingPrice, equipOwned } from "@/lib/city/wardrobe";
 import { useMemo, useState } from "react";
 
 interface Props {
@@ -23,7 +23,6 @@ export function ClothingShop({ store, player, clock, onPlayer, onClose }: Props)
   const item = catalog.find((piece) => piece.id === picked) ?? catalog[0];
   if (!item) return null;
   const owned = player.life.owned.includes(item.id);
-  const lock = itemLocked(player.life, item.id);
   const price = clothingPrice(player.life, item.id);
   const equipped = player.life.equipped[item.slot] === item.id;
 
@@ -57,7 +56,6 @@ export function ClothingShop({ store, player, clock, onPlayer, onClose }: Props)
           <div className="min-h-0 space-y-1.5 overflow-y-auto">
             {catalog.map((piece) => {
               const have = player.life.owned.includes(piece.id);
-              const blocked = itemLocked(player.life, piece.id);
               return (
                 <button
                   key={piece.id}
@@ -74,7 +72,7 @@ export function ClothingShop({ store, player, clock, onPlayer, onClose }: Props)
                 >
                   <p className="text-sm font-semibold text-white">{piece.name}</p>
                   <p className="text-[0.65rem] text-slate-400">
-                    {have ? "Owned" : blocked ? "Locked" : formatDollars(clothingPrice(player.life, piece.id))}
+                    {have ? "Owned" : formatDollars(clothingPrice(player.life, piece.id))}
                   </p>
                 </button>
               );
@@ -85,24 +83,18 @@ export function ClothingShop({ store, player, clock, onPlayer, onClose }: Props)
             <p className="text-xl font-semibold text-white">{item.name}</p>
             <p className="text-sm text-slate-300">{item.description}</p>
             <p className="text-xs uppercase tracking-wider text-slate-500">
-              {item.slot} · {item.category} · {item.collection} · level {item.level}
+              {item.slot} · {item.category} · {item.collection}
             </p>
-            {item.skill ? (
-              <p className="text-xs text-slate-400">
-                Needs {item.skill.path} skill {item.skill.level}
-              </p>
-            ) : null}
             {item.bonus ? (
               <p className="text-xs text-amber-200/90">
                 Optional bonus: {item.bonus.stat} +{Math.round(item.bonus.amount * 100)}%
               </p>
             ) : null}
             <p className="text-lg font-semibold text-amber-200">{formatDollars(price)}</p>
-            {lock ? <p className="text-sm text-rose-200">{lock}</p> : null}
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={owned || Boolean(lock) || player.wallet < price}
+                disabled={owned || player.wallet < price}
                 onClick={() => apply(buyClothing(item.id, clock), `Purchased ${item.name}.`)}
                 className="rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-semibold text-[#1a1206] disabled:opacity-40"
               >
@@ -118,9 +110,7 @@ export function ClothingShop({ store, player, clock, onPlayer, onClose }: Props)
               </button>
             </div>
             {note ? <p className="text-sm text-sky-200">{note}</p> : null}
-            <p className="text-[0.65rem] text-slate-500">
-              Unlocking a collection does not buy the clothes. Preview is the live character doll.
-            </p>
+            <p className="text-[0.65rem] text-slate-500">Preview is the live character doll.</p>
           </div>
         </div>
       </div>

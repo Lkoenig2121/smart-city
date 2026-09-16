@@ -19,7 +19,6 @@ import {
   type PlayerState,
 } from "@/lib/city/player";
 import { venueLabel, venueRole, type VenueRole } from "@/lib/city/venues";
-import { STORES } from "@/lib/city/clothing";
 import type { Building, CityState } from "@/lib/city/types";
 import { formatMoney } from "@/lib/simulation/buildings/buildings";
 import { useEffect, useState, type ReactNode } from "react";
@@ -286,15 +285,21 @@ function MallDesk({ building }: { building: Building }) {
       <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Mall</p>
       <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
       <p className="mt-2 text-sm text-slate-300">
-        Walk the concourse into a store, or take the atrium stairs to the overlook. Press E at a rack to browse, I for inventory.
+        First floor is the clothing concourse. Ride the south escalators to second-floor shops and snack huts, then east or west to the third-floor food court. Press E at a stall to buy hamburgers, hot dogs, nachos, and drinks. Press E at a rack to browse, I for inventory.
       </p>
       <ul className="mt-3 space-y-1 text-left text-sm text-slate-200">
-        {STORES.map((store) => (
-          <li key={store.id} className="rounded-lg bg-black/30 px-3 py-1.5">
-            <span className="font-semibold text-amber-200">{store.name}</span>
-            <span className="text-slate-400"> · {store.blurb}</span>
-          </li>
-        ))}
+        <li className="rounded-lg bg-black/30 px-3 py-1.5">
+          <span className="font-semibold text-amber-200">Level 1</span>
+          <span className="text-slate-400"> · Fashion, jewelry, sneakers, kids, luxury, department</span>
+        </li>
+        <li className="rounded-lg bg-black/30 px-3 py-1.5">
+          <span className="font-semibold text-amber-200">Level 2</span>
+          <span className="text-slate-400"> · Gifts, home, outdoor, books, beauty, snack huts</span>
+        </li>
+        <li className="rounded-lg bg-black/30 px-3 py-1.5">
+          <span className="font-semibold text-amber-200">Level 3</span>
+          <span className="text-slate-400"> · Gallery, tech, records, sport, toys, food court</span>
+        </li>
       </ul>
       <p className="mt-3 text-[0.65rem] text-slate-500">Walk back to the doors and press E to leave</p>
     </div>
@@ -410,7 +415,7 @@ function deskCopy(role: VenueRole, building: Building, state: CityState) {
       };
     case "mall":
       return {
-        body: "The directory lists Fashion Avenue and Sneaker District off the concourse, Luxury Boutique and the Department Store at the north end, plus the food court by the doors.",
+        body: "The directory lists Fashion Avenue and Sneaker District off the concourse, Luxury Boutique and the Department Store at the north end, and the food court on the third floor.",
         stat: null,
         action: "Read the directory",
         actionNote: "Walk into a store and press E at the racks. Stairs climb the atrium.",
