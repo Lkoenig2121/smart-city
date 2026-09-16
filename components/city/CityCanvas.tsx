@@ -7,10 +7,19 @@ import { getBuildingAt } from "@/lib/simulation/city/cityState";
 import { pickBuildingAt } from "@/lib/renderer/pickBuilding";
 import { subwayGateTile, subwayStationId } from "@/lib/city/subway";
 import { citizenIsOutdoors } from "@/lib/simulation/citizens/citizenBehavior";
-import type { Building, CityEvent, CityState, CityWeather, Tool } from "@/lib/city/types";
+import type {
+  Building,
+  CityEvent,
+  CityState,
+  CityWeather,
+  Tool,
+} from "@/lib/city/types";
 import { officeRank, readPlayer, totalBalance } from "@/lib/city/player";
 import { findMall } from "@/lib/city/venues";
-import { parkingFill, trafficFlowScore } from "@/lib/simulation/traffic/roadNetwork";
+import {
+  parkingFill,
+  trafficFlowScore,
+} from "@/lib/simulation/traffic/roadNetwork";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CityHud } from "./CityHud";
 import { StreetView } from "./StreetView";
@@ -115,7 +124,11 @@ export function CityCanvas() {
     const wheel = (event: WheelEvent) => {
       event.preventDefault();
       const rect = canvas.getBoundingClientRect();
-      renderer.camera.zoomAt(event.clientX - rect.left, event.clientY - rect.top, event.deltaY > 0 ? 0.9 : 1.11);
+      renderer.camera.zoomAt(
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+        event.deltaY > 0 ? 0.9 : 1.11,
+      );
     };
     canvas.addEventListener("wheel", wheel, { passive: false });
 
@@ -235,7 +248,10 @@ export function CityCanvas() {
     const engine = engineRef.current;
     const renderer = rendererRef.current;
     if (!engine || !renderer) return;
-    const centre = renderer.camera.pickTile(renderer.width / 2, renderer.height / 2);
+    const centre = renderer.camera.pickTile(
+      renderer.width / 2,
+      renderer.height / 2,
+    );
     const clamped = {
       x: Math.max(0, Math.min(engine.state.size - 1, centre.x)),
       y: Math.max(0, Math.min(engine.state.size - 1, centre.y)),
@@ -248,7 +264,9 @@ export function CityCanvas() {
   const enterSelectedStation = useCallback(() => {
     const engine = engineRef.current;
     if (!engine) return;
-    const selected = engine.selectedId ? engine.state.buildings.get(engine.selectedId) : null;
+    const selected = engine.selectedId
+      ? engine.state.buildings.get(engine.selectedId)
+      : null;
     if (!selected || selected.kind !== "subway_station") return;
     const id = subwayStationId(selected);
     if (!id) return;
@@ -302,10 +320,12 @@ export function CityCanvas() {
       const moved = Math.hypot(sx - pickAt.current.x, sy - pickAt.current.y);
       if (now - pickAt.current.t > 50 || moved > 8) {
         pickAt.current = { t: now, x: sx, y: sy };
-        engine.hoverBuildingId = pickBuildingAt(engine.state, world.x, world.y)?.id ?? null;
+        engine.hoverBuildingId =
+          pickBuildingAt(engine.state, world.x, world.y)?.id ?? null;
       }
     } else {
-      engine.hoverBuildingId = getBuildingAt(engine.state, tile.x, tile.y)?.id ?? null;
+      engine.hoverBuildingId =
+        getBuildingAt(engine.state, tile.x, tile.y)?.id ?? null;
     }
 
     if (!drag.current.active) return;
@@ -339,7 +359,10 @@ export function CityCanvas() {
   };
 
   return (
-    <div ref={wrapRef} className="relative h-full w-full overflow-hidden bg-[#1a2748]">
+    <div
+      ref={wrapRef}
+      className="relative h-full w-full overflow-hidden bg-[#1a2748]"
+    >
       <canvas
         ref={canvasRef}
         className="block h-full w-full cursor-grab touch-none active:cursor-grabbing"
@@ -370,7 +393,8 @@ export function CityCanvas() {
                       ...prev,
                       tool: engine.tool,
                       selected: engine.selectedId
-                        ? (engine.state.buildings.get(engine.selectedId) ?? null)
+                        ? (engine.state.buildings.get(engine.selectedId) ??
+                          null)
                         : prev.selected,
                       hoverLabel: engine.placementHint || prev.hoverLabel,
                       mallExists: Boolean(findMall(engine.state)),

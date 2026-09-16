@@ -1,6 +1,6 @@
 import { diamondPoints, tileCenter } from "@/lib/city/iso";
 import type { CityState, TrafficLight } from "@/lib/city/types";
-import { densityAt, isSignalAgainstBuilding } from "@/lib/simulation/traffic/roadNetwork";
+import { isSignalAgainstBuilding } from "@/lib/simulation/traffic/roadNetwork";
 import { drawVehicle } from "./drawVehicles";
 import { drawDiamond } from "./drawIso";
 import { alpha, type Lighting } from "./palette";
@@ -22,16 +22,6 @@ export function drawTrafficOverlay(ctx: CanvasRenderingContext2D, state: CitySta
     if (isHiddenBehindBuilding(state, lamp.x, lamp.y)) continue;
     if (isSignalAgainstBuilding(state, lamp.x, lamp.y)) continue;
     drawSignal(ctx, lamp, light);
-  }
-}
-
-export function drawCongestionTint(ctx: CanvasRenderingContext2D, state: CityState) {
-  for (const vehicle of state.vehicles) {
-    const x = Math.round(vehicle.x);
-    const y = Math.round(vehicle.y);
-    if (densityAt(state, x, y) < 3) continue;
-    if (isHiddenBehindBuilding(state, x, y)) continue;
-    drawDiamond(ctx, x, y, alpha("#c0392b", 0.16));
   }
 }
 

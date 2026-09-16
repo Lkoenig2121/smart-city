@@ -11,7 +11,7 @@ import { drawTerrainTile } from "./drawTerrain";
 import { drawWaterfrontDecor } from "./drawWaterfront";
 import { drawVehicle } from "./drawVehicles";
 import { drawEventMarkers, drawJobMarkers } from "./drawEvents";
-import { drawCongestionTint, drawParkedCars, drawTrafficOverlay } from "./drawTraffic";
+import { drawParkedCars, drawTrafficOverlay } from "./drawTraffic";
 import { drawWeatherOverlay } from "./drawWeather";
 import { CityCamera, tileVisible, visibleTileRange } from "./camera";
 import { alpha, lightingFor, lit, type Lighting } from "./palette";
@@ -159,7 +159,6 @@ export class CityRenderer {
       }
     }
 
-    drawCongestionTint(ctx, state);
     drawParkedCars(ctx, state, light);
     drawTrafficOverlay(ctx, state, light);
     drawEventMarkers(ctx, state, this.time);
