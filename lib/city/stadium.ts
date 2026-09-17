@@ -107,7 +107,36 @@ export interface StadiumGame {
 /** Live nine-inning game from 6:00 PM to about 9:00 PM, deterministic per city day. */
 export function stadiumGame(state: CityState): StadiumGame | null {
   if (!isGameNight(state)) return null;
-  const elapsed = state.clock.minuteOfDay - GAME_START_MINUTE;
+  return simulateGame(state.clock, state.clock.minuteOfDay);
+}
+
+/**
+ * Completed box score for the most recent game. Null while a game is still
+ * underway, or on day one before first pitch.
+ */
+export function stadiumFinal(state: CityState): StadiumGame | null {
+  const stadium = findStadium(state);
+  if (!stadium || !stadiumIsOpen(stadium)) return null;
+  const minute = state.clock.minuteOfDay;
+  if (minute >= GAME_START_MINUTE && minute < GAME_END_MINUTE) return null;
+  if (minute >= GAME_END_MINUTE) return simulateGame(state.clock, GAME_END_MINUTE);
+  const previous: CityClock = {
+    dayIndex: state.clock.dayIndex - 1,
+    minuteOfDay: GAME_END_MINUTE,
+    dayOfYear: state.clock.dayOfYear <= 1 ? 365 : state.clock.dayOfYear - 1,
+    year: state.clock.dayOfYear <= 1 ? state.clock.year - 1 : state.clock.year,
+  };
+  return simulateGame(previous, GAME_END_MINUTE);
+}
+
+export function stadiumWinner(game: StadiumGame) {
+  if (game.ravens > game.visitors) return "Ravens";
+  if (game.visitors > game.ravens) return "Bears";
+  return null;
+}
+
+function simulateGame(clock: CityClock, minuteOfDay: number): StadiumGame {
+  const elapsed = Math.max(0, minuteOfDay - GAME_START_MINUTE);
   const playMinutes = GAME_END_MINUTE - GAME_START_MINUTE - 8;
   const playing = elapsed < playMinutes;
   const halves = 18;
@@ -123,7 +152,7 @@ export function stadiumGame(state: CityState): StadiumGame | null {
   let justScored = false;
   const lastHalf = playing ? halfIndex : halves - 1;
   for (let half = 0; half <= lastHalf; half++) {
-    const events = scoringTimes(state.clock, half);
+    const events = scoringTimes(clock, half);
     const progress = half < halfIndex ? 1 : playing ? halfProgress : 1;
     const runs = events.filter((at) => at <= progress).length;
     if (half === halfIndex && playing) {
@@ -138,13 +167,13 @@ export function stadiumGame(state: CityState): StadiumGame | null {
       ravensLine[slot] = runs;
     }
   }
-  const outs = playing ? Math.min(2, Math.floor(hash2(state.clock.dayOfYear, elapsed, 19) * 3)) : 0;
-  const balls = playing ? Math.min(3, Math.floor(hash2(state.clock.dayOfYear, Math.floor(elapsed), 21) * 4)) : 0;
-  const strikes = playing ? Math.min(2, Math.floor(hash2(state.clock.dayOfYear, Math.floor(elapsed), 22) * 3)) : 0;
-  const visitorsHits = hitsFor(state.clock, 3, visitors, halfIndex);
-  const ravensHits = hitsFor(state.clock, 7, ravens, halfIndex);
-  const visitorsErrors = errorsFor(state.clock, 11);
-  const ravensErrors = errorsFor(state.clock, 13);
+  const outs = playing ? Math.min(2, Math.floor(hash2(clock.dayOfYear, elapsed, 19) * 3)) : 0;
+  const balls = playing ? Math.min(3, Math.floor(hash2(clock.dayOfYear, Math.floor(elapsed), 21) * 4)) : 0;
+  const strikes = playing ? Math.min(2, Math.floor(hash2(clock.dayOfYear, Math.floor(elapsed), 22) * 3)) : 0;
+  const visitorsHits = hitsFor(clock, 3, visitors, halfIndex);
+  const ravensHits = hitsFor(clock, 7, ravens, halfIndex);
+  const visitorsErrors = errorsFor(clock, 11);
+  const ravensErrors = errorsFor(clock, 13);
   const lineup = top ? BEARS_LINEUP : RAVENS_LINEUP;
   const batter = Math.floor(elapsed / 3.4) % 9;
   return {
@@ -161,8 +190,8 @@ export function stadiumGame(state: CityState): StadiumGame | null {
     visitorsErrors,
     ravensLine,
     visitorsLine,
-    hitLight: playing && (justScored || hash2(state.clock.dayOfYear, Math.floor(elapsed * 2), 31) > 0.86),
-    errorLight: playing && hash2(state.clock.dayOfYear, Math.floor(elapsed * 2), 32) > 0.93,
+    hitLight: playing && (justScored || hash2(clock.dayOfYear, Math.floor(elapsed * 2), 31) > 0.86),
+    errorLight: playing && hash2(clock.dayOfYear, Math.floor(elapsed * 2), 32) > 0.93,
     atBat: playing ? lineup[batter] : "",
     onDeck: playing ? lineup[(batter + 1) % 9] : "",
     inTheHole: playing ? lineup[(batter + 2) % 9] : "",

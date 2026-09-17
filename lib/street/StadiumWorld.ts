@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
-import { isGameNight, stadiumAttendance, stadiumGame } from "@/lib/city/stadium";
+import { isGameNight, stadiumAttendance, stadiumFinal, stadiumGame } from "@/lib/city/stadium";
 import { createFireworkSparks, FIREWORK_PALETTE, sparkFade, stepFireworks, type FireworkSpark } from "@/lib/city/fireworks";
 import { paintRavensScoreboard } from "./ravensScoreboard";
 import { InteriorControls } from "./interiorControls";
@@ -211,7 +211,7 @@ export class StadiumWorld {
       this.scoreCtx,
       this.scoreCanvas.width,
       this.scoreCanvas.height,
-      stadiumGame(this.state),
+      stadiumGame(this.state) ?? stadiumFinal(this.state),
       clock,
       this.time,
     );

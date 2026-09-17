@@ -1,7 +1,14 @@
 "use client";
 
 import type { Building, CityState } from "@/lib/city/types";
-import { findStadium, GAME_HOURS_LABEL, isGameNight, stadiumGateTile } from "@/lib/city/stadium";
+import {
+  findStadium,
+  GAME_HOURS_LABEL,
+  isGameNight,
+  stadiumFinal,
+  stadiumGateTile,
+  stadiumWinner,
+} from "@/lib/city/stadium";
 import {
   canEnterLodgingRoom,
   findLodging,
@@ -992,6 +999,9 @@ export function StreetView({
         : subwayBuilding?.name
           ?? (interior?.kind === "subway" ? stationDef(interior.stationId).name : "Street level");
 
+  const lastFinal = interior?.kind === "stadium" || atGate ? stadiumFinal(state) : null;
+  const lastWinner = lastFinal ? stadiumWinner(lastFinal) : null;
+
   return (
     <div ref={wrapRef} className="absolute inset-0 z-30 bg-[#0b1420]">
       <canvas
@@ -1241,11 +1251,25 @@ export function StreetView({
 
       {interior?.kind === "stadium" || atGate ? (
         <div className="pointer-events-none absolute left-1/2 top-20 z-10 -translate-x-1/2">
-          <div className="rounded-xl border border-white/15 bg-[#1f4d8c]/90 px-5 py-2.5 text-center shadow-xl backdrop-blur">
-            <p className="text-sm font-bold tracking-wide text-white">⚾ RIVERSIDE RAVENS</p>
-            <p className="text-[0.7rem] uppercase tracking-[0.18em] text-amber-200">
-              {isGameNight(state) ? `Live game · ${GAME_HOURS_LABEL}` : `Open for tours · first pitch 6:00 PM`}
-            </p>
+          <div className="overflow-hidden rounded-xl border border-[#16325c] shadow-xl">
+            <div className="bg-[#1f4d8c] px-5 py-2.5 text-center">
+              <p className="text-sm font-bold tracking-wide text-white">⚾ RIVERSIDE RAVENS</p>
+              {lastFinal ? (
+                <div className="mt-1.5 rounded-md bg-[#10233f] px-4 py-1.5">
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-amber-300">Final</p>
+                  <p className="text-sm font-bold text-white">
+                    Ravens {lastFinal.ravens} – {lastFinal.visitors} Bears
+                  </p>
+                  <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-amber-200">
+                    {lastWinner ? `${lastWinner} win` : "Game tied"}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[0.7rem] uppercase tracking-[0.18em] text-amber-200">
+                  {isGameNight(state) ? `Live game · ${GAME_HOURS_LABEL}` : `Open for tours · first pitch 6:00 PM`}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       ) : null}
