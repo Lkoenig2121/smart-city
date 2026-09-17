@@ -22,6 +22,49 @@ const DEFENSE: { x: number; z: number }[] = [
 const BATTER = { x: -0.62, z: 15.52 };
 const DUGOUT_HOME = { x: -14.7, z: 8.2 };
 const DUGOUT_AWAY = { x: 14.7, z: 8.2 };
+const CYCLE = 6.15;
+const PITCH_END = 1.48;
+const CONTACT_AT = 1.94;
+const PLATE = { x: 0.08, y: 1.18, z: 15.92 };
+
+type AtBatKind = "take" | "whiff" | "ground" | "liner" | "fly" | "pop" | "foul" | "homer";
+
+interface AtBatPlay {
+  kind: AtBatKind;
+  landX: number;
+  landZ: number;
+  peak: number;
+  fielder: number;
+}
+
+const AT_BATS: AtBatPlay[] = [
+  { kind: "take", landX: 0.25, landZ: 16.2, peak: 0, fielder: 1 },
+  { kind: "whiff", landX: -0.2, landZ: 16.25, peak: 0, fielder: 1 },
+  { kind: "ground", landX: -5.4, landZ: 4.1, peak: 0.42, fielder: 5 },
+  { kind: "ground", landX: -8.2, landZ: 7.4, peak: 0.38, fielder: 4 },
+  { kind: "ground", landX: 2.6, landZ: 1.6, peak: 0.4, fielder: 3 },
+  { kind: "ground", landX: 8.6, landZ: 6.8, peak: 0.36, fielder: 2 },
+  { kind: "ground", landX: 0.4, landZ: 6.2, peak: 0.34, fielder: 0 },
+  { kind: "ground", landX: -3.8, landZ: 9.6, peak: 0.28, fielder: 4 },
+  { kind: "liner", landX: -11.4, landZ: -3.6, peak: 2.15, fielder: 6 },
+  { kind: "liner", landX: 11.8, landZ: -2.8, peak: 1.95, fielder: 8 },
+  { kind: "liner", landX: 1.2, landZ: -6.4, peak: 2.35, fielder: 7 },
+  { kind: "liner", landX: -7.2, landZ: 0.4, peak: 1.7, fielder: 5 },
+  { kind: "fly", landX: 0.3, landZ: -13.4, peak: 8.6, fielder: 7 },
+  { kind: "fly", landX: -11.2, landZ: -9.4, peak: 7.4, fielder: 6 },
+  { kind: "fly", landX: 12.8, landZ: -8.2, peak: 7.8, fielder: 8 },
+  { kind: "fly", landX: -6.4, landZ: -12.2, peak: 8.1, fielder: 6 },
+  { kind: "fly", landX: 7.1, landZ: -12.6, peak: 8.3, fielder: 8 },
+  { kind: "pop", landX: 4.1, landZ: 12.2, peak: 9.4, fielder: 2 },
+  { kind: "pop", landX: -2.6, landZ: 11.4, peak: 10.2, fielder: 0 },
+  { kind: "pop", landX: 0.8, landZ: 17.8, peak: 8.8, fielder: 1 },
+  { kind: "foul", landX: -17.4, landZ: 18.6, peak: 6.2, fielder: -1 },
+  { kind: "foul", landX: 17.8, landZ: 17.4, peak: 5.8, fielder: -1 },
+  { kind: "foul", landX: -15.6, landZ: 8.4, peak: 4.4, fielder: -1 },
+  { kind: "homer", landX: 1.4, landZ: -24.5, peak: 14.2, fielder: 7 },
+  { kind: "homer", landX: -8.6, landZ: -22.8, peak: 13.4, fielder: 6 },
+  { kind: "homer", landX: 10.2, landZ: -22.2, peak: 13.8, fielder: 8 },
+];
 
 /**
  * First-person walk through Ravens Ballpark. Lighting and the scoreboard
@@ -235,29 +278,40 @@ export class StadiumWorld {
       return;
     }
 
-    const cycle = this.time % 5.6;
-    const pitch = cycle < 1.45;
-    const inAir = cycle >= 1.45 && cycle < 1.92;
-    const contact = Math.floor(this.time / 5.6) % 3 === 1;
-    const fly = inAir && contact ? 0 : contact && cycle >= 1.92 ? Math.min(1, (cycle - 1.92) / 2.1) : 0;
+    const cycle = this.time % CYCLE;
+    const play = AT_BATS[Math.floor(this.time / CYCLE) % AT_BATS.length];
+    const pitch = cycle < PITCH_END;
+    const inAir = cycle >= PITCH_END && cycle < CONTACT_AT;
+    const swung = play.kind !== "take";
+    const contact = play.kind !== "take" && play.kind !== "whiff";
+    const after = cycle >= CONTACT_AT;
+    const flight = after ? Math.min(1, (cycle - CONTACT_AT) / (play.kind === "homer" ? 2.55 : play.kind === "ground" ? 1.35 : 2.05)) : 0;
+    const pitchX = ((Math.floor(this.time / CYCLE) % 7) - 3) * 0.11;
 
     for (let i = 0; i < 9; i++) {
       const spot = DEFENSE[i];
       let x = spot.x;
       let z = spot.z;
       if (i === 0 && pitch) z += Math.sin(cycle * 8) * 0.12;
-      if (fly > 0 && i === 7) {
-        x += fly * 4.2;
-        z += fly * 3.5;
+      if (i === 1 && (play.kind === "take" || play.kind === "whiff") && after) {
+        x += pitchX * 0.6;
+        z += 0.18;
+      }
+      if (contact && after && play.fielder === i) {
+        const chase = play.kind === "ground" ? 0.92 : play.kind === "homer" ? 0.28 : 0.78;
+        const u = Math.min(1, flight * (play.kind === "ground" ? 1.35 : 1.05));
+        x += (play.landX - spot.x) * u * chase;
+        z += (play.landZ - spot.z) * u * chase;
       }
       dummy.position.set(x, 0.95, z);
-      dummy.rotation.set(0, i === 1 || i === 0 ? 0 : Math.atan2(spot.x, 15.5 - spot.z), 0);
+      dummy.rotation.set(0, i === 1 || i === 0 ? 0 : Math.atan2(x, 15.5 - z), 0);
       dummy.updateMatrix();
       this.players.setMatrixAt(i, dummy.matrix);
     }
 
-    const swing = inAir && contact ? -0.35 : 0;
-    dummy.position.set(BATTER.x, 0.95, BATTER.z);
+    const swinging = swung && (inAir || (after && flight < 0.18));
+    const swing = swinging ? (play.kind === "homer" ? -0.55 : play.kind === "whiff" ? -0.42 : -0.32) : 0;
+    dummy.position.set(BATTER.x + (swinging ? -0.08 : 0), 0.95, BATTER.z);
     dummy.rotation.set(0, Math.PI + swing, 0);
     dummy.updateMatrix();
     this.players.setMatrixAt(9, dummy.matrix);
@@ -265,17 +319,35 @@ export class StadiumWorld {
 
     this.ball.visible = game.playing || game.firstPitch;
     if (!this.ball.visible) return;
-    if (cycle < 1.45) {
-      this.ball.position.set(0.2, 1.35 + Math.max(0, 1.2 - cycle) * 0.4, 8.55);
-    } else if (cycle < 1.92) {
-      const t = (cycle - 1.45) / 0.47;
-      this.ball.position.set(0.05, 1.25 + Math.sin(t * Math.PI) * 0.55, 8.55 + t * 7.5);
-    } else if (contact) {
-      const t = Math.min(1, (cycle - 1.92) / 2.2);
-      this.ball.position.set(t * 11.5, 1.4 + Math.sin(t * Math.PI) * 4.8, 15.4 - t * 22);
+    if (pitch) {
+      const t = cycle / PITCH_END;
+      this.ball.position.set(
+        0.18 + t * (PLATE.x + pitchX - 0.18),
+        1.55 - t * 0.32 + Math.sin(t * Math.PI) * 0.08,
+        8.55 + t * (PLATE.z - 8.55),
+      );
+    } else if (inAir) {
+      const t = (cycle - PITCH_END) / (CONTACT_AT - PITCH_END);
+      this.ball.position.set(PLATE.x + pitchX * (1 - t * 0.3), PLATE.y + Math.sin(t * Math.PI) * 0.28, PLATE.z - 0.2 + t * 0.35);
+    } else if (!contact) {
+      this.ball.position.set(play.landX, 1.02, play.landZ);
     } else {
-      this.ball.position.set(0.2, 1.05, 16.15);
+      this.placeHit(play, flight, pitchX);
     }
+  }
+
+  private placeHit(play: AtBatPlay, t: number, pitchX: number) {
+    const x = PLATE.x + pitchX + (play.landX - PLATE.x - pitchX) * t;
+    const z = PLATE.z + (play.landZ - PLATE.z) * t;
+    let y = 0.16;
+    if (play.kind === "ground") {
+      y = 0.16 + Math.abs(Math.sin(t * Math.PI * 3.2)) * play.peak * (1 - t);
+    } else if (play.kind === "liner") {
+      y = 0.9 + Math.sin(t * Math.PI) * play.peak;
+    } else {
+      y = 1.05 + Math.sin(Math.min(1, t) * Math.PI) * play.peak;
+    }
+    this.ball.position.set(x, Math.max(0.14, y), z);
   }
 
   private fillCrowd(crowd: { seated: number; walking: number }, dt: number) {
