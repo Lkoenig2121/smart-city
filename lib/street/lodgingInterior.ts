@@ -469,7 +469,7 @@ function addSlidingDoors(
   group.add(fixed);
 
   const moving = new THREE.Group();
-  moving.position.set(openX, 0, trackZ + 0.07);
+  moving.position.set(closedX, 0, trackZ + 0.07);
   addPanel(moving, panelW);
   addBox(moving, handleMat, 0.04, 0.42, 0.05, -panelW / 2 + 0.1, 1.05, 0.06);
   group.add(moving);
@@ -488,8 +488,8 @@ function addSlidingDoors(
     leaf.maxX = x1 + 0.1;
   };
 
-  let amount = 1;
-  let target = 1;
+  let amount = 0;
+  let target = 0;
   applyBlocker(amount);
 
   const slider: SliderDoor = {

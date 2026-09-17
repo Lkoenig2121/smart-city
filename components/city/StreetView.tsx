@@ -132,7 +132,7 @@ export function StreetView({
   const [pickingRoom, setPickingRoom] = useState(false);
   const [atBed, setAtBed] = useState(false);
   const [atSlider, setAtSlider] = useState(false);
-  const [sliderOpen, setSliderOpen] = useState(true);
+  const [sliderOpen, setSliderOpen] = useState(false);
   const [sleeping, setSleeping] = useState(false);
   const [sleepPhase, setSleepPhase] = useState<"night" | "morning">("night");
   const [sleepInterest, setSleepInterest] = useState(0);
@@ -556,7 +556,7 @@ export function StreetView({
     setPickingRoom(false);
     setAtBed(false);
     setAtSlider(false);
-    setSliderOpen(true);
+    setSliderOpen(false);
     setSleeping(false);
     setSleepPhase("night");
     setSleepInterest(0);
