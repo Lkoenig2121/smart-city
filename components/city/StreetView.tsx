@@ -37,6 +37,15 @@ import { consumeHeld } from "@/lib/city/bag";
 import { characterStats } from "@/lib/city/character";
 import { consumableById } from "@/lib/city/consumables";
 import { isTypingTarget } from "@/lib/city/input";
+import {
+  markPhoneToasted,
+  pendingPhoneToast,
+  phoneUnreadCount,
+  PHONE_TIME_SCALE,
+  readPhone,
+  type PhoneMessage,
+  type PhoneWaypoint,
+} from "@/lib/city/phone";
 import { discoverPlace } from "@/lib/city/wardrobe";
 import { STORES, type ClothStore } from "@/lib/city/clothing";
 import type { MoveMode } from "@/lib/street/controls";
@@ -54,6 +63,7 @@ import { ClothingShop } from "./ClothingShop";
 import { LodgingDesk } from "./LodgingDesk";
 import { PoolBar } from "./PoolBar";
 import { OfficeComputer } from "./OfficeComputer";
+import { PlayerPhone } from "./PlayerPhone";
 import { PlayerStatus } from "./PlayerStatus";
 import { RoomComputer } from "./RoomComputer";
 import { StreetMinimap } from "./StreetMinimap";
@@ -108,8 +118,11 @@ export function StreetView({
   const mallShopRef = useRef<ClothStore | null>(null);
   const mallSnackRef = useRef<{ name: string; items: string[] } | null>(null);
   const barMenuRef = useRef(false);
+  const phoneOpenRef = useRef(false);
   const tickRef = useRef(onTick);
-  tickRef.current = onTick;
+  tickRef.current = (dt: number) => {
+    onTick(phoneOpenRef.current ? dt * PHONE_TIME_SCALE : dt);
+  };
 
   const [locked, setLocked] = useState(false);
   const [clock, setClock] = useState(() => formatClock(state));
@@ -152,6 +165,11 @@ export function StreetView({
   const [mallHut, setMallHut] = useState<string | null>(null);
   const [mallSnack, setMallSnack] = useState<{ name: string; items: string[] } | null>(null);
   const [barMenu, setBarMenu] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const [phoneToast, setPhoneToast] = useState<PhoneMessage | null>(null);
+  const [phoneThread, setPhoneThread] = useState<string | null>(null);
+  const [waypoint, setWaypoint] = useState<PhoneWaypoint | null>(() => readPhone().waypoint);
+  const [unread, setUnread] = useState(0);
 
   const inside = interior !== null;
   const lodgingBuilding =
@@ -165,6 +183,7 @@ export function StreetView({
     Boolean(mallShop) ||
     Boolean(mallSnack) ||
     barMenu ||
+    phoneOpen ||
     sleeping ||
     atComputer ||
     atOfficeComputer ||
@@ -177,7 +196,59 @@ export function StreetView({
     mallShopRef.current = mallShop;
     mallSnackRef.current = mallSnack;
     barMenuRef.current = barMenu;
-  }, [characterMenu, mallShop, mallSnack, barMenu]);
+    phoneOpenRef.current = phoneOpen;
+  }, [characterMenu, mallShop, mallSnack, barMenu, phoneOpen]);
+
+  const openPhone = (threadId: string | null = null) => {
+    if (sleepingRef.current) return;
+    if (atComputerRef.current || atOfficeComputerRef.current) return;
+    if (pickingStop || pickingRoom || riding) return;
+    if (mallShopRef.current || mallSnackRef.current) return;
+    if (characterMenuRef.current) {
+      characterMenuRef.current = null;
+      setCharacterMenu(null);
+    }
+    if (barMenuRef.current) {
+      barMenuRef.current = false;
+      setBarMenu(false);
+      setAtDesk(false);
+    }
+    setPhoneThread(threadId);
+    phoneOpenRef.current = true;
+    setPhoneOpen(true);
+    if (document.pointerLockElement) document.exitPointerLock();
+  };
+
+  const closePhone = () => {
+    phoneOpenRef.current = false;
+    setPhoneOpen(false);
+    setPhoneThread(null);
+    setWaypoint(readPhone().waypoint);
+    setUnread(phoneUnreadCount(state, readPlayer()));
+  };
+
+  const refreshPhoneChrome = (nextPlayer = readPlayer()) => {
+    setWaypoint(readPhone().waypoint);
+    setUnread(phoneUnreadCount(state, nextPlayer));
+    const toast = pendingPhoneToast(state, nextPlayer);
+    if (toast && !phoneOpenRef.current) setPhoneToast(toast);
+    else if (!toast) setPhoneToast(null);
+  };
+
+  useEffect(() => {
+    if (!active) return;
+    setUnread(phoneUnreadCount(state, player));
+    setWaypoint(readPhone().waypoint);
+    if (phoneOpen) {
+      setPhoneToast(null);
+      return;
+    }
+    const toast = pendingPhoneToast(state, player);
+    if (toast) {
+      markPhoneToasted(toast.id);
+      setPhoneToast(toast);
+    }
+  }, [active, state, player, phoneOpen]);
 
   useEffect(() => {
     const paused = busyUi;
@@ -220,6 +291,11 @@ export function StreetView({
       if (event.repeat) return;
       if (isTypingTarget(event.target)) return;
       if (event.code === "Escape") {
+        if (phoneOpenRef.current) {
+          event.preventDefault();
+          closePhone();
+          return;
+        }
         if (mallShopRef.current) {
           event.preventDefault();
           mallShopRef.current = null;
@@ -247,8 +323,19 @@ export function StreetView({
         }
         return;
       }
+      if (event.code === "KeyM") {
+        if (sleepingRef.current) return;
+        if (atComputerRef.current || atOfficeComputerRef.current) return;
+        if (pickingStop || pickingRoom || riding) return;
+        if (mallShopRef.current || mallSnackRef.current) return;
+        event.preventDefault();
+        if (phoneOpenRef.current) closePhone();
+        else openPhone();
+        return;
+      }
       if (event.code === "KeyI") {
         if (sleepingRef.current) return;
+        if (phoneOpenRef.current) return;
         if (atComputerRef.current || atOfficeComputerRef.current) return;
         if (pickingStop || pickingRoom || riding) return;
         if (mallShopRef.current || mallSnackRef.current) return;
@@ -260,6 +347,7 @@ export function StreetView({
       }
       if (event.code === "KeyP") {
         if (sleepingRef.current) return;
+        if (phoneOpenRef.current) return;
         if (atComputerRef.current || atOfficeComputerRef.current) return;
         if (pickingStop || pickingRoom || riding) return;
         if (mallShopRef.current || mallSnackRef.current) return;
@@ -303,7 +391,7 @@ export function StreetView({
     const onDown = (event: globalThis.MouseEvent) => {
       if (event.button !== 0) return;
       if (!document.pointerLockElement) return;
-      if (sleepingRef.current || characterMenuRef.current || mallShopRef.current || mallSnackRef.current) return;
+      if (sleepingRef.current || characterMenuRef.current || mallShopRef.current || mallSnackRef.current || phoneOpenRef.current) return;
       if (atComputerRef.current || atOfficeComputerRef.current || atDeskRef.current) return;
       const item = consumableById(heldRef.current ?? "");
       if (!item) return;
@@ -909,14 +997,14 @@ export function StreetView({
   }, [active, interior, state]);
 
   const requestLock = () => {
-    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallSnack) return;
+    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallSnack || phoneOpen) return;
     const canvas = inside ? canvasRef.current : outdoorCanvasRef.current;
     if (!canvas) return;
     void canvas.requestPointerLock();
   };
 
   const onCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallSnack) return;
+    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallSnack || phoneOpen) return;
     const canvas = canvasRef.current;
     const world = lodgingRef.current;
     if (canvas && world && interior?.kind === "lodging" && interior.zone === "room") {
@@ -1137,7 +1225,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom && !sleeping && !atOfficeComputer && !characterMenu && !mallShop && !mallSnack ? (
+      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom && !sleeping && !atOfficeComputer && !characterMenu && !mallShop && !mallSnack && !phoneOpen ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
           <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
             <p className="text-xs font-semibold text-white">Click to look around</p>
@@ -1159,7 +1247,7 @@ export function StreetView({
                 <span className="font-medium text-white">Mouse</span> look
               </p>
             )}
-            <p className="mt-0.5 text-[0.6rem] text-slate-400">Esc releases the cursor · I inventory</p>
+            <p className="mt-0.5 text-[0.6rem] text-slate-400">Esc releases the cursor · I inventory · M phone</p>
           </div>
         </div>
       ) : null}
@@ -1181,7 +1269,8 @@ export function StreetView({
               <span className="font-semibold text-white">Shift</span> run ·{" "}
               <span className="font-semibold text-white">Space</span> jump ·{" "}
               <span className="font-semibold text-white">E</span>{" "}
-              {inside ? "leave" : "enter"} · <span className="font-semibold text-white">I</span> inventory
+              {inside ? "leave" : "enter"} · <span className="font-semibold text-white">I</span> inventory ·{" "}
+              <span className="font-semibold text-white">M</span> phone
             </>
           )}
         </div>
@@ -1561,6 +1650,57 @@ export function StreetView({
         />
       ) : null}
 
+      {phoneOpen ? (
+        <PlayerPhone
+          state={state}
+          player={player}
+          onPlayer={(next) => {
+            setPlayer(next);
+            refreshPhoneChrome(next);
+          }}
+          onClose={closePhone}
+          onOpenCharacter={() => {
+            closePhone();
+            characterMenuRef.current = "outfit";
+            setCharacterMenu("outfit");
+          }}
+          onChanged={() => refreshPhoneChrome()}
+          startThreadId={phoneThread}
+        />
+      ) : null}
+
+      {phoneToast && !phoneOpen && !failed ? (
+        <button
+          type="button"
+          onClick={() => {
+            openPhone(phoneToast.id);
+            setPhoneToast(null);
+          }}
+          className="pointer-events-auto absolute left-1/2 top-16 z-40 w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-white/15 bg-[#101826]/95 px-4 py-3 text-left shadow-2xl backdrop-blur"
+        >
+          <p className="text-[0.65rem] uppercase tracking-[0.2em] text-sky-300">Messages · now</p>
+          <p className="mt-1 text-sm font-semibold text-white">{phoneToast.sender}</p>
+          <p className="truncate text-xs text-slate-300">{phoneToast.body[0]}</p>
+        </button>
+      ) : null}
+
+      {!failed && !phoneOpen ? (
+        <button
+          type="button"
+          onClick={() => openPhone()}
+          className="pointer-events-auto absolute bottom-24 left-4 z-30 grid h-12 w-12 place-items-center rounded-2xl border border-white/15 bg-black/55 text-xl shadow-xl backdrop-blur hover:bg-black/70"
+          title="Open phone (M)"
+          aria-label="Open phone"
+        >
+          📱
+          {unread > 0 ? (
+            <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[0.65rem] font-bold text-white">
+              {unread}
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+
       {sleeping ? (
         <div className="absolute inset-0 z-40 grid place-items-center bg-black">
           <div className="text-center">
@@ -1586,7 +1726,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {!failed && !inside ? <StreetMinimap state={state} positionRef={positionRef} /> : null}
+      {!failed && !inside ? <StreetMinimap state={state} positionRef={positionRef} waypoint={waypoint} /> : null}
     </div>
   );
 }

@@ -40,7 +40,7 @@ export function PlayerStatus({ player = readPlayer() }: Props) {
       <p className="text-[0.7rem] text-white">
         Level {life.level}
         <span className="text-slate-400">
-          {life.need ? ` · ${life.into}/${life.need} XP · I inventory` : " · max · I inventory"}
+          {life.need ? ` · ${life.into}/${life.need} XP · I inventory · M phone` : " · max · I inventory · M phone"}
         </span>
       </p>
       <p className="text-[0.7rem] text-slate-300">

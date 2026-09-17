@@ -1,6 +1,7 @@
 "use client";
 
 import type { CityState } from "@/lib/city/types";
+import type { PhoneWaypoint } from "@/lib/city/phone";
 import { BUS_STOPS, isTramTile } from "@/lib/city/transit";
 import { POI_LEGEND, drawPoiMark, poiKind } from "@/lib/city/minimapPois";
 import { readPlayer } from "@/lib/city/player";
@@ -14,14 +15,18 @@ import { useEffect, useRef } from "react";
 export function StreetMinimap({
   state,
   positionRef,
+  waypoint = null,
 }: {
   state: CityState;
   positionRef: React.RefObject<{ x: number; y: number; yaw: number } | null>;
+  waypoint?: PhoneWaypoint | null;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const baseRef = useRef<HTMLCanvasElement | null>(null);
   const sizeRef = useRef(240);
+  const waypointRef = useRef(waypoint);
+  waypointRef.current = waypoint;
 
   const paintBase = (size: number) => {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -143,6 +148,29 @@ export function StreetMinimap({
             ctx.stroke();
           }
 
+          const pin = waypointRef.current;
+          if (pin) {
+            const wx = pin.x * cell;
+            const wy = pin.y * cell + offsetY;
+            if (position) {
+              ctx.beginPath();
+              ctx.moveTo(position.x * cell, position.y * cell + offsetY);
+              ctx.lineTo(wx, wy);
+              ctx.strokeStyle = "rgba(56, 189, 248, 0.75)";
+              ctx.setLineDash([4, 3]);
+              ctx.lineWidth = 1.4;
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+            ctx.beginPath();
+            ctx.arc(wx, wy, Math.max(4.4, cell * 1.2), 0, Math.PI * 2);
+            ctx.fillStyle = "#38bdf8";
+            ctx.fill();
+            ctx.strokeStyle = "rgba(8, 20, 32, 0.8)";
+            ctx.lineWidth = 1.3;
+            ctx.stroke();
+          }
+
           if (position) {
             const px = position.x * cell;
             const py = position.y * cell + offsetY;
@@ -179,7 +207,7 @@ export function StreetMinimap({
     >
       <canvas ref={canvasRef} className="block w-full aspect-[5/4]" />
       <div className="border-t border-white/10 px-2 py-1 text-center text-[0.58rem] uppercase tracking-wider text-slate-300">
-        {state.name}
+        {waypoint ? `Waypoint · ${waypoint.label}` : state.name}
       </div>
       <div className="grid grid-cols-5 gap-x-1 gap-y-0.5 border-t border-white/10 px-2 py-1.5">
         {POI_LEGEND.map((item) => (
