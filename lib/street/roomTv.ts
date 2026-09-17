@@ -3,6 +3,7 @@ import { advanceDay, weekdayOf } from "@/lib/city/calendar";
 import { DAYS, type CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
 import { forecastFor, weatherEmoji } from "@/lib/simulation/weather/weather";
+import { stadiumBigPlay, stadiumOnTv, stadiumWinner } from "@/lib/city/stadium";
 
 export interface RoomTv {
   update: (dt: number, state: CityState) => void;
@@ -16,7 +17,7 @@ const SWITCH_SECS = 0.7;
 const CYCLE = CHANNEL_SECS + SWITCH_SECS;
 
 const CHANNELS = [
-  { id: 12, name: "RNV SPORT", title: "LIVE HOCKEY" },
+  { id: 12, name: "RNV SPORT", title: "RAVENS BASEBALL" },
   { id: 7, name: "RIVERSIDE 7", title: "CITY TONIGHT" },
   { id: 4, name: "WX 4", title: "FORECAST" },
 ] as const;
@@ -133,10 +134,10 @@ export function addRoomTelevision(
       glow.intensity = 0.6;
     } else {
       const t = local - SWITCH_SECS + elapsed * 0.15;
-      if (index === 0) drawHockey(ctx, t, clock);
+      if (index === 0) drawBaseball(ctx, t, clock, state);
       else if (index === 1) drawNews(ctx, t, clock, state);
       else drawWeather(ctx, t, clock, state);
-      glow.color.set(index === 0 ? 0xb8d8ff : index === 1 ? 0x6a90c8 : 0x7ec8ff);
+      glow.color.set(index === 0 ? 0x8fd48a : index === 1 ? 0x6a90c8 : 0x7ec8ff);
       glow.intensity = 2.4;
     }
     texture.needsUpdate = true;
@@ -166,121 +167,316 @@ function drawZap(ctx: CanvasRenderingContext2D, channel: (typeof CHANNELS)[numbe
   ctx.fillText(channel.name, 38, 124);
 }
 
-function drawHockey(ctx: CanvasRenderingContext2D, t: number, clock: ReturnType<typeof formatClock>) {
-  ctx.fillStyle = "#0d1a28";
+function drawBaseball(
+  ctx: CanvasRenderingContext2D,
+  t: number,
+  clock: ReturnType<typeof formatClock>,
+  state: CityState,
+) {
+  const game = stadiumOnTv(state);
+  const play = game ? stadiumBigPlay(game) : null;
+  const winner = game ? stadiumWinner(game) : null;
+  const live = Boolean(game?.playing);
+  const loop = 6.4;
+  const u = (t % loop) / loop;
+
+  const night = live || clock.hour24 >= 18;
+  const sky = ctx.createLinearGradient(0, 0, 0, 120);
+  sky.addColorStop(0, night ? "#0c1428" : "#6aa7d8");
+  sky.addColorStop(1, night ? "#1a2744" : "#9ecfff");
+  ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
 
-  const iceX = 28;
-  const iceY = 58;
-  const iceW = 584;
-  const iceH = 248;
-  ctx.fillStyle = "#1a3a2c";
-  roundRectPath(ctx, iceX - 8, iceY - 8, iceW + 16, iceH + 16, 28);
+  drawCrowdBowl(ctx, t, night);
+
+  ctx.fillStyle = night ? "#3a2418" : "#8a5340";
+  ctx.beginPath();
+  ctx.moveTo(18, 118);
+  ctx.quadraticCurveTo(320, 44, 622, 118);
+  ctx.lineTo(622, 138);
+  ctx.quadraticCurveTo(320, 68, 18, 138);
+  ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = "#e8f4fb";
-  roundRectPath(ctx, iceX, iceY, iceW, iceH, 22);
+  ctx.fillStyle = night ? "#163822" : "#1f4a28";
+  ctx.beginPath();
+  ctx.moveTo(22, 122);
+  ctx.quadraticCurveTo(320, 52, 618, 122);
+  ctx.lineTo(618, 134);
+  ctx.quadraticCurveTo(320, 64, 22, 134);
+  ctx.closePath();
   ctx.fill();
 
-  ctx.strokeStyle = "#c0392b";
-  ctx.lineWidth = 5;
+  ctx.fillStyle = night ? "#1a2740" : "#c9a44c";
+  roundRectPath(ctx, 268, 28, 104, 42, 4);
+  ctx.fill();
+  ctx.fillStyle = night ? "#c9a44c" : "#1f4d8c";
+  ctx.font = "800 11px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("RAVENS", 320, 46);
+  ctx.fillStyle = night ? "#f4f1ea" : "#10233f";
+  ctx.font = "700 16px system-ui, sans-serif";
+  ctx.fillText(game ? `${game.ravens}  ${game.visitors}` : "0  0", 320, 64);
+
+  ctx.fillStyle = "#c9a44c";
+  ctx.fillRect(46, 86, 6, 52);
+  ctx.fillRect(588, 86, 6, 52);
+
+  ctx.fillStyle = "#2f7a3e";
   ctx.beginPath();
-  ctx.moveTo(iceX + iceW / 2, iceY + 6);
-  ctx.lineTo(iceX + iceW / 2, iceY + iceH - 6);
-  ctx.stroke();
-  ctx.strokeStyle = "#2f6fbf";
-  ctx.lineWidth = 4;
+  ctx.moveTo(-10, 330);
+  ctx.lineTo(18, 138);
+  ctx.quadraticCurveTo(320, 68, 622, 138);
+  ctx.lineTo(650, 330);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#b7925c";
   ctx.beginPath();
-  ctx.moveTo(iceX + iceW * 0.28, iceY + 6);
-  ctx.lineTo(iceX + iceW * 0.28, iceY + iceH - 6);
-  ctx.moveTo(iceX + iceW * 0.72, iceY + 6);
-  ctx.lineTo(iceX + iceW * 0.72, iceY + iceH - 6);
+  ctx.moveTo(8, 330);
+  ctx.lineTo(34, 148);
+  ctx.quadraticCurveTo(320, 84, 606, 148);
+  ctx.lineTo(632, 330);
+  ctx.lineTo(608, 330);
+  ctx.lineTo(586, 156);
+  ctx.quadraticCurveTo(320, 98, 54, 156);
+  ctx.lineTo(32, 330);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#34844a";
+  ctx.beginPath();
+  ctx.moveTo(32, 330);
+  ctx.lineTo(54, 156);
+  ctx.quadraticCurveTo(320, 98, 586, 156);
+  ctx.lineTo(608, 330);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(244,241,234,0.85)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(320, 292);
+  ctx.lineTo(36, 150);
+  ctx.moveTo(320, 292);
+  ctx.lineTo(604, 150);
   ctx.stroke();
 
-  ctx.strokeStyle = "#c0392b";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(iceX + iceW / 2, iceY + iceH / 2, 38, 0, Math.PI * 2);
-  ctx.stroke();
+  ctx.fillStyle = "#2a5a34";
+  roundRectPath(ctx, 8, 188, 78, 36, 4);
+  ctx.fill();
+  roundRectPath(ctx, 554, 188, 78, 36, 4);
+  ctx.fill();
+  ctx.fillStyle = "#1f4d8c";
+  ctx.fillRect(14, 194, 28, 24);
   ctx.fillStyle = "#c0392b";
+  ctx.fillRect(598, 194, 28, 24);
+
+  ctx.fillStyle = "#c4a56a";
   ctx.beginPath();
-  ctx.arc(iceX + iceW / 2, iceY + iceH / 2, 5, 0, Math.PI * 2);
+  ctx.ellipse(320, 228, 118, 78, 0, 0, Math.PI * 2);
   ctx.fill();
-
-  drawCrease(ctx, iceX + 18, iceY + iceH / 2, 1);
-  drawCrease(ctx, iceX + iceW - 18, iceY + iceH / 2, -1);
-
-  const puckX = iceX + iceW * (0.5 + Math.sin(t * 1.7) * 0.32);
-  const puckY = iceY + iceH * (0.5 + Math.cos(t * 1.15) * 0.28);
-
-  for (let i = 0; i < 5; i++) {
-    const x = iceX + 70 + ((t * 42 + i * 97) % (iceW - 140));
-    const y = iceY + 36 + (i * 41 + Math.sin(t * 1.8 + i) * 16) % (iceH - 72);
-    drawSkater(ctx, x, y, "#1e3a6b", t + i);
-  }
-  for (let i = 0; i < 5; i++) {
-    const x = iceX + iceW - 70 - ((t * 38 + i * 81) % (iceW - 140));
-    const y = iceY + 48 + (i * 37 + Math.cos(t * 1.5 + i) * 18) % (iceH - 72);
-    drawSkater(ctx, x, y, "#c9a44c", t + i * 1.3);
-  }
-
-  ctx.fillStyle = "#111";
   ctx.beginPath();
-  ctx.ellipse(puckX, puckY, 7, 5, 0, 0, Math.PI * 2);
+  ctx.moveTo(320, 304);
+  ctx.lineTo(456, 208);
+  ctx.lineTo(320, 140);
+  ctx.lineTo(184, 208);
+  ctx.closePath();
   ctx.fill();
-
-  ctx.fillStyle = "rgba(10,14,22,0.78)";
-  roundRectPath(ctx, 16, 10, 268, 40, 8);
+  ctx.fillStyle = "#b7925c";
+  ctx.beginPath();
+  ctx.ellipse(320, 228, 28, 16, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#f4f1ea";
-  ctx.font = "700 18px system-ui, sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText("RIV  3", 28, 37);
-  ctx.fillStyle = "#c9a44c";
-  ctx.fillText("HBR  2", 118, 37);
-  ctx.fillStyle = "#ff6b5a";
-  ctx.font = "700 13px system-ui, sans-serif";
-  ctx.fillText("LIVE", 210, 36);
+  ctx.beginPath();
+  ctx.moveTo(312, 298);
+  ctx.lineTo(320, 286);
+  ctx.lineTo(328, 298);
+  ctx.lineTo(320, 306);
+  ctx.closePath();
+  ctx.fill();
 
+  const bases = [
+    { x: 320, y: 286 },
+    { x: 430, y: 214 },
+    { x: 320, y: 156 },
+    { x: 210, y: 214 },
+  ];
+  ctx.fillStyle = "#f4f1ea";
+  for (const base of bases) {
+    ctx.save();
+    ctx.translate(base.x, base.y);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillRect(-8, -8, 16, 16);
+    ctx.restore();
+  }
+  ctx.beginPath();
+  ctx.arc(320, 228, 7, 0, Math.PI * 2);
+  ctx.fill();
+
+  const fielders = [
+    { x: 320, y: 228 },
+    { x: 328, y: 300 },
+    { x: 452, y: 200 },
+    { x: 352, y: 168 },
+    { x: 188, y: 200 },
+    { x: 250, y: 176 },
+    { x: 150, y: 118 },
+    { x: 320, y: 86 },
+    { x: 490, y: 118 },
+  ];
+  for (const spot of fielders) drawBallplayer(ctx, spot.x, spot.y, "#1f4d8c", 0.85);
+
+  const batterX = 308;
+  const batterY = 298;
+  const swinging = u > 0.18 && u < 0.28;
+  drawBallplayer(ctx, batterX, batterY, play?.home === false ? "#c0392b" : "#e8ece8", 1.05, swinging ? -0.55 : 0.08);
+
+  let ballX = 320;
+  let ballY = 236;
+  if (u < 0.2) {
+    const p = u / 0.2;
+    ballX = 320 + (batterX + 10 - 320) * p;
+    ballY = 228 + (batterY - 8 - 228) * p;
+  } else if (u < 0.62) {
+    const p = (u - 0.2) / 0.42;
+    const endX = play && !play.home ? 490 : play && play.runs >= 3 ? 318 : 150;
+    const endY = play && play.runs >= 3 ? 52 : 108;
+    ballX = batterX + 10 + (endX - batterX - 10) * p;
+    ballY = batterY - 8 + (endY - (batterY - 8)) * p - Math.sin(p * Math.PI) * (play && play.runs >= 3 ? 92 : 48);
+  } else {
+    const endX = play && !play.home ? 490 : play && play.runs >= 3 ? 318 : 150;
+    const endY = play && play.runs >= 3 ? 52 : 108;
+    ballX = endX;
+    ballY = endY;
+  }
+  ctx.fillStyle = "#f4f1ea";
+  ctx.beginPath();
+  ctx.arc(ballX, ballY, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#c0392b";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  const runnerCount = Math.max(1, Math.min(4, play?.runs || 1));
+  if (u > 0.24) {
+    const runT = Math.min(1, (u - 0.24) / 0.62);
+    for (let i = 0; i < runnerCount; i++) {
+      const along = Math.max(0, Math.min(1, runT - i * 0.12));
+      const pos = basePath(along);
+      drawBallplayer(ctx, pos.x, pos.y, play?.home === false ? "#c0392b" : "#e8ece8", 0.9);
+    }
+  }
+
+  roundRectPath(ctx, 14, 10, 268, 72, 8);
+  ctx.fillStyle = "#10233f";
+  ctx.fill();
+  ctx.fillStyle = "#c9a44c";
+  ctx.font = "700 11px system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(live ? "LIVE  ·  RNV SPORT" : "FINAL  ·  RNV SPORT", 26, 30);
+  ctx.fillStyle = "#f4f1ea";
+  ctx.font = "800 22px system-ui, sans-serif";
+  ctx.fillText(`RAV  ${game?.ravens ?? 0}`, 26, 56);
+  ctx.fillStyle = "#ffb4a8";
+  ctx.fillText(`BEA  ${game?.visitors ?? 0}`, 132, 56);
+  ctx.fillStyle = "#e8c36a";
+  ctx.font = "700 12px system-ui, sans-serif";
+  ctx.fillText(live ? `${game?.inning ?? 1}` : winner ? `${winner} win` : "TIE", 230, 54);
+
+  roundRectPath(ctx, 430, 10, 196, 40, 8);
   ctx.fillStyle = "rgba(10,14,22,0.78)";
-  roundRectPath(ctx, 470, 10, 154, 40, 8);
   ctx.fill();
   ctx.fillStyle = "#e8dcc8";
-  ctx.font = "600 14px system-ui, sans-serif";
+  ctx.font = "600 13px system-ui, sans-serif";
   ctx.textAlign = "right";
-  ctx.fillText("2nd  08:14", 610, 28);
-  ctx.fillStyle = "#9aa4ae";
-  ctx.font = "600 11px system-ui, sans-serif";
-  ctx.fillText(`RNV SPORT  ·  ${clock.time}`, 610, 44);
+  ctx.fillText(clock.time, 610, 36);
 
-  ctx.fillStyle = "rgba(10,14,22,0.7)";
-  ctx.fillRect(0, H - 28, W, 28);
-  ctx.fillStyle = "#f4e6c0";
-  ctx.font = "700 13px system-ui, sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText("RIVERSIDE RIVERMEN vs HARBOR BEARS", 16, H - 10);
-}
-
-function drawCrease(ctx: CanvasRenderingContext2D, x: number, y: number, dir: number) {
-  ctx.fillStyle = "rgba(80,150,220,0.28)";
-  ctx.beginPath();
-  ctx.ellipse(x + dir * 18, y, 22, 32, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillStyle = "#10233f";
+  ctx.fillRect(0, H - 42, W, 42);
   ctx.fillStyle = "#c0392b";
-  ctx.fillRect(x - 4, y - 28, 8, 56);
+  ctx.fillRect(0, H - 42, 108, 42);
+  ctx.fillStyle = "#fff8f2";
+  ctx.font = "800 13px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(live ? "LIVE" : "RECAP", 54, H - 16);
+  ctx.fillStyle = "#f4e6c0";
+  ctx.font = "700 15px system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(play?.label ?? "Ravens vs Harbor Bears  ·  first pitch 6:00 PM", 122, H - 16);
 }
 
-function drawSkater(ctx: CanvasRenderingContext2D, x: number, y: number, jersey: string, t: number) {
+function drawCrowdBowl(ctx: CanvasRenderingContext2D, t: number, night: boolean) {
+  const deck = night ? "#3a3530" : "#b9b3a8";
+  const seat = "#9b2b24";
+  ctx.fillStyle = deck;
+  ctx.beginPath();
+  ctx.moveTo(0, 128);
+  ctx.lineTo(0, 38);
+  ctx.quadraticCurveTo(320, -8, 640, 38);
+  ctx.lineTo(640, 128);
+  ctx.quadraticCurveTo(320, 58, 0, 128);
+  ctx.closePath();
+  ctx.fill();
+
+  const palettes = night
+    ? ["#1f4d8c", "#c0392b", "#ece6da", "#c9a44c", "#2a2420", "#6b4a32"]
+    : ["#1f4d8c", "#c0392b", "#f4f1ea", "#c9a44c", "#3a3a3a", "#6b4a32"];
+  for (let row = 0; row < 5; row++) {
+    const y0 = 36 + row * 16;
+    ctx.fillStyle = seat;
+    ctx.beginPath();
+    ctx.moveTo(12 + row * 6, y0 + 14);
+    ctx.quadraticCurveTo(320, y0 - 10, 628 - row * 6, y0 + 14);
+    ctx.lineTo(628 - row * 6, y0 + 18);
+    ctx.quadraticCurveTo(320, y0 - 6, 12 + row * 6, y0 + 18);
+    ctx.closePath();
+    ctx.fill();
+    const count = 28 + row * 4;
+    for (let i = 0; i < count; i++) {
+      const u = (i + 0.5) / count;
+      const x = 24 + row * 8 + u * (592 - row * 16);
+      const y = y0 + 4 + Math.sin(u * Math.PI) * (row * -1.6) + Math.sin(t * 3.2 + i * 0.7 + row) * 0.7;
+      if (Math.abs(x - 320) < 58 && row < 2) continue;
+      ctx.fillStyle = palettes[(i * 3 + row) % palettes.length];
+      ctx.fillRect(x - 2.2, y, 4.4, 7.5);
+      ctx.fillStyle = "#e0c2a2";
+      ctx.beginPath();
+      ctx.arc(x, y - 1.6, 1.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function basePath(t: number) {
+  const pts = [
+    { x: 320, y: 286 },
+    { x: 430, y: 214 },
+    { x: 320, y: 156 },
+    { x: 210, y: 214 },
+    { x: 320, y: 286 },
+  ];
+  const scaled = t * (pts.length - 1);
+  const i = Math.min(pts.length - 2, Math.floor(scaled));
+  const u = scaled - i;
+  return {
+    x: pts[i].x + (pts[i + 1].x - pts[i].x) * u,
+    y: pts[i].y + (pts[i + 1].y - pts[i].y) * u,
+  };
+}
+
+function drawBallplayer(ctx: CanvasRenderingContext2D, x: number, y: number, jersey: string, s = 1, tilt = 0) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(Math.sin(t * 2.2) * 0.25);
+  ctx.rotate(tilt);
+  ctx.scale(s, s);
   ctx.fillStyle = jersey;
-  ctx.fillRect(-7, -5, 14, 16);
+  ctx.fillRect(-6, -4, 12, 14);
   ctx.fillStyle = "#f0d2b4";
   ctx.beginPath();
-  ctx.arc(0, -10, 5, 0, Math.PI * 2);
+  ctx.arc(0, -8, 5, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#1a1a1a";
-  ctx.fillRect(-9, 10, 18, 3);
+  ctx.fillRect(-5, -12, 10, 3);
   ctx.restore();
 }
 
@@ -343,11 +539,17 @@ function drawNews(
   ctx.textAlign = "left";
   ctx.fillText("Downtown waterfront draws record visitors", 18, 300);
 
+  const game = stadiumOnTv(state);
+  const winner = game ? stadiumWinner(game) : null;
   const headlines = [
     ...state.events.map((event) => event.headline),
     `Population ${state.population.toLocaleString()} and still climbing`,
     "Harborview books out the club floor  ·  Room 1110 still open",
-    "Rivermen lead the Bears 3–2 in the second period",
+    game
+      ? game.playing
+        ? `Ravens ${game.ravens}–${game.visitors} Bears  ·  inning ${game.inning} at the Ballpark`
+        : `FINAL  Ravens ${game.ravens}–${game.visitors} Bears  ·  ${winner ? `${winner} win` : "tied"}`
+      : "Ravens host the Bears tonight  ·  first pitch 6:00 PM",
     "City Hall: promenade lights stay on past midnight",
   ];
   const ticker = headlines.join("     ◆     ");

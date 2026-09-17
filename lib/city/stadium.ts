@@ -135,6 +135,59 @@ export function stadiumWinner(game: StadiumGame) {
   return null;
 }
 
+/** Live game if one is on, otherwise the most recent final. */
+export function stadiumOnTv(state: CityState) {
+  return stadiumGame(state) ?? stadiumFinal(state);
+}
+
+export interface StadiumBigPlay {
+  inning: number;
+  runs: number;
+  home: boolean;
+  batter: string;
+  label: string;
+}
+
+/** Best scoring frame to replay on TV — hometown inning if the Ravens crossed. */
+export function stadiumBigPlay(game: StadiumGame): StadiumBigPlay {
+  let inning = 1;
+  let runs = 0;
+  let home = true;
+  for (let i = 0; i < 9; i++) {
+    const r = game.ravensLine[i] ?? -1;
+    if (r > runs) {
+      runs = r;
+      inning = i + 1;
+      home = true;
+    }
+  }
+  if (runs < 1) {
+    for (let i = 0; i < 9; i++) {
+      const v = game.visitorsLine[i] ?? -1;
+      if (v > runs) {
+        runs = v;
+        inning = i + 1;
+        home = false;
+      }
+    }
+  }
+  const lineup = home ? RAVENS_LINEUP : BEARS_LINEUP;
+  const batter = lineup[(inning * 3 + (home ? 1 : 2)) % 9];
+  const frame = inningOrdinal(inning);
+  let label = `${batter} in the ${frame}`;
+  if (runs >= 3) label = `${batter}'s ${runs}-run shot in the ${frame}`;
+  else if (runs === 2) label = `${batter} plates two in the ${frame}`;
+  else if (runs === 1) label = `${batter} scores in the ${frame}`;
+  return { inning, runs, home, batter, label };
+}
+
+function inningOrdinal(n: number) {
+  if (n === 1) return "1st";
+  if (n === 2) return "2nd";
+  if (n === 3) return "3rd";
+  return `${n}th`;
+}
+
 function simulateGame(clock: CityClock, minuteOfDay: number): StadiumGame {
   const elapsed = Math.max(0, minuteOfDay - GAME_START_MINUTE);
   const playMinutes = GAME_END_MINUTE - GAME_START_MINUTE - 8;
