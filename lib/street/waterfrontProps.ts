@@ -31,6 +31,7 @@ export interface WaterfrontDecor {
 /**
  * Piers, boats, the ferris, beach umbrellas, and promenade railings.
  * Boardwalk paving itself is handled in the city ground pass.
+ * Dustfall skips Riverside pier clutter and plants the ferris in open sand.
  */
 export function addWaterfrontDecor(
   state: CityState,
@@ -40,13 +41,30 @@ export function addWaterfrontDecor(
   lamps: THREE.Vector3[],
   blockers: WaterfrontBlocker[],
 ): WaterfrontDecor {
+  const disposables: Array<{ dispose: () => void }> = [];
+
+  if (state.id === "dustfall") {
+    const wood = new THREE.Color("#8a6a4a");
+    const woodDark = new THREE.Color("#5c4030");
+    addDustfallFerrisPad(trimB, wood, woodDark, blockers);
+    const boats = new THREE.Group();
+    const { root, wheel } = buildFerris(disposables, "dustfall");
+    group.add(root);
+    return {
+      boats,
+      ferrisWheel: wheel,
+      dispose: () => {
+        for (const item of disposables) item.dispose();
+      },
+    };
+  }
+
   const wood = new THREE.Color("#6e5840");
   const woodDark = new THREE.Color("#4a3b2c");
   const rail = new THREE.Color("#3d454c");
   const bulb = new THREE.Color("#ffd19a");
   const canvas = new THREE.Color("#f4efe4");
   const pole = new THREE.Color("#4a4f55");
-  const disposables: Array<{ dispose: () => void }> = [];
 
   addPromenadeTrim(state, trimB, lampHeadB, lamps, wood, woodDark, rail, bulb, pole);
   addDocks(trimB, wood, woodDark);
@@ -68,6 +86,27 @@ export function addWaterfrontDecor(
       for (const item of disposables) item.dispose();
     },
   };
+}
+
+/** Low sand platform under the Dustfall ferris — no pier rails. */
+function addDustfallFerrisPad(
+  trimB: MeshBuilder,
+  wood: THREE.Color,
+  woodDark: THREE.Color,
+  blockers: WaterfrontBlocker[],
+) {
+  const tile = ferrisWorldTile("dustfall");
+  const cx = tile.x * TILE;
+  const cz = tile.y * TILE;
+  const half = 7.5;
+  trimB.ground(cx - half, cz - half, cx + half, cz + half, 0.08, wood);
+  trimB.ground(cx - half + 0.6, cz - half + 0.6, cx + half - 0.6, cz + half - 0.6, 0.14, woodDark);
+  blockers.push({
+    minX: cx - 2.8,
+    maxX: cx + 2.8,
+    minZ: cz - 5.2,
+    maxZ: cz + 5.2,
+  });
 }
 
 /** True when the boardwalk meets an east–west bridge — leave that opening clear. */
@@ -247,10 +286,11 @@ function buildBoats(disposables: Array<{ dispose: () => void }>) {
   return group;
 }
 
-function buildFerris(disposables: Array<{ dispose: () => void }>) {
+function buildFerris(disposables: Array<{ dispose: () => void }>, cityId?: string) {
   const root = new THREE.Group();
-  const tile = ferrisWorldTile();
-  root.position.set(tile.x * TILE, 0.5, tile.y * TILE);
+  const tile = ferrisWorldTile(cityId);
+  // Dustfall sits on a sand pad (y≈0); Riverside ferris stands on the pier deck.
+  root.position.set(tile.x * TILE, cityId === "dustfall" ? 0.14 : 0.5, tile.y * TILE);
 
   const steelMat = new THREE.MeshStandardMaterial({ color: "#c45c4a", roughness: 0.35, metalness: 0.45 });
   const darkMat = new THREE.MeshStandardMaterial({ color: "#3a3230", roughness: 0.5, metalness: 0.3 });

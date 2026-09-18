@@ -5,6 +5,7 @@ import { spawnCitizens } from "@/lib/simulation/citizens/spawnCitizens";
 import { bootstrapEvents } from "@/lib/simulation/events/cityEvents";
 import { seedTrafficNetwork } from "@/lib/simulation/traffic/roadNetwork";
 import { openingClock, weatherFor } from "@/lib/simulation/weather/weather";
+import { markAllEnterableVenues } from "./venues";
 import type {
   Building,
   BuildingKind,
@@ -252,18 +253,31 @@ export function generateDustfall(seed = 934201): CityState {
   place("house", 15, 8);
   place("house", 18, 26);
   place("house", 19, 26);
-  place("apartment", 22, 7);
-  place("apartment", 24, 7);
+  const flatsA = place("apartment", 22, 7);
+  if (flatsA) {
+    markLodging(flatsA, "residences");
+    flatsA.name = "Nile Court";
+    paintEgypt(flatsA, rand);
+  }
+  const flatsB = place("apartment", 24, 7);
+  if (flatsB) {
+    markLodging(flatsB, "residences");
+    flatsB.name = "Sandstone Residences";
+    paintEgypt(flatsB, rand);
+  }
   place("office", 21, 14);
   place("office", 22, 14);
   place("skyscraper", 30, 20);
   place("tower", 31, 10);
 
-  for (let i = 0; i < 40; i++) {
+  // Every Dustfall building should be walk-in (civic by kind, rest tagged here).
+  markAllEnterableVenues(buildings);
+
+  for (let i = 0; i < 18; i++) {
     const x = 1 + Math.floor(rand() * (SIZE - 2));
     const y = 1 + Math.floor(rand() * (SIZE - 2));
     const tile = tiles[y][x];
-    if (!tile.road && !tile.buildingId && tile.terrain === "sand" && rand() > 0.55) {
+    if (!tile.road && !tile.buildingId && tile.terrain === "sand" && rand() > 0.72) {
       tile.tree = { variant: Math.floor(rand() * 4), scale: 0.55 + rand() * 0.5 };
     }
   }

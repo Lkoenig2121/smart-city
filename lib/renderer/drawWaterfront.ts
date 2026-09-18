@@ -4,6 +4,7 @@ import type { Tile } from "@/lib/city/types";
 import {
   FERRIS_Y,
   WATERFRONT_BOATS,
+  ferrisWorldTile,
   isMarinaDockRow,
   isWestBank,
   promenadeXAt,
@@ -19,7 +20,16 @@ export function drawWaterfrontDecor(
   tile: Tile,
   light: Lighting,
   time: number,
+  cityId?: string,
 ) {
+  if (cityId === "dustfall") {
+    const ferris = ferrisWorldTile("dustfall");
+    if (x === Math.floor(ferris.x) && y === Math.floor(ferris.y)) {
+      drawFerris(ctx, x, y, light, time);
+    }
+    return;
+  }
+
   if (
     tile.terrain === "sand" &&
     !tile.road &&

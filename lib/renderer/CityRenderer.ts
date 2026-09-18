@@ -151,7 +151,7 @@ export class CityRenderer {
         if (x === 20 && y === 26 && tile.terrain === "park") {
           drawFountain(ctx, x, y, light, this.time);
         }
-        drawWaterfrontDecor(ctx, x, y, tile, light, this.time);
+        drawWaterfrontDecor(ctx, x, y, tile, light, this.time, state.id);
       }
 
       const rowVehicles = this.vehiclesByRow.get(sum);

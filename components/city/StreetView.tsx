@@ -130,6 +130,8 @@ export function StreetView({
   const lodgingDoorRef = useRef<Building | null>(null);
   const subwayDoorRef = useRef<Building | null>(null);
   const venueDoorRef = useRef<Building | null>(null);
+  /** Enter the aimed / door-tagged building; shared by E and click. */
+  const tryEnterStreetDoorRef = useRef<() => boolean>(() => false);
   const atDeskRef = useRef(false);
   const deskDismissedRef = useRef(false);
   const atComputerRef = useRef(false);
@@ -559,6 +561,36 @@ export function StreetView({
         world.inputTarget.clearKeys();
       },
     };
+    const enterStreetDoor = () => {
+      const target = world.enterTarget();
+      if (!target) return false;
+      if (target.kind === "venue") {
+        setInterior({ kind: "venue", buildingId: target.building.id });
+        setPlayer(discoverPlace(target.building.id));
+        return true;
+      }
+      if (target.kind === "lodging") {
+        setInterior({ kind: "lodging", buildingId: target.building.id, zone: "lobby" });
+        setPlayer(discoverPlace(target.building.id));
+        return true;
+      }
+      if (target.kind === "subway") {
+        const id = subwayStationId(target.building);
+        if (id) {
+          setInterior({ kind: "subway", stationId: id });
+          setPlayer(discoverPlace(`subway:${id}`));
+        }
+        return true;
+      }
+      if (target.kind === "stadium") {
+        setInterior({ kind: "stadium" });
+        setPlayer(discoverPlace("ravens-ballpark", 48));
+        return true;
+      }
+      return false;
+    };
+    tryEnterStreetDoorRef.current = enterStreetDoor;
+
     const detachInput = attachPointerInput(canvas, inputProxy, {
       setLocked,
       consumeKey: (event) => {
@@ -579,12 +611,7 @@ export function StreetView({
           return true;
         }
         const car = world.nearOwnedCar(readPlayer().ownedVehicles);
-        const doorNearby = Boolean(
-          venueDoorRef.current ||
-            lodgingDoorRef.current ||
-            subwayDoorRef.current ||
-            atGateRef.current,
-        );
+        const doorNearby = Boolean(world.enterTarget());
 
         // F = drive when a car is in range (also when a building door competes for E).
         if (event.code === "KeyF") {
@@ -609,33 +636,7 @@ export function StreetView({
           markMissionRamp();
           return true;
         }
-        const venue = venueDoorRef.current;
-        if (venue) {
-          setInterior({ kind: "venue", buildingId: venue.id });
-          setPlayer(discoverPlace(venue.id));
-          return true;
-        }
-        const door = lodgingDoorRef.current;
-        if (door) {
-          setInterior({ kind: "lodging", buildingId: door.id, zone: "lobby" });
-          setPlayer(discoverPlace(door.id));
-          return true;
-        }
-        const subway = subwayDoorRef.current;
-        if (subway) {
-          const id = subwayStationId(subway);
-          if (id) {
-            setInterior({ kind: "subway", stationId: id });
-            setPlayer(discoverPlace(`subway:${id}`));
-          }
-          return true;
-        }
-        if (atGateRef.current) {
-          setInterior({ kind: "stadium" });
-          setPlayer(discoverPlace("ravens-ballpark", 48));
-          return true;
-        }
-        return false;
+        return enterStreetDoor();
       },
     });
 
@@ -1349,6 +1350,15 @@ export function StreetView({
 
   const onCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
     if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallSnack || phoneOpen) return;
+
+    // Outdoor street: click the white-highlighted building to walk in.
+    if (!inside && !dustfallTrip && !driving) {
+      const outdoor = outdoorCanvasRef.current;
+      if (outdoor && document.pointerLockElement === outdoor) {
+        if (tryEnterStreetDoorRef.current()) return;
+      }
+    }
+
     const canvas = canvasRef.current;
     const world = lodgingRef.current;
     if (canvas && world && interior?.kind === "lodging" && interior.zone === "room") {
@@ -1682,7 +1692,8 @@ export function StreetView({
               <span className="font-semibold text-white">WASD</span> walk ·{" "}
               <span className="font-semibold text-white">Shift</span> run ·{" "}
               <span className="font-semibold text-white">Space</span> jump ·{" "}
-              <span className="font-semibold text-white">E</span>{" "}
+              <span className="font-semibold text-white">E</span>/
+              <span className="font-semibold text-white">Click</span>{" "}
               {inside ? "leave" : "enter"} · <span className="font-semibold text-white">I</span> inventory ·{" "}
               <span className="font-semibold text-white">M</span> phone
             </>
@@ -1748,6 +1759,7 @@ export function StreetView({
                   <p className="truncate text-sm font-semibold text-white">{doorChoiceLabel}</p>
                 </div>
                 <p className="shrink-0 text-sm text-slate-300">
+                  <span className="font-semibold text-white">Click</span>/
                   <span className="font-semibold text-white">E</span> enter
                 </p>
               </div>
@@ -1800,7 +1812,8 @@ export function StreetView({
             </p>
             <p className="mt-1 text-xl font-semibold text-white">Enter stadium</p>
             <p className="mt-1 text-sm text-slate-300">
-              Press <span className="font-semibold text-white">E</span>
+              <span className="font-semibold text-white">Click</span> or{" "}
+              <span className="font-semibold text-white">E</span>
             </p>
           </div>
         </div>
@@ -1814,7 +1827,8 @@ export function StreetView({
             </p>
             <p className="mt-1 text-xl font-semibold text-white">{lodgingDoor.name}</p>
             <p className="mt-1 text-sm text-slate-300">
-              Press <span className="font-semibold text-white">E</span> to enter the lobby
+              <span className="font-semibold text-white">Click</span> or press{" "}
+              <span className="font-semibold text-white">E</span> to enter the lobby
             </p>
           </div>
         </div>
@@ -1837,7 +1851,8 @@ export function StreetView({
             </p>
             <p className="mt-1 text-xl font-semibold text-white">{venueDoor.name}</p>
             <p className="mt-1 text-sm text-slate-300">
-              Press <span className="font-semibold text-white">E</span> to enter
+              <span className="font-semibold text-white">Click</span> or press{" "}
+              <span className="font-semibold text-white">E</span> to enter
               {venueRole(venueDoor) === "office"
                 ? " · start work at the desk"
                 : venueRole(venueDoor) === "mall"
@@ -1854,7 +1869,8 @@ export function StreetView({
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Subway</p>
             <p className="mt-1 text-xl font-semibold text-white">{subwayDoor.name}</p>
             <p className="mt-1 text-sm text-slate-300">
-              Press <span className="font-semibold text-white">E</span> to go underground
+              <span className="font-semibold text-white">Click</span> or press{" "}
+              <span className="font-semibold text-white">E</span> to go underground
             </p>
           </div>
         </div>

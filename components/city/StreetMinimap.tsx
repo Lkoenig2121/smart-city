@@ -6,6 +6,7 @@ import { BUS_STOPS, isTramTile } from "@/lib/city/transit";
 import { POI_LEGEND, drawPoiMark, poiKind } from "@/lib/city/minimapPois";
 import { readPlayer } from "@/lib/city/player";
 import { isPromenadeTile, waterfrontPois } from "@/lib/city/waterfront";
+import { DUSTFALL_RETURN_BRIDGE, HIGHWAY_RAMP } from "@/lib/city/vehicles";
 import { HIGHWAY_CORRIDOR } from "@/lib/street/DustfallWorld";
 import { useEffect, useRef } from "react";
 
@@ -66,7 +67,11 @@ export function StreetMinimap({
           ctx.fillRect(x * cell, y * cell, cell + 0.5, cell + 0.5);
         }
         if (tile.road) {
-          ctx.fillStyle = tile.bridge ? "#8d8a80" : isPromenadeTile(x, y) ? "#8a7354" : "#6a6c72";
+          ctx.fillStyle = tile.bridge
+            ? "#8d8a80"
+            : state.id !== "dustfall" && isPromenadeTile(x, y)
+              ? "#8a7354"
+              : "#6a6c72";
           ctx.fillRect(x * cell, y * cell, cell + 0.5, cell + 0.5);
         }
         if (isTramTile(x, y)) {
@@ -75,6 +80,8 @@ export function StreetMinimap({
         }
       }
     }
+
+    paintHighwayExitGreens(ctx, state, cell);
 
     for (const building of state.buildings.values()) {
       ctx.fillStyle = building.floors > 14 ? "#d8dde2" : "#a9a196";
@@ -101,7 +108,7 @@ export function StreetMinimap({
         kind === "stadium" ? mark * 1.2 : mark,
       );
     }
-    for (const poi of waterfrontPois()) {
+    for (const poi of waterfrontPois(state.id)) {
       drawPoiMark(ctx, poi.x * cell, poi.y * cell, poi.kind, mark);
     }
 
@@ -301,9 +308,15 @@ export function StreetMinimap({
                 ctx.lineWidth = 1.35;
                 ctx.stroke();
               }
-              if (live.dustfallUnlocked) {
-                ctx.fillStyle = "rgba(232, 184, 106, 0.85)";
-                ctx.fillRect(19.2 * cell, offsetY - 2, 1.6 * cell, 3);
+              if (live.dustfallUnlocked && state.id !== "dustfall") {
+                // Soft pulse tip on the Hwy 93 exit (green zone is on the base map).
+                ctx.fillStyle = "rgba(90, 200, 110, 0.9)";
+                ctx.fillRect(
+                  (HIGHWAY_RAMP.x - 0.15) * cell,
+                  offsetY - 1.5,
+                  1.3 * cell,
+                  2.2,
+                );
               }
             } catch {
               /* storage */
@@ -368,6 +381,75 @@ export function StreetMinimap({
 }
 
 type HighwayView = { x0: number; y0: number; cellX: number; cellY: number };
+
+/** Green verge around the city↔highway portal so the exit reads clearly on the radar. */
+function paintHighwayExitGreens(
+  ctx: CanvasRenderingContext2D,
+  state: CityState,
+  cell: number,
+) {
+  const zones =
+    state.id === "dustfall"
+      ? [
+          {
+            x: DUSTFALL_RETURN_BRIDGE.x,
+            y0: DUSTFALL_RETURN_BRIDGE.yMin - 1,
+            y1: state.size - 1,
+            halfW: 3,
+          },
+        ]
+      : state.id === "riverside"
+        ? [
+            {
+              x: HIGHWAY_RAMP.x,
+              y0: 0,
+              y1: HIGHWAY_RAMP.yMax + 2,
+              halfW: 3,
+            },
+          ]
+        : [];
+
+  for (const zone of zones) {
+    for (let y = zone.y0; y <= zone.y1; y++) {
+      if (y < 0 || y >= state.size) continue;
+      const edge = y <= zone.y0 + 1 || y >= zone.y1 - 1;
+      for (let dx = -zone.halfW; dx <= zone.halfW; dx++) {
+        const x = zone.x + dx;
+        if (x < 0 || x >= state.size) continue;
+        const tile = state.tiles[y]?.[x];
+        if (!tile || tile.buildingId) continue;
+        const onRamp = Math.abs(dx) <= 1 && Boolean(tile.road || tile.bridge);
+        // Keep the pavement readable; wash the shoulders and verge in green.
+        if (onRamp) {
+          ctx.fillStyle = edge ? "rgba(62, 140, 72, 0.55)" : "rgba(55, 125, 65, 0.28)";
+        } else {
+          const dist = Math.abs(dx) / zone.halfW;
+          ctx.fillStyle =
+            dist < 0.4
+              ? "rgba(46, 130, 58, 0.72)"
+              : dist < 0.75
+                ? "rgba(42, 115, 52, 0.55)"
+                : "rgba(38, 100, 48, 0.35)";
+        }
+        ctx.fillRect(x * cell, y * cell, cell + 0.5, cell + 0.5);
+      }
+    }
+
+    // Bright green tip past the map edge so “leave city → highway” is obvious.
+    if (state.id !== "dustfall") {
+      ctx.fillStyle = "rgba(70, 190, 95, 0.85)";
+      ctx.fillRect((zone.x - 1.2) * cell, -cell * 0.35, 2.4 * cell, cell * 0.7);
+    } else {
+      ctx.fillStyle = "rgba(70, 190, 95, 0.85)";
+      ctx.fillRect(
+        (zone.x - 1.2) * cell,
+        state.size * cell - cell * 0.35,
+        2.4 * cell,
+        cell * 0.7,
+      );
+    }
+  }
+}
 
 function drawPlayerMarker(
   ctx: CanvasRenderingContext2D,

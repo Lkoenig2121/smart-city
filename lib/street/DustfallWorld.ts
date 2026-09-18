@@ -104,6 +104,7 @@ export class DustfallWorld {
   private readonly endZ: number;
   private readonly laneX: number;
   private readonly blockers: Blocker[] = [];
+  private readonly traffic: HighwayTrafficCar[] = [];
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -151,6 +152,7 @@ export class DustfallWorld {
     this.scene.add(this.group);
     this.carMesh = makeSimpleCar(color);
     this.scene.add(this.carMesh);
+    this.spawnTraffic();
   }
 
   private buildCorridor() {
@@ -264,6 +266,69 @@ export class DustfallWorld {
     this.blockers.push(boxBlocker(cx - 22, townZ + 18, 8.2, 4.2));
   }
 
+  /** Two-way NPC traffic sharing the pavement with the player. */
+  private spawnTraffic() {
+    const colors = [
+      "#c0392b",
+      "#2c3e50",
+      "#f4f1ea",
+      "#1f4d8c",
+      "#d4a017",
+      "#4a6741",
+      "#8e44ad",
+      "#e67e22",
+      "#1abc9c",
+      "#7f8c8d",
+      "#b8956a",
+      "#34495e",
+    ];
+    const count = 12;
+    const travel = this.startZ - this.endZ;
+    const laneOffset = 2.75;
+    for (let i = 0; i < count; i++) {
+      const northbound = i % 2 === 0;
+      // Right-hand traffic: northbound on +X, southbound on −X.
+      const lane = northbound ? 1 : -1;
+      const dir: 1 | -1 = northbound ? -1 : 1;
+      const t = (i + 0.35) / count;
+      const z = this.endZ + 36 + t * (travel - 72);
+      const x = this.laneX + lane * laneOffset;
+      const speed = 16 + (i % 5) * 3.2 + (northbound ? 1.5 : 0);
+      const mesh = makeSimpleCar(colors[i % colors.length], i % 4 === 0 ? "truck" : "car");
+      mesh.position.set(x, 0.4, z);
+      mesh.rotation.y = northbound ? 0 : Math.PI;
+      this.scene.add(mesh);
+      const halfZ = i % 4 === 0 ? 3.1 : 2.15;
+      const blocker = boxBlocker(x, z, 1.15, halfZ);
+      this.blockers.push(blocker);
+      this.traffic.push({ mesh, z, lane, speed, dir, blocker, halfZ });
+    }
+  }
+
+  private updateTraffic(dt: number) {
+    const minZ = this.endZ - 24;
+    const maxZ = this.startZ + 24;
+    const laneOffset = 2.75;
+    const playerX = this.controls.position.x;
+    const playerZ = this.controls.position.z;
+    for (const car of this.traffic) {
+      const x = this.laneX + car.lane * laneOffset;
+      const nearPlayer = Math.hypot(playerX - x, playerZ - car.z) < 12;
+      const sameLane = Math.abs(playerX - x) < 3.2;
+      const slow = nearPlayer && sameLane ? 0.38 : 1;
+      car.z += car.dir * car.speed * slow * dt;
+      if (car.dir < 0 && car.z < minZ) car.z = maxZ;
+      if (car.dir > 0 && car.z > maxZ) car.z = minZ;
+
+      car.mesh.position.set(x, 0.4, car.z);
+      car.mesh.rotation.y = car.dir < 0 ? 0 : Math.PI;
+      car.blocker.minX = x - 1.15;
+      car.blocker.maxX = x + 1.15;
+      car.blocker.minZ = car.z - car.halfZ;
+      car.blocker.maxZ = car.z + car.halfZ;
+    }
+  }
+
   resize(width: number, height: number) {
     this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
@@ -277,6 +342,7 @@ export class DustfallWorld {
       this.laneX - 95,
       this.laneX + 95,
     );
+    this.updateTraffic(dt);
     this.controls.applyTo(this.camera);
     this.carMesh.position.copy(this.controls.position);
     this.carMesh.position.y -= 0.15;
@@ -355,22 +421,41 @@ export class DustfallWorld {
   }
 }
 
-function makeSimpleCar(color: string) {
+function makeSimpleCar(color: string, kind: "car" | "truck" = "car") {
   const g = new THREE.Group();
+  const bodyLen = kind === "truck" ? 5.6 : 4.2;
   const body = new THREE.Mesh(
-    new THREE.BoxGeometry(1.9, 0.55, 4.2),
+    new THREE.BoxGeometry(1.9, kind === "truck" ? 0.7 : 0.55, bodyLen),
     new THREE.MeshStandardMaterial({ color, metalness: 0.35, roughness: 0.42 }),
   );
-  body.position.y = 0.55;
+  body.position.y = kind === "truck" ? 0.7 : 0.55;
   g.add(body);
   const cabin = new THREE.Mesh(
-    new THREE.BoxGeometry(1.65, 0.5, 2),
+    new THREE.BoxGeometry(1.65, 0.5, kind === "truck" ? 1.6 : 2),
     new THREE.MeshStandardMaterial({ color: "#9ec5e8", transparent: true, opacity: 0.5 }),
   );
-  cabin.position.set(0, 1.0, -0.1);
+  cabin.position.set(0, kind === "truck" ? 1.25 : 1.0, kind === "truck" ? bodyLen * 0.22 : -0.1);
   g.add(cabin);
+  if (kind === "truck") {
+    const bed = new THREE.Mesh(
+      new THREE.BoxGeometry(1.85, 0.9, 2.8),
+      new THREE.MeshStandardMaterial({ color: "#3a3d42", roughness: 0.9 }),
+    );
+    bed.position.set(0, 1.15, -1.1);
+    g.add(bed);
+  }
   return g;
 }
+
+type HighwayTrafficCar = {
+  mesh: THREE.Group;
+  z: number;
+  lane: number;
+  speed: number;
+  dir: 1 | -1;
+  blocker: Blocker;
+  halfZ: number;
+};
 
 function makeHighwaySign() {
   const g = new THREE.Group();

@@ -38,6 +38,8 @@ export function isVenueRole(value: unknown): value is VenueRole {
 
 export function venueRole(building: Building): VenueRole | null {
   if (lodgingUse(building)) return null;
+  const tagged = building.stats.extra?.venue;
+  if (isVenueRole(tagged)) return tagged;
   if (
     building.kind === "baseball_stadium" ||
     building.kind === "park_pavilion" ||
@@ -45,8 +47,6 @@ export function venueRole(building: Building): VenueRole | null {
   ) {
     return null;
   }
-  const tagged = building.stats.extra?.venue;
-  if (isVenueRole(tagged)) return tagged;
   if (building.kind === "hospital") return "hospital";
   if (building.kind === "school") return "school";
   if (building.kind === "city_hall") return "city_hall";
@@ -54,6 +54,41 @@ export function venueRole(building: Building): VenueRole | null {
   if (building.kind === "fire") return "fire";
   if (building.kind === "office") return "office";
   return null;
+}
+
+/** Make every non-lodging building enterable (Dustfall / full-city pass). */
+export function markAllEnterableVenues(buildings: Map<string, Building>) {
+  let shopI = 0;
+  for (const building of [...buildings.values()].sort(
+    (a, b) => a.origin.y - b.origin.y || a.origin.x - b.origin.x,
+  )) {
+    if (lodgingUse(building)) continue;
+    if (venueRole(building)) continue;
+
+    switch (building.kind) {
+      case "shop":
+        if (shopI === 0) markVenue(building, "bank", building.name || "Desert Ledger");
+        else if (shopI % 2 === 1) markVenue(building, "restaurant");
+        else markVenue(building, "shop");
+        shopI += 1;
+        break;
+      case "house":
+        markVenue(building, "house");
+        break;
+      case "apartment":
+        markVenue(building, "apartment");
+        break;
+      case "tower":
+      case "skyscraper":
+        markVenue(building, "office");
+        break;
+      case "park_pavilion":
+        markVenue(building, "shop", building.name);
+        break;
+      default:
+        break;
+    }
+  }
 }
 
 export function isEnterableVenue(building: Building) {

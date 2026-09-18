@@ -45,7 +45,11 @@ export function isMarinaDockRow(y: number) {
 /** Ferris sits on a pier over the river, south of the dining strip. */
 export const FERRIS_Y = 28;
 
-export function ferrisWorldTile() {
+/** Dustfall ferris — open sand east of the Nile, off the arterial. */
+export const DUSTFALL_FERRIS = { x: 14.15, y: 30.35 };
+
+export function ferrisWorldTile(cityId?: string) {
+  if (cityId === "dustfall") return { ...DUSTFALL_FERRIS };
   return { x: riverXAt(FERRIS_Y) + 1.55, y: FERRIS_Y + 0.5 };
 }
 
@@ -170,7 +174,11 @@ export function isWaterfrontBuilding(building: Building) {
   return building.stats.extra?.waterfront === "Riverside";
 }
 
-export function waterfrontPois(): { x: number; y: number; kind: "marina" | "beach" | "ferris" }[] {
+export function waterfrontPois(cityId?: string): { x: number; y: number; kind: "marina" | "beach" | "ferris" }[] {
+  if (cityId === "dustfall") {
+    const ferris = ferrisWorldTile("dustfall");
+    return [{ x: ferris.x, y: ferris.y, kind: "ferris" }];
+  }
   const ferris = ferrisWorldTile();
   return [
     { x: promenadeXAt(4) + 0.4, y: 4.2, kind: "beach" },

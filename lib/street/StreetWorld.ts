@@ -23,6 +23,8 @@ import { makePlayerCarMesh, placeCarMesh } from "./playerCar";
 
 /** Field of view at rest, and how far it narrows mid-hop. */
 const BASE_FOV = 72;
+/** Walk-in range while a building is aimed / highlighted (matches glow usability). */
+const ENTER_AIM_RANGE = TILE * 5;
 const HOP_ZOOM = 7;
 
 /** How many lamps get a real point light at once. */
@@ -411,25 +413,44 @@ export class StreetWorld {
   nearStadiumGate() {
     const stadium = findStadium(this.state);
     if (!stadium || !stadiumIsOpen(stadium)) return false;
-    return this.aimedWithin(stadium, TILE * 4.2);
+    return this.aimedWithin(stadium, TILE * 5);
   }
 
   nearLodgingEntrance() {
     const building = this.aimedBuilding();
     if (!building || !lodgingUse(building)) return null;
-    return this.aimedWithin(building, TILE * 2.2) ? building : null;
+    return this.aimedWithin(building, ENTER_AIM_RANGE) ? building : null;
   }
 
   nearSubwayEntrance() {
     const building = this.aimedBuilding();
     if (!building || building.kind !== "subway_station") return null;
-    return this.aimedWithin(building, TILE * 2.2) ? building : null;
+    return this.aimedWithin(building, ENTER_AIM_RANGE) ? building : null;
   }
 
   nearVenueEntrance() {
     const building = this.aimedBuilding();
     if (!building || lodgingUse(building) || !isEnterableVenue(building)) return null;
-    return this.aimedWithin(building, TILE * 2.2) ? building : null;
+    return this.aimedWithin(building, ENTER_AIM_RANGE) ? building : null;
+  }
+
+  /**
+   * Aimed / highlighted building the player can walk into (click or E).
+   * Prefer this over separate door refs when handling a click.
+   */
+  enterTarget():
+    | { kind: "venue" | "lodging" | "subway"; building: Building }
+    | { kind: "stadium" }
+    | null {
+    if (this.isDriving) return null;
+    if (this.nearStadiumGate()) return { kind: "stadium" };
+    const lodging = this.nearLodgingEntrance();
+    if (lodging) return { kind: "lodging", building: lodging };
+    const subway = this.nearSubwayEntrance();
+    if (subway) return { kind: "subway", building: subway };
+    const venue = this.nearVenueEntrance();
+    if (venue) return { kind: "venue", building: venue };
+    return null;
   }
 
   aimedBuilding() {
