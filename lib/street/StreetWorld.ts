@@ -15,7 +15,11 @@ import { StreetWeatherFx } from "./weatherFx";
 import { StreetFireworks } from "./streetFireworks";
 import { HeldItemView } from "./heldItem";
 import type { PhoneWaypoint } from "@/lib/city/phone";
+import type { OwnedVehicle } from "@/lib/city/vehicles";
+import { DUSTFALL_RETURN_BRIDGE, DUSTFALL_RETURN_PORTAL_Y, HIGHWAY_PORTAL_Y, HIGHWAY_RAMP, driveStats } from "@/lib/city/vehicles";
 import { findPath, nearestRoad } from "@/lib/simulation/traffic/pathfinding";
+import { DriveControls } from "./driveControls";
+import { makePlayerCarMesh, placeCarMesh } from "./playerCar";
 
 /** Field of view at rest, and how far it narrows mid-hop. */
 const BASE_FOV = 72;
@@ -68,6 +72,10 @@ export class StreetWorld {
   private navMat: THREE.MeshStandardMaterial;
   private navPath: Array<{ x: number; z: number }> = [];
   private navPathKey = "";
+  private drive: DriveControls | null = null;
+  private drivingId: string | null = null;
+  private ownedCarMeshes = new Map<string, THREE.Group>();
+  private ownedCarRoot = new THREE.Group();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -141,6 +149,230 @@ export class StreetWorld {
     this.navArrows.renderOrder = 3;
     this.navArrows.visible = false;
     this.scene.add(this.navArrows);
+    this.ownedCarRoot.name = "owned-cars";
+    this.scene.add(this.ownedCarRoot);
+    if (state.id === "dustfall") this.placeRiversideReturnBridge();
+    else this.placeHighway93Props();
+  }
+
+  private placeRiversideReturnBridge() {
+    const x = DUSTFALL_RETURN_BRIDGE.x * TILE + TILE / 2;
+    const z = 33.5 * TILE;
+    const sign = new THREE.Group();
+    const board = new THREE.Mesh(
+      new THREE.BoxGeometry(10.5, 3.2, 0.35),
+      new THREE.MeshStandardMaterial({ color: "#1f6b3a", roughness: 0.7 }),
+    );
+    board.position.y = 7.4;
+    sign.add(board);
+    const post = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 7.6, 0.32),
+      new THREE.MeshStandardMaterial({ color: "#c5c9ce" }),
+    );
+    post.position.set(-4, 3.3, 0);
+    const post2 = post.clone();
+    post2.position.x = 4;
+    sign.add(post, post2);
+    sign.position.set(x - 8.5, 0, 31.2 * TILE);
+    this.scene.add(sign);
+
+    // Simple deck rails along the wash crossing.
+    for (const side of [-1, 1] as const) {
+      const rail = new THREE.Mesh(
+        new THREE.BoxGeometry(0.35, 1.1, TILE * 2.2),
+        new THREE.MeshStandardMaterial({ color: "#8a7a5c", roughness: 0.85 }),
+      );
+      rail.position.set(x + side * 4.2, 1.15, z);
+      this.scene.add(rail);
+    }
+
+    const warn = new THREE.Mesh(
+      new THREE.BoxGeometry(1.4, 1.4, 0.12),
+      new THREE.MeshStandardMaterial({ color: "#f4d03f" }),
+    );
+    warn.position.set(x + 5.2, 2.2, 32.2 * TILE);
+    warn.rotation.y = Math.PI / 4;
+    this.scene.add(warn);
+  }
+
+  private placeHighway93Props() {
+    const x = HIGHWAY_RAMP.x * TILE + TILE / 2;
+    const z = 2.5 * TILE;
+    const sign = new THREE.Group();
+    const board = new THREE.Mesh(
+      new THREE.BoxGeometry(9.5, 3.1, 0.35),
+      new THREE.MeshStandardMaterial({ color: "#1f6b3a", roughness: 0.7 }),
+    );
+    board.position.y = 7.2;
+    sign.add(board);
+    const post = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 7.4, 0.32),
+      new THREE.MeshStandardMaterial({ color: "#c5c9ce" }),
+    );
+    post.position.set(-3.6, 3.2, 0);
+    const post2 = post.clone();
+    post2.position.x = 3.6;
+    sign.add(post, post2);
+    sign.position.set(x - 7.5, 0, z);
+    this.scene.add(sign);
+
+    const warn = new THREE.Mesh(
+      new THREE.BoxGeometry(1.4, 1.4, 0.12),
+      new THREE.MeshStandardMaterial({ color: "#f4d03f" }),
+    );
+    warn.position.set(x + 5.5, 2.2, 4.2 * TILE);
+    warn.rotation.y = Math.PI / 4;
+    this.scene.add(warn);
+
+    for (const zz of [1.2, 2.8, 4.0]) {
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.16, 11, 6),
+        new THREE.MeshStandardMaterial({ color: "#1a1c20" }),
+      );
+      pole.position.set(x + 6.2, 5.5, zz * TILE);
+      this.scene.add(pole);
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.55, 8, 8),
+        new THREE.MeshStandardMaterial({ color: "#d8dde2", emissive: "#f0f4f8", emissiveIntensity: 0.35 }),
+      );
+      head.position.set(x + 6.2, 11.1, zz * TILE);
+      this.scene.add(head);
+    }
+  }
+
+  get isDriving() {
+    return Boolean(this.drivingId && this.drive);
+  }
+
+  get driveControls() {
+    return this.drive;
+  }
+
+  get drivingVehicleId() {
+    return this.drivingId;
+  }
+
+  syncOwnedCars(cars: OwnedVehicle[], hideId: string | null = null) {
+    const seen = new Set<string>();
+    for (const car of cars) {
+      seen.add(car.id);
+      let mesh = this.ownedCarMeshes.get(car.id);
+      if (!mesh) {
+        mesh = makePlayerCarMesh(car);
+        this.ownedCarMeshes.set(car.id, mesh);
+        this.ownedCarRoot.add(mesh);
+      }
+      const body = mesh.children[0] as THREE.Mesh | undefined;
+      if (body && body.material instanceof THREE.MeshStandardMaterial) {
+        body.material.color.set(car.color);
+      }
+      if (car.id === hideId) {
+        mesh.visible = false;
+        continue;
+      }
+      const ground = this.controls.groundAt(car.parkX * TILE, car.parkY * TILE);
+      placeCarMesh(mesh, car, ground);
+    }
+    for (const [id, mesh] of this.ownedCarMeshes) {
+      if (seen.has(id)) continue;
+      mesh.removeFromParent();
+      this.ownedCarMeshes.delete(id);
+    }
+  }
+
+  nearOwnedCar(cars: OwnedVehicle[]) {
+    if (this.isDriving) return null;
+    const px = this.controls.position.x;
+    const pz = this.controls.position.z;
+    let best: OwnedVehicle | null = null;
+    let bestD = TILE * 2.4;
+    for (const car of cars) {
+      const dx = px - car.parkX * TILE;
+      const dz = pz - car.parkY * TILE;
+      const d = Math.hypot(dx, dz);
+      if (d < bestD) {
+        bestD = d;
+        best = car;
+      }
+    }
+    return best;
+  }
+
+  nearHighwayRamp() {
+    if (this.state.id === "dustfall") return this.nearReturnBridge();
+    const pos = this.drive?.position ?? this.controls.position;
+    const tx = pos.x / TILE;
+    const ty = pos.z / TILE;
+    return Math.abs(tx - HIGHWAY_RAMP.x) < 1.6 && ty <= HIGHWAY_RAMP.yMax + 0.8 && ty >= -0.2;
+  }
+
+  atHighwayPortal() {
+    if (this.state.id === "dustfall") return this.atReturnPortal();
+    if (!this.isDriving || !this.drive) return false;
+    const tx = this.drive.position.x / TILE;
+    const ty = this.drive.position.z / TILE;
+    return Math.abs(tx - HIGHWAY_RAMP.x) < 2.2 && ty <= HIGHWAY_PORTAL_Y;
+  }
+
+  nearReturnBridge() {
+    const pos = this.drive?.position ?? this.controls.position;
+    const tx = pos.x / TILE;
+    const ty = pos.z / TILE;
+    return (
+      Math.abs(tx - DUSTFALL_RETURN_BRIDGE.x) < 1.8 &&
+      ty >= DUSTFALL_RETURN_BRIDGE.yMin - 0.4 &&
+      ty <= DUSTFALL_RETURN_BRIDGE.yMax + 0.6
+    );
+  }
+
+  atReturnPortal() {
+    if (!this.isDriving || !this.drive) return false;
+    const tx = this.drive.position.x / TILE;
+    const ty = this.drive.position.z / TILE;
+    return Math.abs(tx - DUSTFALL_RETURN_BRIDGE.x) < 2.2 && ty >= DUSTFALL_RETURN_PORTAL_Y;
+  }
+
+  startDriving(car: OwnedVehicle) {
+    const stats = driveStats(car);
+    this.drive = new DriveControls(this.state, this.city.blockers);
+    this.drive.topSpeed = stats.topSpeed;
+    this.drive.accel = stats.accel;
+    this.drive.spawnAt(car.parkX * TILE, car.parkY * TILE, car.parkYaw);
+    this.drivingId = car.id;
+    this.controls.enabled = false;
+    this.controls.clearKeys();
+    const mesh = this.ownedCarMeshes.get(car.id);
+    if (mesh) mesh.visible = false;
+  }
+
+  private driveFuelEmpty = false;
+
+  setDriveFuelEmpty(empty: boolean) {
+    this.driveFuelEmpty = empty;
+  }
+
+  /** Routes pointer / keyboard into walk or drive controls. */
+  get inputTarget() {
+    return this.drive ?? this.controls;
+  }
+
+  stopDriving(): { x: number; y: number; yaw: number } | null {
+    if (!this.drive || !this.drivingId) return null;
+    const x = this.drive.position.x / TILE;
+    const y = this.drive.position.z / TILE;
+    const yaw = this.drive.yaw;
+    this.controls.spawnAt(x, y, yaw);
+    this.controls.enabled = true;
+    this.drive = null;
+    const id = this.drivingId;
+    this.drivingId = null;
+    const mesh = this.ownedCarMeshes.get(id);
+    if (mesh) mesh.visible = true;
+    return { x, y, yaw };
+  }
+
+  driveMph() {
+    return this.drive?.mph() ?? 0;
   }
 
   /** Lets a hotel room parent the live city mesh so the window is a real opening. */
@@ -403,13 +635,25 @@ export class StreetWorld {
 
   render(dt: number) {
     this.time += dt;
-    this.controls.update(dt);
-    this.controls.applyTo(this.camera);
+    if (this.drive && this.drivingId) {
+      this.drive.update(dt, this.driveFuelEmpty);
+      this.drive.applyTo(this.camera);
+      const mesh = this.ownedCarMeshes.get(this.drivingId);
+      if (mesh) {
+        mesh.visible = true;
+        mesh.position.copy(this.drive.position);
+        mesh.position.y -= 0.15;
+        mesh.rotation.y = this.drive.yaw;
+      }
+    } else {
+      this.controls.update(dt);
+      this.controls.applyTo(this.camera);
+    }
     this.heldView.update(dt);
 
     // Narrow the lens slightly as a hop travels, the way Street View pushes in
     // between panoramas. Skipped in free-walk mode, where it would feel odd.
-    const zoom = this.controls.mode === "hop" ? this.controls.hopEase * HOP_ZOOM : 0;
+    const zoom = !this.drive && this.controls.mode === "hop" ? this.controls.hopEase * HOP_ZOOM : 0;
     const fov = BASE_FOV - zoom;
     if (Math.abs(this.camera.fov - fov) > 0.01) {
       this.camera.fov = fov;
@@ -615,12 +859,14 @@ export class StreetWorld {
     ctx.putImageData(image, 0, 0);
   }
 
-  /** Player position in tile coordinates, for the minimap. */
+  /** Player / vehicle position in tile coordinates, for the minimap. */
   get tilePosition() {
+    const pos = this.drive?.position ?? this.controls.position;
+    const yaw = this.drive?.yaw ?? this.controls.yaw;
     return {
-      x: this.controls.position.x / TILE,
-      y: this.controls.position.z / TILE,
-      yaw: this.controls.yaw,
+      x: pos.x / TILE,
+      y: pos.z / TILE,
+      yaw,
     };
   }
 

@@ -14,7 +14,7 @@ import { drawEventMarkers, drawJobMarkers } from "./drawEvents";
 import { drawParkedCars, drawTrafficOverlay } from "./drawTraffic";
 import { drawWeatherOverlay } from "./drawWeather";
 import { CityCamera, tileVisible, visibleTileRange } from "./camera";
-import { alpha, lightingFor, lit, type Lighting } from "./palette";
+import { alpha, lightingFor, lit, mix, type Lighting } from "./palette";
 import { drawDiamond, isoBoxCorners } from "./drawIso";
 import { buildingDrawHeight, isHiddenBehindBuilding, mastHeight } from "./pickBuilding";
 import {
@@ -79,7 +79,18 @@ export class CityRenderer {
     this.time += dt;
     this.camera.update(dt);
     const state = engine.state;
-    const light = lightingFor(state);
+    let light = lightingFor(state);
+    if (state.id === "dustfall") {
+      light = {
+        ...light,
+        skyTop: mix(light.skyTop, "#e8a858", 0.42),
+        skyBottom: mix(light.skyBottom, "#f5d6a0", 0.48),
+        tint: mix(light.tint ?? "#ffffff", "#f0d9a8", 0.25),
+        tintAmount: Math.max(light.tintAmount, 0.1),
+        ambient: light.ambient * 1.05,
+        sun: light.sun * 1.08,
+      };
+    }
     const ctx = this.ctx;
     if (!ctx) return;
 

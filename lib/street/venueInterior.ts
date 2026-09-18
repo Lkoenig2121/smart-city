@@ -40,6 +40,7 @@ const PALETTE: Record<VenueRole, Palette> = {
   restaurant: { floor: "#3a2a1c", wall: "#5a3d28", trim: "#c9a44c", accent: "#7a2e2e", furniture: "#2c1c14" },
   bank: { floor: "#e8dcc8", wall: "#f4efe6", trim: "#2f5d4a", accent: "#c9a44c", furniture: "#3a322c" },
   mall: { floor: "#eceae4", wall: "#f5f4f0", trim: "#d5d1c9", accent: "#8a96a3", furniture: "#c8c3bb" },
+  dealership: { floor: "#3a4048", wall: "#dce3ea", trim: "#1f4d8c", accent: "#c9a44c", furniture: "#5d7384" },
   house: { floor: "#c4a882", wall: "#f3d7b5", trim: "#6d4c41", accent: "#4d5b3f", furniture: "#8b3d2e" },
   apartment: { floor: "#b7c3c9", wall: "#e6ddd2", trim: "#5c5348", accent: "#3d5a80", furniture: "#6e6256" },
 };

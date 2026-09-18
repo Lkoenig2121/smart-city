@@ -36,6 +36,14 @@ import {
 import { characterProgress } from "@/lib/city/progression";
 import { forecastFor, weatherEmoji } from "@/lib/simulation/weather/weather";
 import { formatClock } from "@/lib/simulation/city/cityTick";
+import {
+  applyActiveVehicle,
+  applyVehicleCustomize,
+  categoryLabel,
+  vehicleById,
+} from "@/lib/city/vehicles";
+import { beyondRiversideStatus } from "@/lib/city/missions";
+import { writePlayer } from "@/lib/city/player";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 const APPS: { id: PhoneApp; name: string; icon: string; tint: string }[] = [
@@ -49,6 +57,7 @@ const APPS: { id: PhoneApp; name: string; icon: string; tint: string }[] = [
   { id: "photos", name: "Photos", icon: "🖼️", tint: "from-orange-300 to-pink-500" },
   { id: "contacts", name: "Contacts", icon: "👥", tint: "from-slate-300 to-slate-600" },
   { id: "city", name: "City 311", icon: "🏛️", tint: "from-teal-200 to-emerald-700" },
+  { id: "vehicles", name: "Vehicles", icon: "🚗", tint: "from-sky-400 to-blue-700" },
   { id: "settings", name: "Settings", icon: "⚙️", tint: "from-zinc-400 to-zinc-700" },
 ];
 
@@ -202,6 +211,8 @@ export function PlayerPhone({
                 <ContactsView inbox={inbox} onOpen={openThread} />
               ) : app === "city" ? (
                 <CityView state={state} onWaypoint={waypoint} />
+              ) : app === "vehicles" ? (
+                <VehiclesView player={player} onPlayer={onPlayer} onWaypoint={waypoint} onNote={setNote} note={note} />
               ) : (
                 <SettingsView muted={save.muted} waypoint={save.waypoint?.label ?? null} onMute={(muted) => { setPhoneMuted(muted); refresh(); }} onClear={() => { setPhoneWaypoint(null); refresh(); }} />
               )}
@@ -412,7 +423,7 @@ function MapsView({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pins = phoneMapPins(state, player);
   const groups = [
-    { label: "Work & shops", kinds: ["office", "mall", "bank"] as const },
+    { label: "Work & shops", kinds: ["office", "mall", "bank", "dealership"] as const },
     { label: "Go out", kinds: ["stadium", "hotel", "marina", "ferris"] as const },
     { label: "Civic", kinds: ["city_hall", "hospital", "police", "fire", "school", "subway"] as const },
   ];
@@ -723,6 +734,140 @@ function CityView({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function VehiclesView({
+  player,
+  onPlayer,
+  onWaypoint,
+  onNote,
+  note,
+}: {
+  player: PlayerState;
+  onPlayer: (player: PlayerState) => void;
+  onWaypoint: (x: number, y: number, label: string) => void;
+  onNote: (note: string | null) => void;
+  note: string | null;
+}) {
+  const [picked, setPicked] = useState(player.activeVehicleId ?? player.ownedVehicles[0]?.id ?? null);
+  const car = player.ownedVehicles.find((item) => item.id === picked) ?? player.ownedVehicles[0] ?? null;
+  const mission = beyondRiversideStatus(player);
+  const catalog = car ? vehicleById(car.catalogId) : null;
+
+  return (
+    <div className="pt-2">
+      <AppTitle>Vehicles</AppTitle>
+      <p className="text-xs text-white/50">Garage · Riverside Motors lot</p>
+      {player.ownedVehicles.length === 0 ? (
+        <Empty>No cars yet. Visit Riverside Motors north of downtown.</Empty>
+      ) : (
+        <div className="mt-2 space-y-2">
+          {player.ownedVehicles.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setPicked(item.id)}
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left ${
+                item.id === car?.id ? "bg-sky-500/20" : "bg-white/5"
+              }`}
+            >
+              <span className="text-sm font-semibold">{item.model}</span>
+              <span className="text-[0.65rem] text-white/50">{item.licensePlate}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {car ? (
+        <div className="mt-3 space-y-2 rounded-2xl bg-white/5 p-3">
+          <p className="text-sm font-semibold">{car.model}</p>
+          <p className="text-xs text-white/55">
+            {categoryLabel(car.category)} · {Math.round(car.mileage)} mi · Fuel {Math.round(car.fuel)}% · Condition{" "}
+            {Math.round(car.condition)}%
+          </p>
+          <p className="text-xs text-sky-200">Plate {car.licensePlate}</p>
+          <div className="flex flex-wrap gap-2">
+            {(catalog?.colors ?? [car.color]).map((swatch) => (
+              <button
+                key={swatch}
+                type="button"
+                onClick={() => {
+                  const next = applyVehicleCustomize(player, car.id, { color: swatch });
+                  if (typeof next === "string") onNote(next);
+                  else {
+                    writePlayer(next);
+                    onPlayer(next);
+                    onNote("Paint updated.");
+                  }
+                }}
+                className={`h-7 w-7 rounded-full border ${car.color === swatch ? "border-white" : "border-transparent"}`}
+                style={{ background: swatch }}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const next = applyActiveVehicle(player, car.id);
+              if (typeof next === "string") onNote(next);
+              else {
+                writePlayer(next);
+                onPlayer(next);
+                onNote("Set as active vehicle.");
+              }
+            }}
+            className="w-full rounded-xl bg-white/10 px-3 py-2 text-sm"
+          >
+            Set as active
+          </button>
+          <button
+            type="button"
+            onClick={() => onWaypoint(car.parkX, car.parkY, car.model)}
+            className="w-full rounded-xl bg-sky-500/20 px-3 py-2 text-sm text-sky-100"
+          >
+            Locate vehicle
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const next = applyVehicleCustomize(player, car.id, {
+                performance: Math.min(3, car.upgrades.performance + 1),
+              });
+              if (typeof next === "string") onNote(next);
+              else {
+                writePlayer(next);
+                onPlayer(next);
+                onNote(`Performance tune Lv${next.ownedVehicles.find((v) => v.id === car.id)?.upgrades.performance ?? 0}`);
+              }
+            }}
+            className="w-full rounded-xl bg-white/10 px-3 py-2 text-sm"
+          >
+            Performance upgrade ({car.upgrades.performance}/3)
+          </button>
+        </div>
+      ) : null}
+      <div className="mt-4 rounded-2xl bg-amber-400/10 p-3">
+        <p className="text-[0.65rem] uppercase tracking-[0.16em] text-amber-200">Beyond Riverside</p>
+        <ul className="mt-2 space-y-1">
+          {mission.steps.map((step) => (
+            <li key={step.id} className={`text-xs ${step.done ? "text-emerald-200" : "text-white/55"}`}>
+              {step.done ? "✓" : "○"} {step.label}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-[0.65rem] text-white/40">Reward {mission.reward}</p>
+      </div>
+      {player.dustfallUnlocked ? (
+        <button
+          type="button"
+          onClick={() => onWaypoint(20, 2, "Highway 93 · Dustfall")}
+          className="mt-2 w-full rounded-xl bg-amber-400/20 px-3 py-2 text-sm text-amber-100"
+        >
+          Waypoint · Dustfall highway
+        </button>
+      ) : null}
+      {note ? <p className="mt-2 text-xs text-amber-200">{note}</p> : null}
     </div>
   );
 }

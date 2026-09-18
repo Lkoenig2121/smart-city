@@ -29,6 +29,7 @@ export type PhoneApp =
   | "photos"
   | "contacts"
   | "city"
+  | "vehicles"
   | "settings";
 
 export type PhoneChoice = "accept" | "maybe" | "decline";
@@ -252,6 +253,22 @@ export function phoneInbox(state: CityState, player: PlayerState): PhoneMessage[
           y: venueGateTile(mall).y,
           label: mall.name,
         },
+      }),
+    );
+  }
+
+  if (!player.dustfallUnlocked && clock.dayIndex >= 0) {
+    messages.push(
+      makeMessage(save, {
+        id: "hwy-tease",
+        sender: "Unknown Number",
+        handle: "unknown",
+        timeMin: 19 * 60 + 12,
+        body: [
+          "If you want to see what's beyond Riverside, meet me at the old highway.",
+          "North end of the main arterial — look for the green 93 sign. You'll need a car.",
+        ],
+        location: { x: 20, y: 3, label: "Highway 93 ramp" },
       }),
     );
   }
@@ -628,6 +645,7 @@ export function pinColor(kind: PoiKind | "event" | "work" | "you") {
     stadium: "#1f4d8c",
     bank: "#2f5d4a",
     mall: "#c9a44c",
+    dealership: "#ff5c8a",
     office: "#3d9ad1",
     bus: "#5d7384",
     marina: "#1d6a8a",

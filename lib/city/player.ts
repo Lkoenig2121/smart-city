@@ -8,6 +8,7 @@ import {
   parseLife,
   type LifeState,
 } from "./character";
+import { parseOwnedVehicles, type OwnedVehicle } from "./vehicles";
 
 const STORAGE = "smartcity-player";
 const STARTING_WALLET = 500;
@@ -70,10 +71,24 @@ export interface PlayerState {
   shift: ActiveShift | null;
   lastInterestDay: string | null;
   life: LifeState;
+  ownedVehicles: OwnedVehicle[];
+  activeVehicleId: string | null;
+  dustfallUnlocked: boolean;
 }
 
 export function emptyPlayer(): PlayerState {
-  return { wallet: STARTING_WALLET, bank: 0, ledger: [], career: null, shift: null, lastInterestDay: null, life: emptyLife() };
+  return {
+    wallet: STARTING_WALLET,
+    bank: 0,
+    ledger: [],
+    career: null,
+    shift: null,
+    lastInterestDay: null,
+    life: emptyLife(),
+    ownedVehicles: [],
+    activeVehicleId: null,
+    dustfallUnlocked: false,
+  };
 }
 
 export function readPlayer(): PlayerState {
@@ -432,6 +447,9 @@ function parsePlayer(value: unknown): PlayerState {
     shift: parseShift(raw.shift),
     lastInterestDay: typeof raw.lastInterestDay === "string" ? raw.lastInterestDay : null,
     life: parseLife(raw.life),
+    ownedVehicles: parseOwnedVehicles(raw.ownedVehicles),
+    activeVehicleId: typeof raw.activeVehicleId === "string" ? raw.activeVehicleId : null,
+    dustfallUnlocked: Boolean(raw.dustfallUnlocked),
   };
 }
 

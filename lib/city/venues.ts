@@ -12,6 +12,7 @@ export type VenueRole =
   | "restaurant"
   | "bank"
   | "mall"
+  | "dealership"
   | "house"
   | "apartment";
 
@@ -26,6 +27,7 @@ const ROLES: VenueRole[] = [
   "restaurant",
   "bank",
   "mall",
+  "dealership",
   "house",
   "apartment",
 ];
@@ -79,6 +81,21 @@ export function findMall(state: CityState) {
     if (venueRole(building) === "mall") return building;
   }
   return null;
+}
+
+export function findDealership(state: CityState) {
+  for (const building of state.buildings.values()) {
+    if (venueRole(building) === "dealership") return building;
+  }
+  return null;
+}
+
+export function markDealership(building: Building, name = "Riverside Motors") {
+  markVenue(building, "dealership", name);
+  building.wallColor = "#ff5c8a";
+  building.roofColor = "#2a3038";
+  building.accentColor = "#ffe0ea";
+  building.floors = Math.max(building.floors, 2);
 }
 
 export const MALL_FOOTPRINT = { w: 8, d: 8 };
@@ -172,6 +189,8 @@ export function venueLabel(role: VenueRole) {
       return "Bank";
     case "mall":
       return "Mall";
+    case "dealership":
+      return "Dealership";
     case "house":
       return "Home";
     case "apartment":
@@ -201,6 +220,8 @@ export function venueEnterHint(role: VenueRole) {
       return "Enter for banking";
     case "mall":
       return "Enter the mall";
+    case "dealership":
+      return "Browse vehicles";
     case "house":
       return "Visit this home";
     case "apartment":
@@ -213,7 +234,13 @@ export function markNotableVenues(buildings: Map<string, Building>) {
   const list = [...buildings.values()].sort(
     (a, b) => a.origin.y - b.origin.y || a.origin.x - b.origin.x,
   );
-  const shops = list.filter((b) => b.kind === "shop" && !b.stats.extra?.waterfront && venueRole(b) !== "mall");
+  const reserved = (b: Building) => {
+    const role = venueRole(b);
+    return role === "mall" || role === "dealership" || role === "bank";
+  };
+  const shops = list.filter(
+    (b) => b.kind === "shop" && !b.stats.extra?.waterfront && !reserved(b),
+  );
   if (shops[0]) markVenue(shops[0], "shop");
   if (shops[1]) markVenue(shops[1], "restaurant");
   if (shops[2]) markBank(shops[2], "Riverside Trust");
@@ -223,7 +250,7 @@ export function markNotableVenues(buildings: Map<string, Building>) {
     const harborMall = shops.find((_, i) => i > 4);
     if (harborMall) markMall(harborMall, "Harbor Mall");
   }
-  const secondBank = shops.find((shop, i) => i > 4 && venueRole(shop) !== "mall");
+  const secondBank = shops.find((shop, i) => i > 4 && venueRole(shop) !== "mall" && venueRole(shop) !== "dealership");
   if (secondBank) markBank(secondBank, "Northline Savings");
 
   const offices = list.filter((b) => b.kind === "office");

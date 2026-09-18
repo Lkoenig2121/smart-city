@@ -856,6 +856,7 @@ function addCityView(
   state: CityState,
   view: { edgeZ: number; toward: -1 | 1; floor: number },
 ) {
+  const desert = state.id === "dustfall";
   const dir = view.toward;
   // Air gap so the near ground is a distant street, not a wall in the window.
   const zNear = view.edgeZ + dir * 10;
@@ -863,16 +864,16 @@ function addCityView(
   const z0 = Math.min(zNear, zFar);
   const z1 = Math.max(zNear, zFar);
   const groundY = -vistaDrop(view.floor);
-  const grass = new THREE.Color("#3d8c42");
-  const park = new THREE.Color("#2a6a32");
-  const pavement = new THREE.Color("#7d7972");
-  const asphalt = new THREE.Color("#3f4148");
-  const water = new THREE.Color("#2a6d94");
-  const sand = new THREE.Color("#cbb67a");
+  const ground = new THREE.Color(desert ? "#c4a574" : "#3d8c42");
+  const park = new THREE.Color(desert ? "#2a6b5a" : "#2a6a32");
+  const pavement = new THREE.Color(desert ? "#b8956a" : "#7d7972");
+  const asphalt = new THREE.Color(desert ? "#4a4540" : "#3f4148");
+  const water = new THREE.Color(desert ? "#1a6b8a" : "#2a6d94");
+  const sand = new THREE.Color(desert ? "#e8d5a8" : "#cbb67a");
   const trunk = new THREE.Color("#5a3d28");
-  const leaf = new THREE.Color("#1f6b2c");
+  const leaf = new THREE.Color(desert ? "#3d7a42" : "#1f6b2c");
 
-  floorB.ground(-150, z0, 150, z1, groundY, grass);
+  floorB.ground(-150, z0, 150, z1, groundY, ground);
   for (let i = 0; i < 5; i++) {
     const x = -72 + i * 34;
     floorB.ground(x, z0, x + 6.4, z1, groundY + 0.08, asphalt);
@@ -889,6 +890,11 @@ function addCityView(
   const riverB = zNear + dir * 104;
   floorB.ground(-150, Math.min(riverA, riverB), -18, Math.max(riverA, riverB), groundY + 0.04, water);
   floorB.ground(-18, Math.min(riverA, riverB) + 6, -6, Math.max(riverA, riverB) - 4, groundY + 0.05, sand);
+  if (desert) {
+    // Second Nile band + dunes.
+    floorB.ground(24, Math.min(riverA, riverB), 150, Math.max(riverA, riverB), groundY + 0.04, water);
+    floorB.ground(40, zNear + dir * 40, 110, zNear + dir * 70, groundY + 0.12, sand);
+  }
   const parkA = zNear + dir * 32;
   const parkB = zNear + dir * 62;
   floorB.ground(28, Math.min(parkA, parkB), 96, Math.max(parkA, parkB), groundY + 0.03, park);
@@ -930,20 +936,44 @@ function addCityView(
     }
   });
 
-  for (let i = 0; i < 34; i++) {
+  const plantCount = desert ? 18 : 34;
+  for (let i = 0; i < plantCount; i++) {
     const x = -62 + (i % 12) * 11 + ((i * 5) % 4);
     const z = zNear + dir * (12 + Math.floor(i / 12) * 24 + (i % 4) * 4);
     const s = 0.8 + (i % 4) * 0.16;
-    wallB.box(x - 0.14, z - 0.14, x + 0.14, z + 0.14, groundY, groundY + 1.6 * s, trunk);
-    trimB.box(
-      x - 1.05 * s,
-      z - 1.05 * s,
-      x + 1.05 * s,
-      z + 1.05 * s,
-      groundY + 1.3 * s,
-      groundY + 3.8 * s,
-      leaf,
-    );
+    if (desert) {
+      // Sparse palms / scrub.
+      wallB.box(x - 0.12, z - 0.12, x + 0.12, z + 0.12, groundY, groundY + 2.4 * s, trunk);
+      trimB.box(
+        x - 1.35 * s,
+        z - 0.2,
+        x + 1.35 * s,
+        z + 0.2,
+        groundY + 2.1 * s,
+        groundY + 2.5 * s,
+        leaf,
+      );
+      trimB.box(
+        x - 0.2,
+        z - 1.35 * s,
+        x + 0.2,
+        z + 1.35 * s,
+        groundY + 2.1 * s,
+        groundY + 2.5 * s,
+        leaf,
+      );
+    } else {
+      wallB.box(x - 0.14, z - 0.14, x + 0.14, z + 0.14, groundY, groundY + 1.6 * s, trunk);
+      trimB.box(
+        x - 1.05 * s,
+        z - 1.05 * s,
+        x + 1.05 * s,
+        z + 1.05 * s,
+        groundY + 1.3 * s,
+        groundY + 3.8 * s,
+        leaf,
+      );
+    }
   }
 }
 
@@ -957,18 +987,19 @@ function addCityFlank(
   toward: -1 | 1,
   floor: number,
 ) {
+  const desert = state.id === "dustfall";
   const dir = toward;
   const xNear = edgeX + dir * 8;
   const xFar = edgeX + dir * 150;
   const x0 = Math.min(xNear, xFar);
   const x1 = Math.max(xNear, xFar);
   const groundY = -vistaDrop(floor);
-  const grass = new THREE.Color("#3d8c42");
-  const asphalt = new THREE.Color("#3f4148");
+  const ground = new THREE.Color(desert ? "#c4a574" : "#3d8c42");
+  const asphalt = new THREE.Color(desert ? "#4a4540" : "#3f4148");
   const trunk = new THREE.Color("#5a3d28");
-  const leaf = new THREE.Color("#1f6b2c");
+  const leaf = new THREE.Color(desert ? "#3d7a42" : "#1f6b2c");
 
-  floorB.ground(x0, -80, x1, 80, groundY, grass);
+  floorB.ground(x0, -80, x1, 80, groundY, ground);
   floorB.ground(x0, -4, x1, 4, groundY + 0.08, asphalt);
 
   const neighbors = [...state.buildings.values()]
@@ -995,12 +1026,16 @@ function addCityFlank(
     );
   });
 
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < (desert ? 8 : 14); i++) {
     const x = xNear + dir * (7 + (i % 5) * 14);
     const z = -36 + Math.floor(i / 5) * 28 + (i % 4) * 3;
     const s = 0.82 + (i % 3) * 0.14;
-    wallB.box(x - 0.14, z - 0.14, x + 0.14, z + 0.14, groundY, groundY + 1.55 * s, trunk);
-    trimB.box(x - s, z - s, x + s, z + s, groundY + 1.25 * s, groundY + 3.6 * s, leaf);
+    wallB.box(x - 0.14, z - 0.14, x + 0.14, z + 0.14, groundY, groundY + (desert ? 2.2 : 1.55) * s, trunk);
+    if (desert) {
+      trimB.box(x - 1.2 * s, z - 0.15, x + 1.2 * s, z + 0.15, groundY + 2.0 * s, groundY + 2.35 * s, leaf);
+    } else {
+      trimB.box(x - s, z - s, x + s, z + s, groundY + 1.25 * s, groundY + 3.6 * s, leaf);
+    }
   }
 }
 
@@ -1293,19 +1328,20 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
   const floorB = new MeshBuilder();
   const wallB = new MeshBuilder();
   const trimB = new MeshBuilder();
+  const desert = state.id === "dustfall";
 
   const minX = -18;
   const maxX = 18;
   const minZ = -16;
   const maxZ = 16;
-  const stone = new THREE.Color("#d5cfc4");
-  const grass = new THREE.Color("#3fa34a");
+  const stone = new THREE.Color(desert ? "#e8dcc4" : "#d5cfc4");
+  const lawn = new THREE.Color(desert ? "#c9a86a" : "#3fa34a");
   const water = new THREE.Color(WATER);
   const shelf = new THREE.Color(WATER_SHALLOW);
   const dark = new THREE.Color("#3a3a3a");
-  const cream = new THREE.Color("#ece6da");
+  const cream = new THREE.Color(desert ? "#f0e4c4" : "#ece6da");
   const navy = new THREE.Color("#1c1c1c");
-  const facade = new THREE.Color("#d8c4a8");
+  const facade = new THREE.Color(desert ? "#e6d2a0" : "#d8c4a8");
 
   floorB.ground(minX, minZ, maxX, maxZ, 0, stone);
 
@@ -1351,14 +1387,14 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
     trimB.box(x, -5.4, x + 2.2, -2.8, 0.12, 0.28, white);
   }
 
-  // Grass patches + lounge chairs.
+  // Lounge pads + chairs (sandstone planters in Dustfall).
   for (const [x, z] of [
     [-15.2, 4.2],
     [-15.2, 8.6],
     [12.4, 4.2],
     [12.4, 8.6],
   ]) {
-    floorB.ground(x, z, x + 3.4, z + 2.6, 0.05, grass);
+    floorB.ground(x, z, x + 3.4, z + 2.6, 0.05, lawn);
     trimB.box(x + 0.35, z + 0.35, x + 3.0, z + 2.2, 0.05, 0.28, navy);
     blockers.push({ minX: x + 0.35, maxX: x + 3.0, minZ: z + 0.35, maxZ: z + 2.2 });
   }
@@ -1368,7 +1404,7 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
   const barX1 = -11.7;
   const barZ0 = -9.4;
   const barZ1 = -4.55;
-  const teal = new THREE.Color("#1a6b6b");
+  const teal = new THREE.Color(desert ? "#2a6b5a" : "#1a6b6b");
   const wood = new THREE.Color("#6b4a32");
   const bottle = ["#1f4d8c", "#c0392b", "#e8c36a", "#2aa8c4", "#f4f1ea"];
   wallB.box(barX0, barZ0, barX0 + 0.42, barZ1, 0, 3.15, cream);
@@ -1391,7 +1427,18 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
     trimB.box(-11.35, z, -10.88, z + 0.42, 0, 0.7, navy);
     blockers.push({ minX: -11.35, maxX: -10.88, minZ: z, maxZ: z + 0.42 });
   }
-  addBarSign(group, disposables, "CABANA", "Food · Drinks", "#1a6b6b", barX1 + 0.22, 2.42, (barZ0 + barZ1) / 2, -Math.PI / 2, 3.6);
+  addBarSign(
+    group,
+    disposables,
+    desert ? "CARAVANSERAI" : "CABANA",
+    desert ? "Dates · Mint tea" : "Food · Drinks",
+    desert ? "#2a6b5a" : "#1a6b6b",
+    barX1 + 0.22,
+    2.42,
+    (barZ0 + barZ1) / 2,
+    -Math.PI / 2,
+    3.6,
+  );
 
   // Giant chess.
   for (let i = 0; i < 4; i++) {

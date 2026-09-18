@@ -40,6 +40,17 @@ export class CityEngine {
     this.state = createInitialCity(seed);
   }
 
+  /** Swap the live city (e.g. Riverside → Dustfall overview). */
+  loadState(state: CityState) {
+    this.state = state;
+    this.selectedId = null;
+    this.hover = null;
+    this.hoverBuildingId = null;
+    this.tool = "inspect";
+    this.placementHint = "";
+    this.mapRev += 1;
+  }
+
   tick(dt: number) {
     tickCity(this.state, dt);
   }

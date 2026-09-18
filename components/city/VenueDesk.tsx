@@ -29,10 +29,19 @@ interface Props {
   player?: PlayerState;
   onPlayerChange?: (player: PlayerState) => void;
   onOpenWorkstation?: () => void;
+  onOpenMotors?: () => void;
   onClose?: () => void;
 }
 
-export function VenueDesk({ building, state, player, onPlayerChange, onOpenWorkstation, onClose }: Props) {
+export function VenueDesk({
+  building,
+  state,
+  player,
+  onPlayerChange,
+  onOpenWorkstation,
+  onOpenMotors,
+  onClose,
+}: Props) {
   const role = venueRole(building) ?? "office";
   const body =
     role === "office" ? (
@@ -41,6 +50,8 @@ export function VenueDesk({ building, state, player, onPlayerChange, onOpenWorks
       <BankDesk building={building} state={state} player={player} onPlayerChange={onPlayerChange} />
     ) : role === "mall" ? (
       <MallDesk building={building} />
+    ) : role === "dealership" ? (
+      <MotorsDesk building={building} onOpenMotors={onOpenMotors} />
     ) : (
       <FlavorDesk building={building} state={state} role={role} />
     );
@@ -306,6 +317,32 @@ function MallDesk({ building }: { building: Building }) {
   );
 }
 
+function MotorsDesk({
+  building,
+  onOpenMotors,
+}: {
+  building: Building;
+  onOpenMotors?: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-sky-300/35 bg-[#101820]/92 p-5 text-center shadow-2xl backdrop-blur">
+      <p className="text-[0.65rem] uppercase tracking-[0.28em] text-sky-300">Dealership</p>
+      <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
+      <p className="mt-2 text-sm text-slate-300">
+        New inventory on the floor — compact through luxury. Buy a car, then step outside to the lot and press E to drive.
+      </p>
+      <button
+        type="button"
+        onClick={() => onOpenMotors?.()}
+        className="mt-4 w-full rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-semibold text-[#0b1420]"
+      >
+        Browse vehicles
+      </button>
+      <p className="mt-3 text-[0.65rem] text-slate-500">Highway 93 toward Dustfall starts just north of here</p>
+    </div>
+  );
+}
+
 function FlavorDesk({ building, state, role }: { building: Building; state: CityState; role: VenueRole }) {
   const [note, setNote] = useState<string | null>(null);
   const copy = deskCopy(role, building, state);
@@ -419,6 +456,13 @@ function deskCopy(role: VenueRole, building: Building, state: CityState) {
         stat: null,
         action: "Read the directory",
         actionNote: "Walk into a store and press E at the racks. Stairs climb the atrium.",
+      };
+    case "dealership":
+      return {
+        body: "Glass showroom. Keys hang behind the counter. Sales staff wait by the lot doors.",
+        stat: null,
+        action: "Ask about inventory",
+        actionNote: "Browse the floor for compact through luxury models.",
       };
   }
 }

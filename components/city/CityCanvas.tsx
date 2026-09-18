@@ -23,6 +23,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CityHud } from "./CityHud";
 import { StreetView } from "./StreetView";
+import { generateDustfall } from "@/lib/city/generateDustfall";
+import { markMissionDustfall } from "@/lib/city/missions";
 
 const PAN_KEYS: Record<string, string> = {
   w: "up",
@@ -76,6 +78,9 @@ export function CityCanvas() {
   /** While the street overlay is visible it owns the simulation clock. */
   const streetActive = useRef(false);
   streetActive.current = streetOpen;
+  const dustfallStateRef = useRef<CityState | null>(null);
+  const riversideStateRef = useRef<CityState | null>(null);
+  const activeCityRef = useRef<"riverside" | "dustfall">("riverside");
 
   const drag = useRef({
     active: false,
@@ -99,6 +104,7 @@ export function CityCanvas() {
 
     engineRef.current = engine;
     rendererRef.current = renderer;
+    riversideStateRef.current = engine.state;
     renderer.attach(ctx);
     let centered = false;
 
@@ -287,6 +293,52 @@ export function CityCanvas() {
     setStreetOpen(false);
   }, []);
 
+  /** Leave street / highway and open the Egypt-styled Dustfall isometric city. */
+  const enterDesertCity = useCallback(() => {
+    const engine = engineRef.current;
+    const renderer = rendererRef.current;
+    const wrap = wrapRef.current;
+    if (!engine || !renderer || !wrap) return;
+
+    markMissionDustfall();
+    if (engine.state.id === "riverside") riversideStateRef.current = engine.state;
+    if (!dustfallStateRef.current) dustfallStateRef.current = generateDustfall();
+    const dustfall = dustfallStateRef.current;
+    dustfall.clock = { ...(riversideStateRef.current ?? engine.state).clock };
+    dustfall.weather = (riversideStateRef.current ?? engine.state).weather;
+
+    engine.loadState(dustfall);
+    activeCityRef.current = "dustfall";
+    setStreetOpen(false);
+    setStreet(null);
+
+    const rect = wrap.getBoundingClientRect();
+    renderer.camera.centerOn(18, 16, rect.width, rect.height);
+
+    const clock = formatClock(engine.state);
+    const life = readPlayer();
+    setHud({
+      cityName: engine.state.name,
+      population: engine.state.population,
+      treasury: engine.state.budget.treasury,
+      day: clock.day,
+      date: clock.date,
+      time: clock.time,
+      phase: labelPhase(dayPhase(engine.state)),
+      weather: engine.state.weather,
+      events: engine.state.events,
+      tool: engine.tool,
+      selected: null,
+      hoverLabel: "",
+      streetLife: engine.state.citizens.filter(citizenIsOutdoors).length,
+      trafficFlow: trafficFlowScore(engine.state),
+      parkingFill: parkingFill(engine.state).pct,
+      wallet: totalBalance(life),
+      careerLabel: life.career ? officeRank(life.career.xp).label : "",
+      mallExists: Boolean(findMall(engine.state)),
+    });
+  }, []);
+
   useEffect(() => {
     if (streetOpen || !street) return;
     const id = window.setTimeout(() => setStreet(null), 160);
@@ -421,6 +473,8 @@ export function CityCanvas() {
             selectedBuildingId={selectedIdRef}
             onTick={tickFromStreet}
             onExit={leaveStreet}
+            onEnterDesertCity={enterDesertCity}
+            riversideState={riversideStateRef.current}
           />
         </div>
       ) : null}

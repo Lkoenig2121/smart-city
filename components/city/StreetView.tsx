@@ -61,6 +61,7 @@ import { weatherEmoji } from "@/lib/simulation/weather/weather";
 import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
 import { CharacterMenu, type CharacterTab } from "./CharacterMenu";
 import { ClothingShop } from "./ClothingShop";
+import { MotorsShowroom } from "./MotorsShowroom";
 import { LodgingDesk } from "./LodgingDesk";
 import { PoolBar } from "./PoolBar";
 import { OfficeComputer } from "./OfficeComputer";
@@ -70,6 +71,19 @@ import { RoomComputer } from "./RoomComputer";
 import { StreetMinimap } from "./StreetMinimap";
 import { SubwayBoard } from "./SubwayBoard";
 import { VenueDesk } from "./VenueDesk";
+import {
+  activeOwnedVehicle,
+  applyDriveTick,
+  applyParkVehicle,
+  hasOwnedVehicle,
+  snapFleetToMotorsApproach,
+  type OwnedVehicle,
+} from "@/lib/city/vehicles";
+import { markMissionDustfall, markMissionHighway, markMissionRamp } from "@/lib/city/missions";
+import { DustfallWorld } from "@/lib/street/DustfallWorld";
+import { DUSTFALL_ARRIVAL, generateDustfall } from "@/lib/city/generateDustfall";
+import { writePlayer } from "@/lib/city/player";
+import { driveStats } from "@/lib/city/vehicles";
 
 type Interior =
   | { kind: "stadium" }
@@ -86,6 +100,10 @@ interface Props {
   selectedBuildingId?: RefObject<string | null>;
   onTick: (dt: number) => void;
   onExit: () => void;
+  /** Opens the Dustfall isometric city overview (Egypt-styled desert). */
+  onEnterDesertCity?: () => void;
+  /** Kept so Highway 93 return can restore Riverside after visiting Dustfall. */
+  riversideState?: CityState | null;
 }
 
 export function StreetView({
@@ -96,6 +114,8 @@ export function StreetView({
   selectedBuildingId,
   onTick,
   onExit,
+  onEnterDesertCity,
+  riversideState = null,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const outdoorCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -165,6 +185,25 @@ export function StreetView({
   const [mallStore, setMallStore] = useState<ClothStore | null>(null);
   const [mallHut, setMallHut] = useState<string | null>(null);
   const [mallSnack, setMallSnack] = useState<{ name: string; items: string[] } | null>(null);
+  const [motorsOpen, setMotorsOpen] = useState(false);
+  const [driving, setDriving] = useState(false);
+  const [nearCar, setNearCar] = useState<OwnedVehicle | null>(null);
+  const [highwayHint, setHighwayHint] = useState<string | null>(null);
+  const [dustfallTrip, setDustfallTrip] = useState(false);
+  const [dustfallProgress, setDustfallProgress] = useState(0);
+  const [highwayToward, setHighwayToward] = useState<"dustfall" | "riverside">("dustfall");
+  const [inDustfall, setInDustfall] = useState(() => state.id === "dustfall");
+  const [playState, setPlayState] = useState(state);
+  const dustfallCityRef = useRef<CityState | null>(state.id === "dustfall" ? state : null);
+  const riversideStateRef = useRef<CityState | null>(state.id === "riverside" ? state : null);
+  const motorsOpenRef = useRef(false);
+  const drivingRef = useRef(false);
+  const dustfallRef = useRef<DustfallWorld | null>(null);
+  const dustfallCanvasRef = useRef<HTMLCanvasElement>(null);
+  const dustfallTripRef = useRef(false);
+  dustfallTripRef.current = dustfallTrip;
+  /** After Highway 93 remount may recreate StreetWorld — resume drive then. */
+  const resumeDriveAfterDustfallRef = useRef(false);
   const [barMenu, setBarMenu] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [phoneToast, setPhoneToast] = useState<PhoneMessage | null>(null);
@@ -195,12 +234,27 @@ export function StreetView({
     Boolean(mallSnack) ||
     barMenu ||
     phoneOpen ||
+    motorsOpen ||
+    dustfallTrip ||
     sleeping ||
     atComputer ||
     atOfficeComputer ||
     pickingStop ||
     pickingRoom ||
     riding;
+  /** Highway almost finished toward Dustfall — unlock desert overview exit. */
+  const besideDesertCity =
+    inDustfall || (dustfallTrip && highwayToward === "dustfall" && dustfallProgress >= 0.88);
+
+  useEffect(() => {
+    if (riversideState?.id === "riverside") riversideStateRef.current = riversideState;
+    if (state.id === "riverside") riversideStateRef.current = state;
+    if (state.id === "dustfall") {
+      dustfallCityRef.current = state;
+      setInDustfall(true);
+      setPlayState(state);
+    }
+  }, [state, riversideState]);
 
   useEffect(() => {
     if (!interior) return;
@@ -215,7 +269,9 @@ export function StreetView({
     mallSnackRef.current = mallSnack;
     barMenuRef.current = barMenu;
     phoneOpenRef.current = phoneOpen;
-  }, [characterMenu, mallShop, mallSnack, barMenu, phoneOpen]);
+    motorsOpenRef.current = motorsOpen;
+    drivingRef.current = driving;
+  }, [characterMenu, mallShop, mallSnack, barMenu, phoneOpen, motorsOpen, driving]);
 
   const openPhone = (threadId: string | null = null) => {
     if (sleepingRef.current) return;
@@ -276,6 +332,7 @@ export function StreetView({
       if (paused) controls.clearKeys();
     };
     apply(worldRef.current?.controls);
+    apply(worldRef.current?.driveControls ?? undefined);
     apply(stadiumRef.current?.controls);
     apply(lodgingRef.current?.controls);
     apply(subwayRef.current?.controls);
@@ -309,6 +366,12 @@ export function StreetView({
       if (event.repeat) return;
       if (isTypingTarget(event.target)) return;
       if (event.code === "Escape") {
+        if (motorsOpenRef.current) {
+          event.preventDefault();
+          motorsOpenRef.current = false;
+          setMotorsOpen(false);
+          return;
+        }
         if (phoneOpenRef.current) {
           event.preventDefault();
           closePhone();
@@ -441,7 +504,7 @@ export function StreetView({
 
     let world: StreetWorld;
     try {
-      world = new StreetWorld(canvas, state);
+      world = new StreetWorld(canvas, playState);
     } catch (error) {
       setFailed(
         error instanceof Error ? error.message : "WebGL is unavailable in this browser.",
@@ -464,7 +527,7 @@ export function StreetView({
       world.dispose();
       worldRef.current = null;
     };
-  }, [state]);
+  }, [playState]);
 
   useEffect(() => {
     if (!active || interior) return;
@@ -475,17 +538,77 @@ export function StreetView({
 
     world.spawnNear(spawn.x, spawn.y);
     world.setMoveMode(mode);
+    if (!inDustfall) {
+      const snapped = snapFleetToMotorsApproach(readPlayer());
+      writePlayer(snapped);
+      setPlayer(snapped);
+    }
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
       world.resize(rect.width, rect.height);
     };
     resize();
 
-    const detachInput = attachPointerInput(canvas, world.controls, {
+    const inputProxy = {
+      look: (dx: number, dy: number) => world.inputTarget.look(dx, dy),
+      keyDown: (event: KeyboardEvent) => world.inputTarget.keyDown(event),
+      keyUp: (event: KeyboardEvent) => world.inputTarget.keyUp(event),
+      // Don't wipe throttle when the cursor unlocks mid-drive.
+      clearKeys: () => {
+        if (world.isDriving) return;
+        world.inputTarget.clearKeys();
+      },
+    };
+    const detachInput = attachPointerInput(canvas, inputProxy, {
       setLocked,
       consumeKey: (event) => {
-        if (event.code !== "KeyE") return false;
+        if (dustfallTripRef.current) return true;
+        if (event.code !== "KeyE" && event.code !== "KeyF") return false;
         event.preventDefault();
+        if (drivingRef.current) {
+          if (event.code !== "KeyE") return false;
+          const parked = world.stopDriving();
+          const id = activeOwnedVehicle(readPlayer())?.id;
+          if (parked && id) {
+            const next = applyParkVehicle(readPlayer(), id, parked.x, parked.y, parked.yaw);
+            writePlayer(next);
+            setPlayer(next);
+          }
+          drivingRef.current = false;
+          setDriving(false);
+          return true;
+        }
+        const car = world.nearOwnedCar(readPlayer().ownedVehicles);
+        const doorNearby = Boolean(
+          venueDoorRef.current ||
+            lodgingDoorRef.current ||
+            subwayDoorRef.current ||
+            atGateRef.current,
+        );
+
+        // F = drive when a car is in range (also when a building door competes for E).
+        if (event.code === "KeyF") {
+          if (!car) return false;
+          world.startDriving(car);
+          drivingRef.current = true;
+          setDriving(true);
+          setNearCar(null);
+          return true;
+        }
+
+        // E = enter building when both are nearby; otherwise enter the car.
+        if (car && !doorNearby) {
+          world.startDriving(car);
+          drivingRef.current = true;
+          setDriving(true);
+          setNearCar(null);
+          return true;
+        }
+        if (world.nearHighwayRamp() && !hasOwnedVehicle(readPlayer()) && !drivingRef.current) {
+          setHighwayHint("Too far to travel on foot. You'll need a car to continue.");
+          markMissionRamp();
+          return true;
+        }
         const venue = venueDoorRef.current;
         if (venue) {
           setInterior({ kind: "venue", buildingId: venue.id });
@@ -520,14 +643,69 @@ export function StreetView({
     let last = performance.now();
     let clockAcc = 0;
     const loop = (now: number) => {
+      if (dustfallTripRef.current) {
+        frame = requestAnimationFrame(loop);
+        return;
+      }
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       tickRef.current(dt);
       world.setPinnedSelection(selectedBuildingId?.current ?? null);
       world.setWaypoint(waypointRef.current);
+      const live = readPlayer();
+      const activeCar = activeOwnedVehicle(live);
+      if (resumeDriveAfterDustfallRef.current && activeCar && !world.isDriving) {
+        resumeDriveAfterDustfallRef.current = false;
+        world.startDriving(activeCar);
+        drivingRef.current = true;
+        setDriving(true);
+      }
+      world.syncOwnedCars(live.ownedVehicles, world.drivingVehicleId);
+      if (world.isDriving && activeCar) {
+        const stats = driveStats(activeCar);
+        world.setDriveFuelEmpty(stats.empty);
+        if (world.nearHighwayRamp()) markMissionRamp();
+        if (!inDustfall && world.atHighwayPortal() && !dustfallTripRef.current) {
+          markMissionHighway();
+          setHighwayToward("dustfall");
+          dustfallTripRef.current = true;
+          setDustfallTrip(true);
+        } else if (inDustfall && world.atReturnPortal() && !dustfallTripRef.current) {
+          setHighwayToward("riverside");
+          dustfallTripRef.current = true;
+          setDustfallTrip(true);
+        } else if (!inDustfall && world.nearHighwayRamp()) {
+          setHighwayHint("Highway 93 · keep driving north onto the ramp for Dustfall");
+        } else if (inDustfall && world.nearReturnBridge()) {
+          setHighwayHint("Riverside Bridge · keep driving south for Highway 93 back to Riverside");
+        } else {
+          setHighwayHint(null);
+        }
+      } else {
+        world.setDriveFuelEmpty(false);
+      }
       if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
       world.render(dt);
       positionRef.current = world.tilePosition;
+      if (world.isDriving && activeCar) {
+        const sped = world.driveMph();
+        const next = applyDriveTick(live, activeCar.id, dt, sped / 2.15, world.tilePosition);
+        writePlayer(next);
+        if (Math.random() < 0.02) setPlayer(next);
+      }
+      if (!world.isDriving) {
+        const car = world.nearOwnedCar(live.ownedVehicles);
+        setNearCar((prev) => (prev?.id === car?.id ? prev : car));
+        if (world.nearHighwayRamp() && !hasOwnedVehicle(live)) {
+          setHighwayHint(
+            inDustfall
+              ? "Too far to travel on foot. You'll need a car for the Riverside Bridge."
+              : "Too far to travel on foot. You'll need a car to continue.",
+          );
+        } else if (!world.nearHighwayRamp()) {
+          setHighwayHint(null);
+        }
+      }
       const pin = waypointRef.current;
       if (pin && world.arrivedAtWaypoint()) clearNavWaypoint();
       const gate = world.nearStadiumGate();
@@ -545,7 +723,7 @@ export function StreetView({
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
-        setClock(formatClock(state));
+        setClock(formatClock(playState));
         setPlayer(readPlayer());
       }
       frame = requestAnimationFrame(loop);
@@ -557,7 +735,152 @@ export function StreetView({
       detachInput();
       if (document.pointerLockElement === canvas) document.exitPointerLock();
     };
-  }, [active, interior, spawn.x, spawn.y, state]);
+  }, [active, interior, spawn.x, spawn.y, playState, inDustfall]);
+
+  useEffect(() => {
+    if (!active || !dustfallTrip) return;
+    const canvas = dustfallCanvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+    const car = activeOwnedVehicle(readPlayer());
+    const toward = highwayToward;
+    let world: DustfallWorld;
+    try {
+      world = new DustfallWorld(canvas, car?.color ?? "#1f4d8c", toward);
+    } catch (error) {
+      setFailed(error instanceof Error ? error.message : "WebGL is unavailable in this browser.");
+      setDustfallTrip(false);
+      return;
+    }
+    dustfallRef.current = world;
+    worldRef.current?.stopDriving();
+    setDriving(false);
+    drivingRef.current = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+
+    const resize = () => {
+      const rect = wrap.getBoundingClientRect();
+      world.resize(rect.width, rect.height);
+    };
+    resize();
+
+    const detachInput = attachPointerInput(
+      canvas,
+      {
+        look: (dx, dy) => world.look(dx, dy),
+        keyDown: (event) => world.controls.keyDown(event),
+        keyUp: (event) => world.controls.keyUp(event),
+        clearKeys: () => world.controls.clearKeys(),
+      },
+      {
+        setLocked,
+        consumeKey: (event) => {
+          if (event.code !== "KeyE") return false;
+          event.preventDefault();
+          world.requestExitVehicle();
+          return true;
+        },
+      },
+    );
+
+    const landInRiverside = (opts: { keepDriving: boolean }) => {
+      const live = readPlayer();
+      const activeCar = activeOwnedVehicle(live);
+      const rampX = 20;
+      const rampY = 3.2;
+      if (activeCar) {
+        const parked = applyParkVehicle(live, activeCar.id, rampX, rampY, 0);
+        writePlayer(parked);
+        setPlayer(parked);
+      }
+      const riverside = riversideStateRef.current ?? (state.id === "riverside" ? state : null);
+      resumeDriveAfterDustfallRef.current = opts.keepDriving;
+      drivingRef.current = false;
+      setDriving(false);
+      setInDustfall(false);
+      if (riverside) setPlayState(riverside);
+      setDustfallTrip(false);
+      dustfallTripRef.current = false;
+      setSpawn({ x: rampX, y: rampY + (opts.keepDriving ? 0 : 0.8) });
+      setHighwayHint("Back in Riverside — Highway 93 is north if you want Dustfall again.");
+    };
+
+    const landInDustfall = (opts: { keepDriving: boolean }) => {
+      markMissionDustfall();
+      if (!dustfallCityRef.current) dustfallCityRef.current = generateDustfall();
+      const df = dustfallCityRef.current;
+      const live = readPlayer();
+      const activeCar = activeOwnedVehicle(live);
+      if (activeCar) {
+        const parked = applyParkVehicle(
+          live,
+          activeCar.id,
+          DUSTFALL_ARRIVAL.x,
+          DUSTFALL_ARRIVAL.y,
+          DUSTFALL_ARRIVAL.yaw,
+        );
+        writePlayer(parked);
+        setPlayer(parked);
+      } else {
+        setPlayer(readPlayer());
+      }
+      resumeDriveAfterDustfallRef.current = opts.keepDriving;
+      drivingRef.current = false;
+      setDriving(false);
+      setInDustfall(true);
+      setPlayState(df);
+      setDustfallTrip(false);
+      dustfallTripRef.current = false;
+      setSpawn({ x: DUSTFALL_ARRIVAL.x, y: DUSTFALL_ARRIVAL.y });
+      setHighwayHint(
+        opts.keepDriving
+          ? "Back in Dustfall — the Riverside Bridge is south."
+          : "Welcome to Dustfall — the Riverside Bridge is south if you want to drive home.",
+      );
+      setClock(formatClock(df));
+    };
+
+    let frame = 0;
+    let last = performance.now();
+    const loop = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      tickRef.current(dt * 0.35);
+      const live = readPlayer();
+      const activeCar = activeOwnedVehicle(live);
+      const empty = activeCar ? driveStats(activeCar).empty : false;
+      world.render(dt, empty);
+      positionRef.current = world.tilePosition;
+      if (activeCar) {
+        writePlayer(applyDriveTick(live, activeCar.id, dt, world.mph() / 2.15));
+      }
+      setDustfallProgress(world.getProgress());
+
+      if (world.wantsExitVehicle()) {
+        if (toward === "riverside") landInDustfall({ keepDriving: false });
+        else landInRiverside({ keepDriving: false });
+        return;
+      }
+      if (world.wantsAbortTrip()) {
+        if (toward === "riverside") landInDustfall({ keepDriving: true });
+        else landInRiverside({ keepDriving: true });
+        return;
+      }
+      if (world.hasArrived()) {
+        if (toward === "riverside") landInRiverside({ keepDriving: true });
+        else landInDustfall({ keepDriving: true });
+        return;
+      }
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(frame);
+      detachInput();
+      dustfallRef.current = null;
+      world.dispose();
+    };
+  }, [active, dustfallTrip, highwayToward, state]);
 
   useEffect(() => {
     if (!active || interior?.kind !== "stadium") return;
@@ -1095,6 +1418,33 @@ export function StreetView({
       ? findLodgingRoom(lodgingBuilding, interior.roomId)
       : null;
 
+  const doorNearby = Boolean(venueDoor || lodgingDoor || subwayDoor || atGate);
+  const carAndDoorChoice =
+    Boolean(nearCar && doorNearby && !driving && !inside && !failed && !dustfallTrip);
+  const doorChoiceLabel = lodgingDoor
+    ? lodgingDoor.name
+    : subwayDoor
+      ? subwayDoor.name
+      : atGate
+        ? "Ravens Ballpark"
+        : venueDoor
+          ? venueDoor.name
+          : "Building";
+  const doorChoiceKind = lodgingDoor
+    ? lodgingUse(lodgingDoor) === "hotel"
+      ? "Hotel"
+      : "Residences"
+    : subwayDoor
+      ? "Subway"
+      : atGate
+        ? "Stadium"
+        : venueDoor
+          ? (() => {
+              const role = venueRole(venueDoor);
+              return role ? venueLabel(role) : "Building";
+            })()
+          : "Enter";
+
   const placeName = interior?.kind === "stadium"
     ? "Ravens Ballpark"
     : lodgingBuilding
@@ -1115,13 +1465,23 @@ export function StreetView({
     <div ref={wrapRef} className="absolute inset-0 z-30 bg-[#0b1420]">
       <canvas
         ref={outdoorCanvasRef}
-        className={`absolute inset-0 h-full w-full ${inside ? "invisible pointer-events-none" : ""}`}
+        className={`absolute inset-0 h-full w-full ${inside || dustfallTrip ? "invisible pointer-events-none" : ""}`}
         onClick={onCanvasClick}
       />
       <canvas
         ref={canvasRef}
-        className={`absolute inset-0 h-full w-full ${inside ? "" : "invisible pointer-events-none"}`}
+        className={`absolute inset-0 h-full w-full ${inside && !dustfallTrip ? "" : "invisible pointer-events-none"}`}
         onClick={onCanvasClick}
+      />
+      <canvas
+        ref={dustfallCanvasRef}
+        className={`absolute inset-0 h-full w-full ${dustfallTrip ? "" : "invisible pointer-events-none"}`}
+        onClick={(event) => {
+          const canvas = dustfallCanvasRef.current;
+          if (!canvas) return;
+          if (document.pointerLockElement !== canvas) canvas.requestPointerLock();
+          event.preventDefault();
+        }}
       />
 
       {failed ? (
@@ -1143,14 +1503,14 @@ export function StreetView({
         <div className="flex flex-col gap-2">
         <div className="pointer-events-auto rounded-xl border border-white/10 bg-black/45 px-3.5 py-2 backdrop-blur">
           <p className="text-[0.6rem] uppercase tracking-[0.2em] text-amber-300/80">
-            {inside ? placeName : "Street level"}
+            {inside ? placeName : inDustfall ? "Dustfall" : "Street level"}
           </p>
           <p className="text-sm font-medium text-white">
             {clock.day} · {clock.date} · {clock.time}
           </p>
           <p className="text-[0.7rem] text-sky-100/80">
-            {weatherEmoji(state.weather.kind)} {state.weather.tempF}° {state.weather.label}
-            {state.events[0] ? ` · ${state.events[0].icon} ${state.events[0].headline}` : ""}
+            {weatherEmoji(playState.weather.kind)} {playState.weather.tempF}° {playState.weather.label}
+            {playState.events[0] ? ` · ${playState.events[0].icon} ${playState.events[0].headline}` : ""}
           </p>
         </div>
         <div className="pointer-events-auto">
@@ -1159,7 +1519,7 @@ export function StreetView({
         </div>
 
         <div className="pointer-events-auto flex items-center gap-2">
-          {!inside ? (
+          {!inside && !driving && !dustfallTrip ? (
             <div className="flex items-center gap-0.5 rounded-xl border border-white/10 bg-black/45 p-1 backdrop-blur">
               <ModeButton
                 active={mode === "hop"}
@@ -1173,6 +1533,10 @@ export function StreetView({
                 label="Walk"
                 title="Walk continuously with WASD"
               />
+            </div>
+          ) : driving || dustfallTrip ? (
+            <div className="rounded-xl border border-sky-300/30 bg-sky-500/15 px-3 py-1.5 text-xs font-semibold text-sky-100 backdrop-blur">
+              Driving
             </div>
           ) : (
             <>
@@ -1232,10 +1596,13 @@ export function StreetView({
           )}
 
           <button
-            onClick={onExit}
+            onClick={() => {
+              if (besideDesertCity && onEnterDesertCity) onEnterDesertCity();
+              else onExit();
+            }}
             className="rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20"
           >
-            ✕ Exit to city view
+            {besideDesertCity ? "✕ Exit to desert city" : "✕ Exit to city view"}
           </button>
         </div>
       </div>
@@ -1246,36 +1613,62 @@ export function StreetView({
         </div>
       ) : null}
 
-      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom && !sleeping && !atOfficeComputer && !characterMenu && !mallShop && !mallSnack && !phoneOpen ? (
+      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom && !sleeping && !atOfficeComputer && !characterMenu && !mallShop && !mallSnack && !phoneOpen && !motorsOpen ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
           <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
-            <p className="text-xs font-semibold text-white">Click to look around</p>
-            {mode === "hop" && !inside ? (
-              <p className="mt-0.5 text-[0.65rem] leading-snug text-slate-300">
-                <span className="font-medium text-white">W</span>/
-                <span className="font-medium text-white">S</span> hop ·{" "}
-                <span className="font-medium text-white">A</span>/
-                <span className="font-medium text-white">D</span> turn ·{" "}
-                <span className="font-medium text-white">Shift</span> run ·{" "}
-                <span className="font-medium text-white">Space</span> jump ·{" "}
-                <span className="font-medium text-white">Mouse</span> look
-              </p>
+            {driving || dustfallTrip ? (
+              <>
+                <p className="text-xs font-semibold text-white">Click the view, then drive</p>
+                <p className="mt-0.5 text-[0.65rem] leading-snug text-slate-300">
+                  <span className="font-medium text-white">W</span> gas ·{" "}
+                  <span className="font-medium text-white">S</span> brake / reverse ·{" "}
+                  <span className="font-medium text-white">A</span>/
+                  <span className="font-medium text-white">D</span> steer ·{" "}
+                  <span className="font-medium text-white">Space</span> handbrake ·{" "}
+                  <span className="font-medium text-white">Mouse</span> look ·{" "}
+                  <span className="font-medium text-white">E</span> exit
+                </p>
+              </>
             ) : (
-              <p className="mt-0.5 text-[0.65rem] leading-snug text-slate-300">
-                <span className="font-medium text-white">WASD</span> walk ·{" "}
-                <span className="font-medium text-white">Space</span> jump ·{" "}
-                <span className="font-medium text-white">Shift</span> run ·{" "}
-                <span className="font-medium text-white">Mouse</span> look
-              </p>
+              <>
+                <p className="text-xs font-semibold text-white">Click to look around</p>
+                {mode === "hop" && !inside ? (
+                  <p className="mt-0.5 text-[0.65rem] leading-snug text-slate-300">
+                    <span className="font-medium text-white">W</span>/
+                    <span className="font-medium text-white">S</span> hop ·{" "}
+                    <span className="font-medium text-white">A</span>/
+                    <span className="font-medium text-white">D</span> turn ·{" "}
+                    <span className="font-medium text-white">Shift</span> run ·{" "}
+                    <span className="font-medium text-white">Space</span> jump ·{" "}
+                    <span className="font-medium text-white">Mouse</span> look
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-[0.65rem] leading-snug text-slate-300">
+                    <span className="font-medium text-white">WASD</span> walk ·{" "}
+                    <span className="font-medium text-white">Space</span> jump ·{" "}
+                    <span className="font-medium text-white">Shift</span> run ·{" "}
+                    <span className="font-medium text-white">Mouse</span> look
+                  </p>
+                )}
+                <p className="mt-0.5 text-[0.6rem] text-slate-400">Esc releases the cursor · I inventory · M phone</p>
+              </>
             )}
-            <p className="mt-0.5 text-[0.6rem] text-slate-400">Esc releases the cursor · I inventory · M phone</p>
           </div>
         </div>
       ) : null}
 
       {locked && !failed ? (
         <div className="pointer-events-none absolute bottom-4 left-4 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-[0.68rem] leading-relaxed text-slate-300 backdrop-blur">
-          {mode === "hop" && !inside ? (
+          {driving || dustfallTrip ? (
+            <>
+              <span className="font-semibold text-white">W</span> gas ·{" "}
+              <span className="font-semibold text-white">S</span> brake/reverse ·{" "}
+              <span className="font-semibold text-white">A</span>/
+              <span className="font-semibold text-white">D</span> steer ·{" "}
+              <span className="font-semibold text-white">Space</span> handbrake ·{" "}
+              <span className="font-semibold text-white">E</span> exit
+            </>
+          ) : mode === "hop" && !inside ? (
             <>
               <span className="font-semibold text-white">W</span>/
               <span className="font-semibold text-white">S</span> next intersection ·{" "}
@@ -1297,7 +1690,109 @@ export function StreetView({
         </div>
       ) : null}
 
-      {atGate && !inside && !failed ? (
+      {driving && !dustfallTrip && !failed ? (
+        <div className="pointer-events-none absolute left-4 top-24 z-10">
+          <div className="min-w-[12rem] rounded-xl border border-white/15 bg-black/55 px-3 py-2 backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.18em] text-sky-200">
+              {activeOwnedVehicle(player)?.model ?? "Vehicle"}
+            </p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-white">
+              {worldRef.current?.driveMph() ?? 0}{" "}
+              <span className="text-sm font-medium text-white/50">MPH</span>
+            </p>
+            <p className="mt-1 text-xs text-slate-300">
+              Fuel {Math.round(activeOwnedVehicle(player)?.fuel ?? 0)}% · Condition{" "}
+              {Math.round(activeOwnedVehicle(player)?.condition ?? 0)}%
+            </p>
+            <p className="mt-1 text-[0.65rem] text-slate-400">
+              W gas · S brake · A/D steer · Space handbrake · Shift boost
+            </p>
+            <p className="mt-0.5 text-[0.65rem] text-slate-500">E exit vehicle · Mouse look</p>
+          </div>
+        </div>
+      ) : null}
+
+      {dustfallTrip && !failed ? (
+        <div className="pointer-events-none absolute left-4 top-24 z-10">
+          <div className="min-w-[12rem] rounded-xl border border-amber-300/30 bg-black/55 px-3 py-2 backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.18em] text-amber-200">Highway 93</p>
+            <p className="mt-1 text-sm font-semibold text-white">
+              {highwayToward === "riverside" ? "Toward Riverside" : "Toward Dustfall"}
+            </p>
+            <p className="mt-1 text-xs text-slate-300">{Math.round(dustfallProgress * 100)}% of the drive</p>
+            <p className="mt-1 text-[0.65rem] text-slate-400">
+              {highwayToward === "riverside"
+                ? dustfallProgress >= 0.88
+                  ? "Riverside ahead"
+                  : "S reverse → Dustfall · E exit"
+                : dustfallProgress >= 0.88
+                  ? "Dustfall ahead — Exit to desert city"
+                  : "S reverse past the sign → Riverside · E exit"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {carAndDoorChoice && nearCar ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="min-w-[16rem] rounded-2xl border border-white/20 bg-black/80 px-5 py-4 shadow-2xl backdrop-blur">
+            <p className="text-center text-[0.65rem] uppercase tracking-[0.28em] text-slate-400">
+              Choose
+            </p>
+            <div className="mt-3 space-y-2.5">
+              <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-300/35 bg-amber-400/10 px-3 py-2">
+                <div className="min-w-0 text-left">
+                  <p className="text-[0.6rem] uppercase tracking-[0.2em] text-amber-300">
+                    {doorChoiceKind}
+                  </p>
+                  <p className="truncate text-sm font-semibold text-white">{doorChoiceLabel}</p>
+                </div>
+                <p className="shrink-0 text-sm text-slate-300">
+                  <span className="font-semibold text-white">E</span> enter
+                </p>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded-xl border border-sky-300/35 bg-sky-400/10 px-3 py-2">
+                <div className="min-w-0 text-left">
+                  <p className="text-[0.6rem] uppercase tracking-[0.2em] text-sky-300">Your vehicle</p>
+                  <p className="truncate text-sm font-semibold text-white">{nearCar.model}</p>
+                </div>
+                <p className="shrink-0 text-sm text-slate-300">
+                  <span className="font-semibold text-white">F</span> drive
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {nearCar && !carAndDoorChoice && !driving && !inside && !failed && !dustfallTrip ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-2xl border border-sky-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-sky-300">Your vehicle</p>
+            <p className="mt-1 text-xl font-semibold text-white">{nearCar.model}</p>
+            <p className="mt-1 text-sm text-slate-300">
+              Press <span className="font-semibold text-white">E</span> or{" "}
+              <span className="font-semibold text-white">F</span> to drive
+            </p>
+            <p className="mt-1 text-xs text-amber-200/90">
+              {inDustfall
+                ? "Drive south → Riverside Bridge → Highway 93 → Riverside"
+                : "Drive north on this road → Highway 93 → Dustfall"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {highwayHint && !inside && !failed && !dustfallTrip ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="max-w-sm rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Highway 93</p>
+            <p className="mt-1 text-sm text-slate-200">{highwayHint}</p>
+          </div>
+        </div>
+      ) : null}
+
+      {atGate && !carAndDoorChoice && !inside && !failed ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
@@ -1311,7 +1806,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {lodgingDoor && !inside && !failed ? (
+      {lodgingDoor && !carAndDoorChoice && !inside && !failed ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
@@ -1325,7 +1820,13 @@ export function StreetView({
         </div>
       ) : null}
 
-      {venueDoor && !lodgingDoor && !subwayDoor && !atGate && !inside && !failed ? (
+      {venueDoor &&
+      !carAndDoorChoice &&
+      !lodgingDoor &&
+      !subwayDoor &&
+      !atGate &&
+      !inside &&
+      !failed ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
@@ -1347,7 +1848,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {subwayDoor && !lodgingDoor && !atGate && !inside && !failed ? (
+      {subwayDoor && !carAndDoorChoice && !lodgingDoor && !atGate && !inside && !failed ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Subway</p>
@@ -1449,6 +1950,24 @@ export function StreetView({
             atOfficeComputerRef.current = true;
             setAtOfficeComputer(true);
             setAtDesk(false);
+          }}
+          onOpenMotors={() => {
+            setMotorsOpen(true);
+            setAtDesk(false);
+          }}
+        />
+      ) : null}
+
+      {motorsOpen ? (
+        <MotorsShowroom
+          player={player}
+          clock={state.clock}
+          onPlayer={(next) => {
+            setPlayer(next);
+          }}
+          onClose={() => {
+            motorsOpenRef.current = false;
+            setMotorsOpen(false);
           }}
         />
       ) : null}
@@ -1747,7 +2266,15 @@ export function StreetView({
         </div>
       ) : null}
 
-      {!failed && !inside ? <StreetMinimap state={state} positionRef={positionRef} waypoint={waypoint} /> : null}
+      {!failed && !inside ? (
+        <StreetMinimap
+          state={playState}
+          positionRef={positionRef}
+          waypoint={waypoint}
+          driving={driving || dustfallTrip}
+          highway={dustfallTrip}
+        />
+      ) : null}
     </div>
   );
 }

@@ -95,11 +95,19 @@ export class LodgingWorld {
     }
 
     if (zone === "pool") {
-      this.scene.background = new THREE.Color(night ? "#10182c" : "#7eb3e0");
-      this.scene.fog = new THREE.Fog(night ? 0x10182c : 0x7eb3e0, 48, 210);
+      const daySky = state.id === "dustfall" ? "#e8b86a" : "#7eb3e0";
+      const nightSky = "#10182c";
+      this.scene.background = new THREE.Color(night ? nightSky : daySky);
+      this.scene.fog = new THREE.Fog(night ? 0x10182c : state.id === "dustfall" ? 0xe8b86a : 0x7eb3e0, 48, 210);
+      if (state.id === "dustfall") {
+        this.hemi.color.set(0xffe6c2);
+        this.hemi.groundColor.set(0xc4a574);
+        this.sun.color.set(0xffd090);
+      }
     } else if (zone === "room") {
-      this.scene.background = new THREE.Color(night ? "#10182c" : "#7eb3e0");
-      this.scene.fog = new THREE.Fog(night ? 0x10182c : 0x7eb3e0, 90, 640);
+      const daySky = state.id === "dustfall" ? "#e8b86a" : "#7eb3e0";
+      this.scene.background = new THREE.Color(night ? "#10182c" : daySky);
+      this.scene.fog = new THREE.Fog(night ? 0x10182c : state.id === "dustfall" ? 0xe8b86a : 0x7eb3e0, 90, 640);
     } else {
       this.scene.background = new THREE.Color("#1c1814");
       this.scene.fog = new THREE.Fog(0x1c1814, 18, 48);
@@ -225,7 +233,8 @@ export class LodgingWorld {
     this.sun.intensity = this.zone === "pool" ? (night ? 0.35 : 2.0) : night ? 0.55 : 1.35;
     this.hemi.intensity = night ? 0.7 : 1.15;
     if (this.zone === "room" || this.zone === "pool") {
-      const sky = night ? "#10182c" : "#7eb3e0";
+      const desert = this.state.id === "dustfall";
+      const sky = night ? "#10182c" : desert ? "#e8b86a" : "#7eb3e0";
       this.scene.background = new THREE.Color(sky);
       if (this.scene.fog instanceof THREE.Fog) this.scene.fog.color.set(sky);
     }
