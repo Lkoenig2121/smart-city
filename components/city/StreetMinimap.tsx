@@ -45,7 +45,7 @@ export function StreetMinimap({
       for (let x = 0; x < state.size; x++) {
         const tile = state.tiles[y][x];
         let color: string | null = null;
-        if (tile.terrain === "water") color = "#1d4f70";
+        if (tile.terrain === "water") color = "#2f3a3c";
         else if (tile.terrain === "park" || tile.terrain === "playground") color = "#2f6b34";
         else if (tile.terrain === "sand") color = "#8a7b52";
         else if (tile.terrain === "plaza" || tile.terrain === "lot") color = "#4a4a45";
@@ -152,19 +152,9 @@ export function StreetMinimap({
           if (pin) {
             const wx = pin.x * cell;
             const wy = pin.y * cell + offsetY;
-            if (position) {
-              ctx.beginPath();
-              ctx.moveTo(position.x * cell, position.y * cell + offsetY);
-              ctx.lineTo(wx, wy);
-              ctx.strokeStyle = "rgba(56, 189, 248, 0.75)";
-              ctx.setLineDash([4, 3]);
-              ctx.lineWidth = 1.4;
-              ctx.stroke();
-              ctx.setLineDash([]);
-            }
             ctx.beginPath();
             ctx.arc(wx, wy, Math.max(4.4, cell * 1.2), 0, Math.PI * 2);
-            ctx.fillStyle = "#38bdf8";
+            ctx.fillStyle = "#39ff6a";
             ctx.fill();
             ctx.strokeStyle = "rgba(8, 20, 32, 0.8)";
             ctx.lineWidth = 1.3;

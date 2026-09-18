@@ -110,8 +110,9 @@ export function nearestRoad(state: CityState, x: number, y: number): Vec2 | null
   if (isRoad(state, x, y)) return { x, y };
   let best: Vec2 | null = null;
   let bestD = Infinity;
-  for (let dy = -4; dy <= 4; dy++) {
-    for (let dx = -4; dx <= 4; dx++) {
+  // Large footprints (mall, stadium) sit farther than a sidewalk from curb roads.
+  for (let dy = -16; dy <= 16; dy++) {
+    for (let dx = -16; dx <= 16; dx++) {
       const nx = x + dx;
       const ny = y + dy;
       if (!isRoad(state, nx, ny)) continue;

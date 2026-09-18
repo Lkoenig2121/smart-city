@@ -43,6 +43,7 @@ import {
   phoneUnreadCount,
   PHONE_TIME_SCALE,
   readPhone,
+  setPhoneWaypoint,
   type PhoneMessage,
   type PhoneWaypoint,
 } from "@/lib/city/phone";
@@ -170,6 +171,16 @@ export function StreetView({
   const [phoneThread, setPhoneThread] = useState<string | null>(null);
   const [waypoint, setWaypoint] = useState<PhoneWaypoint | null>(() => readPhone().waypoint);
   const [unread, setUnread] = useState(0);
+  const waypointRef = useRef(waypoint);
+  waypointRef.current = waypoint;
+
+  const clearNavWaypoint = () => {
+    if (!waypointRef.current) return;
+    setPhoneWaypoint(null);
+    waypointRef.current = null;
+    setWaypoint(null);
+    worldRef.current?.setWaypoint(null);
+  };
 
   const inside = interior !== null;
   const lodgingBuilding =
@@ -190,6 +201,13 @@ export function StreetView({
     pickingStop ||
     pickingRoom ||
     riding;
+
+  useEffect(() => {
+    if (!interior) return;
+    clearNavWaypoint();
+    // Clear route chrome when stepping indoors.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interior]);
 
   useEffect(() => {
     characterMenuRef.current = characterMenu;
@@ -506,9 +524,12 @@ export function StreetView({
       last = now;
       tickRef.current(dt);
       world.setPinnedSelection(selectedBuildingId?.current ?? null);
+      world.setWaypoint(waypointRef.current);
       if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
       world.render(dt);
       positionRef.current = world.tilePosition;
+      const pin = waypointRef.current;
+      if (pin && world.arrivedAtWaypoint()) clearNavWaypoint();
       const gate = world.nearStadiumGate();
       atGateRef.current = gate;
       setAtGate((prev) => (prev === gate ? prev : gate));

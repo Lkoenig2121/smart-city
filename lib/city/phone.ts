@@ -8,7 +8,9 @@ import {
   dayKey,
   type PlayerState,
 } from "./player";
-import { GAME_END_MINUTE, GAME_START_MINUTE, findStadium } from "./stadium";
+import { GAME_END_MINUTE, GAME_START_MINUTE, findStadium, stadiumGateTile } from "./stadium";
+import { lodgingGateTile, lodgingUse } from "./lodging";
+import { isSubwayStation, subwayGateTile } from "./subway";
 import { findMall, findVenue, venueGateTile, venueRole } from "./venues";
 import { formatClockMinutes } from "@/lib/simulation/weather/weather";
 
@@ -246,8 +248,8 @@ export function phoneInbox(state: CityState, player: PlayerState): PhoneMessage[
           "Come try them on. No appointment needed.",
         ],
         location: {
-          x: mall.origin.x + mall.width / 2,
-          y: mall.origin.y + mall.depth,
+          x: venueGateTile(mall).x,
+          y: venueGateTile(mall).y,
           label: mall.name,
         },
       }),
@@ -453,9 +455,10 @@ export function phoneMapPins(state: CityState, player: PlayerState) {
   for (const building of state.buildings.values()) {
     const kind = poiKind(building);
     if (!kind) continue;
+    const spot = buildingNavTile(building);
     pins.push({
-      x: building.origin.x + building.width / 2,
-      y: building.origin.y + building.depth / 2,
+      x: spot.x,
+      y: spot.y,
       label: building.name,
       kind,
     });
@@ -468,9 +471,10 @@ export function phoneMapPins(state: CityState, player: PlayerState) {
   if (player.career) {
     const office = state.buildings.get(player.career.employerId);
     if (office) {
+      const spot = buildingNavTile(office);
       pins.push({
-        x: office.origin.x + office.width / 2,
-        y: office.origin.y + office.depth / 2,
+        x: spot.x,
+        y: spot.y,
         label: office.name,
         kind: "work",
       });
@@ -533,8 +537,20 @@ function firstOffice(state: CityState) {
 function buildingWaypoint(state: CityState, id: string): PhoneWaypoint | undefined {
   const building = state.buildings.get(id);
   if (!building) return undefined;
-  const gate = venueGateTile(building);
+  const gate = buildingNavTile(building);
   return { x: gate.x, y: gate.y, label: building.name };
+}
+
+/** Street approach for navigation — prefer the enterable gate, not the footprint center. */
+function buildingNavTile(building: Building) {
+  if (isSubwayStation(building)) return subwayGateTile(building);
+  if (building.kind === "baseball_stadium") return stadiumGateTile(building);
+  if (lodgingUse(building)) return lodgingGateTile(building);
+  if (venueRole(building)) return venueGateTile(building);
+  return {
+    x: building.origin.x + Math.floor(building.width / 2),
+    y: building.origin.y + building.depth,
+  };
 }
 
 function appointmentTitle(message: PhoneMessage) {

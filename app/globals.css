@@ -39,3 +39,36 @@ button {
   width: 0;
   height: 0;
 }
+
+.phone-scroll {
+  overflow-x: hidden;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.55) rgba(255, 255, 255, 0.12);
+}
+
+.phone-scroll::-webkit-scrollbar {
+  -webkit-appearance: none;
+  width: 10px;
+  display: block;
+}
+
+.phone-scroll::-webkit-scrollbar-track {
+  margin: 6px 2px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+
+.phone-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.55);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+.phone-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.75);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}

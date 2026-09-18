@@ -14,6 +14,8 @@ import { skyTexture } from "./textures";
 import { StreetWeatherFx } from "./weatherFx";
 import { StreetFireworks } from "./streetFireworks";
 import { HeldItemView } from "./heldItem";
+import type { PhoneWaypoint } from "@/lib/city/phone";
+import { findPath, nearestRoad } from "@/lib/simulation/traffic/pathfinding";
 
 /** Field of view at rest, and how far it narrows mid-hop. */
 const BASE_FOV = 72;
@@ -21,6 +23,8 @@ const HOP_ZOOM = 7;
 
 /** How many lamps get a real point light at once. */
 const LIVE_LAMPS = 16;
+const NAV_ARROWS = 14;
+const NAV_SPACING = 4.6;
 
 /**
  * Owns the Three.js scene for the walkable view: static city geometry, the
@@ -58,6 +62,12 @@ export class StreetWorld {
   private windowRT: THREE.WebGLRenderTarget | null = null;
   private windowCam = new THREE.PerspectiveCamera(48, 1.6, 0.35, 700);
   private windowBuf: Uint8Array | null = null;
+  private navTarget: PhoneWaypoint | null = null;
+  private navArrows: THREE.InstancedMesh;
+  private navDummy = new THREE.Object3D();
+  private navMat: THREE.MeshStandardMaterial;
+  private navPath: Array<{ x: number; z: number }> = [];
+  private navPathKey = "";
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -113,6 +123,24 @@ export class StreetWorld {
     }
 
     this.scene.fog = new THREE.Fog(0xc9d8e4, 60, 620);
+
+    this.navMat = new THREE.MeshStandardMaterial({
+      color: "#39ff6a",
+      emissive: new THREE.Color("#22ff66"),
+      emissiveIntensity: 2.4,
+      transparent: true,
+      opacity: 0.92,
+      roughness: 0.35,
+      metalness: 0.05,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    this.navArrows = new THREE.InstancedMesh(makeNavArrowGeometry(), this.navMat, NAV_ARROWS);
+    this.navArrows.frustumCulled = false;
+    this.navArrows.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.navArrows.renderOrder = 3;
+    this.navArrows.visible = false;
+    this.scene.add(this.navArrows);
   }
 
   /** Lets a hotel room parent the live city mesh so the window is a real opening. */
@@ -344,6 +372,35 @@ export class StreetWorld {
     this.heldView.playSip();
   }
 
+  /** Phone Maps waypoint in tile coordinates; arrows glow toward it on the ground. */
+  setWaypoint(target: PhoneWaypoint | null) {
+    this.navTarget = target;
+    if (!target) {
+      this.navPath = [];
+      this.navPathKey = "";
+      this.navArrows.visible = false;
+    }
+  }
+
+  /** True when the walker is on (or beside) the road approach to the current waypoint. */
+  arrivedAtWaypoint() {
+    const target = this.navTarget;
+    if (!target) return false;
+    const px = this.controls.position.x / TILE;
+    const pz = this.controls.position.z / TILE;
+    const goal =
+      nearestRoad(this.state, Math.round(target.x), Math.round(target.y)) ??
+      this.nearestRoad(Math.round(target.x), Math.round(target.y));
+    if (!goal) {
+      const dx = px - target.x;
+      const dy = pz - target.y;
+      return dx * dx + dy * dy <= 4;
+    }
+    const dx = px - (goal.x + 0.5);
+    const dy = pz - (goal.y + 0.5);
+    return dx * dx + dy * dy <= 2.25;
+  }
+
   render(dt: number) {
     this.time += dt;
     this.controls.update(dt);
@@ -394,12 +451,79 @@ export class StreetWorld {
     this.weatherFx.update(dt, this.camera, this.state.weather?.kind ?? "clear");
     this.updateFireworks(dt);
     this.updateGlow(dt);
+    this.updateNavArrows();
     this.renderer.render(this.scene, this.camera);
   }
 
   /** Keep bursts moving while the city mesh is borrowed by a hotel room. */
   tickFireworks(dt: number) {
     this.updateFireworks(dt);
+  }
+
+  private updateNavArrows() {
+    const target = this.navTarget;
+    if (!target) {
+      this.navArrows.visible = false;
+      return;
+    }
+
+    const px = this.controls.position.x;
+    const pz = this.controls.position.z;
+    const startTile =
+      nearestRoad(this.state, Math.floor(px / TILE), Math.floor(pz / TILE)) ??
+      this.nearestRoad(Math.floor(px / TILE), Math.floor(pz / TILE));
+    const goalTile =
+      nearestRoad(this.state, Math.round(target.x), Math.round(target.y)) ??
+      this.nearestRoad(Math.round(target.x), Math.round(target.y));
+    if (!startTile || !goalTile) {
+      this.navArrows.visible = false;
+      return;
+    }
+
+    const key = `${startTile.x},${startTile.y}->${goalTile.x},${goalTile.y}`;
+    if (key !== this.navPathKey) {
+      this.navPathKey = key;
+      const tiles = findPath(this.state, startTile, goalTile);
+      this.navPath = tiles.map((tile) => ({
+        x: tile.x * TILE + TILE / 2,
+        z: tile.y * TILE + TILE / 2,
+      }));
+    }
+
+    if (this.navPath.length < 2) {
+      this.navArrows.visible = false;
+      return;
+    }
+
+    const samples = sampleRoadPath(this.navPath, px, pz, NAV_SPACING, NAV_ARROWS);
+    if (samples.length === 0) {
+      this.navArrows.visible = false;
+      return;
+    }
+
+    this.navArrows.visible = true;
+    const pulse = 0.85 + Math.sin(this.time * 4.2) * 0.15;
+    this.navMat.emissiveIntensity = 1.8 + Math.sin(this.time * 5.5) * 0.9;
+    this.navMat.opacity = 0.72 + Math.sin(this.time * 3.4) * 0.18;
+
+    for (let i = 0; i < NAV_ARROWS; i++) {
+      const sample = samples[i];
+      if (!sample) {
+        this.navDummy.position.set(0, -40, 0);
+        this.navDummy.scale.set(0.001, 0.001, 0.001);
+        this.navDummy.updateMatrix();
+        this.navArrows.setMatrixAt(i, this.navDummy.matrix);
+        continue;
+      }
+      const ground = this.controls.groundAt(sample.x, sample.z);
+      const scale = 0.9 + pulse * 0.18;
+      this.navDummy.position.set(sample.x, ground + 0.08, sample.z);
+      this.navDummy.rotation.set(0, sample.yaw, 0);
+      this.navDummy.scale.set(scale, 1, scale);
+      this.navDummy.updateMatrix();
+      this.navArrows.setMatrixAt(i, this.navDummy.matrix);
+    }
+    this.navArrows.instanceMatrix.needsUpdate = true;
   }
 
   private updateFireworks(dt: number) {
@@ -507,6 +631,8 @@ export class StreetWorld {
     this.weatherFx.dispose();
     this.fireworks.group.removeFromParent();
     this.fireworks.dispose();
+    this.navArrows.geometry.dispose();
+    this.navMat.dispose();
     this.city.dispose();
     this.sky?.dispose();
     this.windowRT?.dispose();
@@ -588,4 +714,81 @@ function nearestFacade(
     }
   }
   return best;
+}
+
+function makeNavArrowGeometry() {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 1.05);
+  shape.lineTo(0.62, -0.08);
+  shape.lineTo(0.26, -0.08);
+  shape.lineTo(0.26, -0.78);
+  shape.lineTo(-0.26, -0.78);
+  shape.lineTo(-0.26, -0.08);
+  shape.lineTo(-0.62, -0.08);
+  shape.closePath();
+  const geo = new THREE.ShapeGeometry(shape);
+  geo.rotateX(-Math.PI / 2);
+  geo.rotateY(Math.PI);
+  geo.translate(0, 0.02, 0);
+  return geo;
+}
+
+/** Walk the road polyline and drop arrow samples ahead of the player. */
+function sampleRoadPath(
+  path: Array<{ x: number; z: number }>,
+  px: number,
+  pz: number,
+  spacing: number,
+  count: number,
+) {
+  const samples: Array<{ x: number; z: number; yaw: number }> = [];
+  if (path.length < 2) return samples;
+
+  let bestSeg = 0;
+  let bestT = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const len2 = dx * dx + dz * dz;
+    const t = len2 < 1e-6 ? 0 : Math.max(0, Math.min(1, ((px - a.x) * dx + (pz - a.z) * dz) / len2));
+    const qx = a.x + dx * t;
+    const qz = a.z + dz * t;
+    const d = Math.hypot(px - qx, pz - qz);
+    if (d < bestD) {
+      bestD = d;
+      bestSeg = i;
+      bestT = t;
+    }
+  }
+
+  const cum = [0];
+  for (let i = 0; i < path.length - 1; i++) {
+    cum.push(cum[i] + Math.hypot(path[i + 1].x - path[i].x, path[i + 1].z - path[i].z));
+  }
+  const total = cum[cum.length - 1];
+  const from =
+    cum[bestSeg] +
+    bestT * Math.hypot(path[bestSeg + 1].x - path[bestSeg].x, path[bestSeg + 1].z - path[bestSeg].z);
+
+  for (let n = 0; n < count; n++) {
+    const d = from + 2.8 + n * spacing;
+    if (d >= total - 1.2) break;
+    let i = 0;
+    while (i < cum.length - 2 && cum[i + 1] < d) i += 1;
+    const segLen = cum[i + 1] - cum[i];
+    const u = segLen < 1e-6 ? 0 : (d - cum[i]) / segLen;
+    const a = path[i];
+    const b = path[i + 1];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    samples.push({
+      x: a.x + dx * u,
+      z: a.z + dz * u,
+      yaw: Math.atan2(dx, dz),
+    });
+  }
+  return samples;
 }

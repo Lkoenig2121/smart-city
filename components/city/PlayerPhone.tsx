@@ -36,7 +36,7 @@ import {
 import { characterProgress } from "@/lib/city/progression";
 import { forecastFor, weatherEmoji } from "@/lib/simulation/weather/weather";
 import { formatClock } from "@/lib/simulation/city/cityTick";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 const APPS: { id: PhoneApp; name: string; icon: string; tint: string }[] = [
   { id: "messages", name: "Messages", icon: "💬", tint: "from-lime-300 to-emerald-500" },
@@ -89,6 +89,8 @@ export function PlayerPhone({
     onChanged?.();
   };
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!startThreadId) return;
     markPhoneRead(startThreadId);
@@ -96,6 +98,18 @@ export function PlayerPhone({
     // Open the tapped notification once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== "ArrowUp" && event.code !== "ArrowDown") return;
+      const node = scrollRef.current;
+      if (!node) return;
+      event.preventDefault();
+      node.scrollBy({ top: event.code === "ArrowDown" ? 72 : -72, behavior: "smooth" });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [app]);
 
   const openApp = (next: PhoneApp) => {
     setNote(null);
@@ -125,16 +139,27 @@ export function PlayerPhone({
   };
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-50 grid place-items-center bg-black/55 p-3 backdrop-blur-sm">
-      <div className="flex items-end gap-4">
+    <div
+      className="pointer-events-auto absolute inset-0 z-50 grid place-items-center bg-black/55 p-3 backdrop-blur-sm"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div className="flex items-end gap-4" onClick={(event) => event.stopPropagation()} role="presentation">
         <div className="relative h-[min(44rem,calc(100vh-2rem))] w-[min(23rem,calc(100vw-2.5rem))] overflow-hidden rounded-[2.4rem] border-[7px] border-[#1a1c20] bg-black shadow-2xl">
           <div className="absolute left-1/2 top-1.5 z-20 h-6 w-28 -translate-x-1/2 rounded-full bg-black" />
-          <div className="flex h-full flex-col bg-gradient-to-b from-[#1c2333] to-[#0b1018] text-white">
-            <header className="flex items-center justify-between px-6 pb-1 pt-3 text-[0.7rem] font-semibold text-white/80">
+          <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-b from-[#1c2333] to-[#0b1018] text-white">
+            <header className="flex shrink-0 items-center justify-between px-6 pb-1 pt-3 text-[0.7rem] font-semibold text-white/80">
               <span>{clock.time}</span>
               <span className="tabular-nums">{unread ? `${unread} new` : "5G"}</span>
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
+            <div
+              ref={app === "maps" ? undefined : scrollRef}
+              className={
+                app === "maps"
+                  ? "flex min-h-0 flex-1 basis-0 flex-col overflow-hidden px-3 pb-2"
+                  : "phone-scroll min-h-0 flex-1 basis-0 px-3 pb-2"
+              }
+            >
               {app === "home" ? (
                 <HomeScreen
                   clockTime={clock.time}
@@ -149,7 +174,13 @@ export function PlayerPhone({
               ) : app === "calendar" ? (
                 <CalendarView state={state} items={calendar} onWaypoint={waypoint} />
               ) : app === "maps" ? (
-                <MapsView state={state} player={player} waypoint={save.waypoint} onWaypoint={waypoint} />
+                <MapsView
+                  state={state}
+                  player={player}
+                  waypoint={save.waypoint}
+                  onWaypoint={waypoint}
+                  scrollRef={scrollRef}
+                />
               ) : app === "bank" ? (
                 <BankView player={player} />
               ) : app === "jobs" ? (
@@ -175,7 +206,7 @@ export function PlayerPhone({
                 <SettingsView muted={save.muted} waypoint={save.waypoint?.label ?? null} onMute={(muted) => { setPhoneMuted(muted); refresh(); }} onClear={() => { setPhoneWaypoint(null); refresh(); }} />
               )}
             </div>
-            <nav className="flex items-center justify-between px-5 pb-3 pt-1">
+            <nav className="flex shrink-0 items-center justify-between px-5 pb-3 pt-1">
               <button type="button" onClick={() => openApp("home")} className="rounded-full bg-white/10 px-4 py-1.5 text-xs text-white/80">
                 Home
               </button>
@@ -187,7 +218,8 @@ export function PlayerPhone({
           </div>
         </div>
         <p className="hidden max-w-[11rem] text-xs text-slate-300 sm:block">
-          City time slows while the phone is open. Press <span className="font-semibold text-white">M</span> or Esc to put it away.
+          City time slows while the phone is open. Click outside, or press{" "}
+          <span className="font-semibold text-white">M</span> / Esc to put it away.
         </p>
       </div>
     </div>
@@ -369,14 +401,24 @@ function MapsView({
   player,
   waypoint,
   onWaypoint,
+  scrollRef,
 }: {
   state: CityState;
   player: PlayerState;
   waypoint: { x: number; y: number; label: string } | null;
   onWaypoint: (x: number, y: number, label: string) => void;
+  scrollRef: RefObject<HTMLDivElement | null>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pins = phoneMapPins(state, player);
+  const groups = [
+    { label: "Work & shops", kinds: ["office", "mall", "bank"] as const },
+    { label: "Go out", kinds: ["stadium", "hotel", "marina", "ferris"] as const },
+    { label: "Civic", kinds: ["city_hall", "hospital", "police", "fire", "school", "subway"] as const },
+  ];
+  const [groupIndex, setGroupIndex] = useState(0);
+  const active = groups[groupIndex] ?? groups[0];
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -390,7 +432,7 @@ function MapsView({
     for (let y = 0; y < state.size; y++) {
       for (let x = 0; x < state.size; x++) {
         const tile = state.tiles[y][x];
-        if (tile.terrain === "water") ctx.fillStyle = "#1d4f70";
+        if (tile.terrain === "water") ctx.fillStyle = "#2f3a3c";
         else if (tile.terrain === "park" || tile.terrain === "playground") ctx.fillStyle = "#2f6b34";
         else if (tile.road) ctx.fillStyle = "#5c5f66";
         else continue;
@@ -412,38 +454,44 @@ function MapsView({
     }
   }, [pins, state, waypoint]);
 
-  const groups = [
-    { label: "Work & shops", kinds: ["office", "mall", "bank"] },
-    { label: "Go out", kinds: ["stadium", "hotel", "marina", "ferris"] },
-    { label: "Civic", kinds: ["city_hall", "hospital", "police", "fire", "school", "subway"] },
-  ];
+  const listed = pins.filter((pin) => (active.kinds as readonly string[]).includes(pin.kind));
 
   return (
-    <div className="pt-2">
-      <AppTitle>Maps</AppTitle>
-      <canvas ref={canvasRef} width={320} height={220} className="mt-2 w-full rounded-2xl bg-[#1b2a22]" />
-      {waypoint ? <p className="mt-2 text-xs text-amber-200">Waypoint · {waypoint.label}</p> : null}
-      {groups.map((group) => (
-        <div key={group.label} className="mt-3">
-          <p className="text-[0.65rem] uppercase tracking-[0.16em] text-white/40">{group.label}</p>
-          <div className="mt-1 space-y-1">
-            {pins
-              .filter((pin) => group.kinds.includes(pin.kind))
-              .slice(0, 6)
-              .map((pin) => (
-                <button
-                  key={`${pin.kind}-${pin.label}-${pin.x}`}
-                  type="button"
-                  onClick={() => onWaypoint(pin.x, pin.y, pin.label)}
-                  className="flex w-full items-center justify-between rounded-xl bg-white/5 px-3 py-2 text-sm"
-                >
-                  <span>{pin.label}</span>
-                  <span className="text-[0.65rem] text-sky-200">Waypoint</span>
-                </button>
-              ))}
-          </div>
-        </div>
-      ))}
+    <div className="flex h-full min-h-0 flex-col pt-2">
+      <div className="shrink-0">
+        <AppTitle>Maps</AppTitle>
+        <nav className="mt-2 flex gap-1 rounded-xl bg-white/5 p-1">
+          {groups.map((group, index) => (
+            <button
+              key={group.label}
+              type="button"
+              onClick={() => setGroupIndex(index)}
+              className={`min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-[0.65rem] font-semibold ${
+                index === groupIndex ? "bg-white/15 text-white" : "text-white/55 hover:text-white/80"
+              }`}
+            >
+              {group.label}
+            </button>
+          ))}
+        </nav>
+        <canvas ref={canvasRef} width={320} height={150} className="mt-2 w-full rounded-2xl bg-[#1b2a22]" />
+        {waypoint ? <p className="mt-2 text-xs text-amber-200">Waypoint · {waypoint.label}</p> : null}
+        <p className="mt-2 text-[0.65rem] uppercase tracking-[0.16em] text-white/40">{active.label}</p>
+      </div>
+      <div ref={scrollRef} className="phone-scroll mt-1 min-h-0 flex-1 basis-0 space-y-1 pr-0.5">
+        {listed.length === 0 ? <Empty>No pins in this category.</Empty> : null}
+        {listed.map((pin) => (
+          <button
+            key={`${pin.kind}-${pin.label}-${pin.x}`}
+            type="button"
+            onClick={() => onWaypoint(pin.x, pin.y, pin.label)}
+            className="flex w-full items-center justify-between rounded-xl bg-white/5 px-3 py-2 text-sm"
+          >
+            <span>{pin.label}</span>
+            <span className="text-[0.65rem] text-sky-200">Waypoint</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
