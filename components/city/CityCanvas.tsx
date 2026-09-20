@@ -370,8 +370,34 @@ export function CityCanvas() {
 
   /** Leave street / highway and open the Egypt-styled Dustfall isometric city. */
   const enterDesertCity = useCallback(() => {
-    switchCity("dustfall");
-  }, [switchCity]);
+    const engine = engineRef.current;
+    const renderer = rendererRef.current;
+    const wrap = wrapRef.current;
+    if (!engine || !renderer || !wrap) return;
+
+    // Arriving via Highway 93 unlocks Dustfall even if the HUD switcher was locked.
+    markMissionDustfall();
+
+    const prev = engine.state;
+    if (prev.id === "riverside") riversideStateRef.current = prev;
+    if (prev.id === "dustfall") dustfallStateRef.current = prev;
+
+    if (prev.id !== "dustfall") {
+      if (!dustfallStateRef.current) dustfallStateRef.current = generateDustfall();
+      const dustfall = dustfallStateRef.current;
+      dustfall.clock = { ...prev.clock };
+      dustfall.weather = prev.weather;
+      engine.loadState(dustfall);
+    }
+
+    activeCityRef.current = "dustfall";
+    setStreetOpen(false);
+    setStreet(null);
+
+    const rect = wrap.getBoundingClientRect();
+    renderer.camera.centerOn(18, 16, rect.width, rect.height);
+    pushHud(engine);
+  }, [pushHud]);
 
   useEffect(() => {
     if (streetOpen || !street) return;
