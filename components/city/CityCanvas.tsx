@@ -43,6 +43,7 @@ const PAN_SPEED = 900;
 
 interface HudSnap {
   cityName: string;
+  cityId: string;
   population: number;
   treasury: number;
   day: string;
@@ -60,6 +61,7 @@ interface HudSnap {
   wallet: number;
   careerLabel: string;
   mallExists: boolean;
+  canSwitchCities: boolean;
 }
 
 export function CityCanvas() {
@@ -206,6 +208,7 @@ export function CityCanvas() {
             : null;
         setHud({
           cityName: engine.state.name,
+          cityId: engine.state.id,
           population: engine.state.population,
           treasury: engine.state.budget.treasury,
           day: clock.day,
@@ -231,6 +234,7 @@ export function CityCanvas() {
           wallet: totalBalance(life),
           careerLabel: life.career ? officeRank(life.career.xp).label : "",
           mallExists: Boolean(findMall(engine.state)),
+          canSwitchCities: Boolean(life.dustfallUnlocked),
         });
       }
       frame = requestAnimationFrame(loop);
@@ -293,32 +297,12 @@ export function CityCanvas() {
     setStreetOpen(false);
   }, []);
 
-  /** Leave street / highway and open the Egypt-styled Dustfall isometric city. */
-  const enterDesertCity = useCallback(() => {
-    const engine = engineRef.current;
-    const renderer = rendererRef.current;
-    const wrap = wrapRef.current;
-    if (!engine || !renderer || !wrap) return;
-
-    markMissionDustfall();
-    if (engine.state.id === "riverside") riversideStateRef.current = engine.state;
-    if (!dustfallStateRef.current) dustfallStateRef.current = generateDustfall();
-    const dustfall = dustfallStateRef.current;
-    dustfall.clock = { ...(riversideStateRef.current ?? engine.state).clock };
-    dustfall.weather = (riversideStateRef.current ?? engine.state).weather;
-
-    engine.loadState(dustfall);
-    activeCityRef.current = "dustfall";
-    setStreetOpen(false);
-    setStreet(null);
-
-    const rect = wrap.getBoundingClientRect();
-    renderer.camera.centerOn(18, 16, rect.width, rect.height);
-
+  const pushHud = useCallback((engine: CityEngine) => {
     const clock = formatClock(engine.state);
     const life = readPlayer();
     setHud({
       cityName: engine.state.name,
+      cityId: engine.state.id,
       population: engine.state.population,
       treasury: engine.state.budget.treasury,
       day: clock.day,
@@ -328,7 +312,9 @@ export function CityCanvas() {
       weather: engine.state.weather,
       events: engine.state.events,
       tool: engine.tool,
-      selected: null,
+      selected: engine.selectedId
+        ? (engine.state.buildings.get(engine.selectedId) ?? null)
+        : null,
       hoverLabel: "",
       streetLife: engine.state.citizens.filter(citizenIsOutdoors).length,
       trafficFlow: trafficFlowScore(engine.state),
@@ -336,8 +322,56 @@ export function CityCanvas() {
       wallet: totalBalance(life),
       careerLabel: life.career ? officeRank(life.career.xp).label : "",
       mallExists: Boolean(findMall(engine.state)),
+      canSwitchCities: Boolean(life.dustfallUnlocked),
     });
   }, []);
+
+  /** Swap the isometric overview between Riverside and Dustfall. */
+  const switchCity = useCallback(
+    (target: "riverside" | "dustfall") => {
+      const engine = engineRef.current;
+      const renderer = rendererRef.current;
+      const wrap = wrapRef.current;
+      if (!engine || !renderer || !wrap) return;
+      if (engine.state.id === target) return;
+      if (target === "dustfall" && !readPlayer().dustfallUnlocked) return;
+
+      const prev = engine.state;
+      if (prev.id === "riverside") riversideStateRef.current = prev;
+      if (prev.id === "dustfall") dustfallStateRef.current = prev;
+
+      let next: CityState;
+      if (target === "dustfall") {
+        markMissionDustfall();
+        if (!dustfallStateRef.current) dustfallStateRef.current = generateDustfall();
+        next = dustfallStateRef.current;
+      } else {
+        next = riversideStateRef.current ?? engine.state;
+        if (next.id !== "riverside") return;
+      }
+
+      // Keep clock / weather continuous across the jump.
+      next.clock = { ...prev.clock };
+      next.weather = prev.weather;
+
+      engine.loadState(next);
+      activeCityRef.current = target;
+      setStreetOpen(false);
+      setStreet(null);
+
+      const rect = wrap.getBoundingClientRect();
+      if (target === "dustfall") renderer.camera.centerOn(18, 16, rect.width, rect.height);
+      else renderer.camera.centerOn(19, 18, rect.width, rect.height);
+
+      pushHud(engine);
+    },
+    [pushHud],
+  );
+
+  /** Leave street / highway and open the Egypt-styled Dustfall isometric city. */
+  const enterDesertCity = useCallback(() => {
+    switchCity("dustfall");
+  }, [switchCity]);
 
   useEffect(() => {
     if (streetOpen || !street) return;
@@ -459,6 +493,7 @@ export function CityCanvas() {
             }}
             onEnterStreet={enterStreet}
             onEnterStation={enterSelectedStation}
+            onSwitchCity={switchCity}
           />
         </div>
       ) : null}

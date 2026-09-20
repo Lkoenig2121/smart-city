@@ -26,6 +26,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
 
 interface HudProps {
   cityName: string;
+  cityId: string;
   population: number;
   treasury: number;
   day: string;
@@ -43,14 +44,17 @@ interface HudProps {
   wallet: number;
   careerLabel: string;
   mallExists?: boolean;
+  canSwitchCities?: boolean;
   onTool: (tool: Tool) => void;
   onClose: () => void;
   onEnterStreet: () => void;
   onEnterStation?: () => void;
+  onSwitchCity?: (cityId: "riverside" | "dustfall") => void;
 }
 
 export function CityHud({
   cityName,
+  cityId,
   population,
   treasury,
   day,
@@ -68,10 +72,12 @@ export function CityHud({
   wallet,
   careerLabel,
   mallExists = false,
+  canSwitchCities = false,
   onTool,
   onClose,
   onEnterStreet,
   onEnterStation,
+  onSwitchCity,
 }: HudProps) {
   return (
     <>
@@ -87,6 +93,33 @@ export function CityHud({
             <p className="text-lg font-semibold leading-tight text-white">
               {cityName}
             </p>
+            {canSwitchCities && onSwitchCity ? (
+              <div className="mt-1.5 flex gap-1">
+                {(
+                  [
+                    { id: "riverside" as const, label: "Riverside" },
+                    { id: "dustfall" as const, label: "Dustfall" },
+                  ] as const
+                ).map((city) => {
+                  const active = cityId === city.id;
+                  return (
+                    <button
+                      key={city.id}
+                      type="button"
+                      title={`Open ${city.label} overview`}
+                      onClick={() => onSwitchCity(city.id)}
+                      className={`rounded-lg px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] transition ${
+                        active
+                          ? "bg-white/20 text-white"
+                          : "bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80"
+                      }`}
+                    >
+                      {city.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         </div>
 
