@@ -9,6 +9,7 @@ import { seedVehicle, stepVehicles } from "../traffic/vehicleMovement";
 import { tickRoadNetwork } from "../traffic/roadNetwork";
 import { SIM_MINUTES_PER_SECOND } from "../weather/weather";
 import { abandonOpenShift, accrueBankInterest, payOvernightInterest, syncPlayerShift } from "@/lib/city/player";
+import { syncCityMilestones } from "@/lib/city/cityProgress";
 
 export function formatClock(state: CityState) {
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -131,4 +132,5 @@ export function tickCity(
   stepCitizens(state, dtSeconds);
   tickBuildingStats(state);
   syncPlayerShift(state);
+  syncCityMilestones(state);
 }

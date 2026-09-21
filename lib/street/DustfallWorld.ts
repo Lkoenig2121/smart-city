@@ -221,7 +221,8 @@ export class DustfallWorld {
         const sign = makeHighwaySign();
         sign.position.set(cx - 10, 7, z);
         this.group.add(sign);
-        this.blockers.push(boxBlocker(cx - 10, z, 5.8, 0.6));
+        // Keep the sign collider off the asphalt (halfX 5.8 used to clip the left lane).
+        this.blockers.push(boxBlocker(cx - 12.5, z, 3.2, 0.6));
       }
     }
 
@@ -299,9 +300,16 @@ export class DustfallWorld {
       mesh.rotation.y = northbound ? 0 : Math.PI;
       this.scene.add(mesh);
       const halfZ = i % 4 === 0 ? 3.1 : 2.15;
-      const blocker = boxBlocker(x, z, 1.15, halfZ);
-      this.blockers.push(blocker);
-      this.traffic.push({ mesh, z, lane, speed, dir, blocker, halfZ });
+      // Visual traffic only — solid NPC hitboxes were wedging the player in place.
+      this.traffic.push({
+        mesh,
+        z,
+        lane,
+        speed,
+        dir,
+        blocker: boxBlocker(x, z, 1.15, halfZ),
+        halfZ,
+      });
     }
   }
 

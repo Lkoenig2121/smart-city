@@ -25,6 +25,8 @@ import { CityHud } from "./CityHud";
 import { StreetView } from "./StreetView";
 import { generateDustfall } from "@/lib/city/generateDustfall";
 import { markMissionDustfall } from "@/lib/city/missions";
+import { syncDustfallUnlock, takeLevelToast } from "@/lib/city/cityProgress";
+import { characterProgress } from "@/lib/city/progression";
 
 const PAN_KEYS: Record<string, string> = {
   w: "up",
@@ -62,6 +64,11 @@ interface HudSnap {
   careerLabel: string;
   mallExists: boolean;
   canSwitchCities: boolean;
+  level: number;
+  levelInto: number;
+  levelNeed: number;
+  levelPct: number;
+  levelToast: string | null;
 }
 
 export function CityCanvas() {
@@ -168,6 +175,7 @@ export function CityCanvas() {
     let frame = 0;
     let last = performance.now();
     let hudAcc = 0;
+    let toastHold: { text: string; until: number } | null = null;
 
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -200,7 +208,13 @@ export function CityCanvas() {
       if (hudAcc > 0.12) {
         hudAcc = 0;
         const clock = formatClock(engine.state);
-        const life = readPlayer();
+        const life = syncDustfallUnlock(readPlayer());
+        const progress = characterProgress(life.life.xp);
+        const note = takeLevelToast();
+        if (note) toastHold = { text: note, until: now + 4500 };
+        const toast =
+          toastHold && now < toastHold.until ? toastHold.text : null;
+        if (toastHold && now >= toastHold.until) toastHold = null;
         const hover = engine.hoverBuildingId
           ? (engine.state.buildings.get(engine.hoverBuildingId) ?? null)
           : engine.hover
@@ -235,6 +249,11 @@ export function CityCanvas() {
           careerLabel: life.career ? officeRank(life.career.xp).label : "",
           mallExists: Boolean(findMall(engine.state)),
           canSwitchCities: Boolean(life.dustfallUnlocked),
+          level: progress.level,
+          levelInto: progress.into,
+          levelNeed: progress.need,
+          levelPct: progress.pct,
+          levelToast: toast,
         });
       }
       frame = requestAnimationFrame(loop);
@@ -299,7 +318,8 @@ export function CityCanvas() {
 
   const pushHud = useCallback((engine: CityEngine) => {
     const clock = formatClock(engine.state);
-    const life = readPlayer();
+    const life = syncDustfallUnlock(readPlayer());
+    const progress = characterProgress(life.life.xp);
     setHud({
       cityName: engine.state.name,
       cityId: engine.state.id,
@@ -323,6 +343,11 @@ export function CityCanvas() {
       careerLabel: life.career ? officeRank(life.career.xp).label : "",
       mallExists: Boolean(findMall(engine.state)),
       canSwitchCities: Boolean(life.dustfallUnlocked),
+      level: progress.level,
+      levelInto: progress.into,
+      levelNeed: progress.need,
+      levelPct: progress.pct,
+      levelToast: takeLevelToast(),
     });
   }, []);
 

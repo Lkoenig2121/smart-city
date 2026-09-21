@@ -109,6 +109,7 @@ export function markMissionDustfall() {
 export function beyondRiversideStatus(player: PlayerState = readPlayer()) {
   const m = syncBeyondRiverside(player).beyondRiverside;
   const steps = [
+    { id: "level", label: "Reach Level 10 by growing Riverside", done: player.dustfallUnlocked },
     { id: "car", label: "Purchase a vehicle at Riverside Motors", done: m.boughtCar },
     { id: "ramp", label: "Drive to the Highway 93 ramp (north)", done: m.reachedRamp },
     { id: "hwy", label: "Follow Highway 93 toward Dustfall", done: m.droveHighway },

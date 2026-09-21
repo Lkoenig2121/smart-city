@@ -614,6 +614,13 @@ function ProfileView({ player, onCharacter }: { player: PlayerState; onCharacter
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
         <div className="h-full bg-amber-400" style={{ width: `${progress.pct}%` }} />
       </div>
+      {!player.dustfallUnlocked ? (
+        <p className="mt-2 rounded-xl bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+          Dustfall unlocks at Level 10 — build Riverside, raise stats, and grow the population.
+        </p>
+      ) : (
+        <p className="mt-2 text-xs text-emerald-200/80">Dustfall is unlocked on the city map.</p>
+      )}
       <p className="mt-4 text-sm">
         {formatDollars(totalBalance(player))} · {player.career ? officeRank(player.career.xp).label : "Unemployed"}
       </p>
@@ -783,8 +790,7 @@ function VehiclesView({
         <div className="mt-3 space-y-2 rounded-2xl bg-white/5 p-3">
           <p className="text-sm font-semibold">{car.model}</p>
           <p className="text-xs text-white/55">
-            {categoryLabel(car.category)} · {Math.round(car.mileage)} mi · Fuel {Math.round(car.fuel)}% · Condition{" "}
-            {Math.round(car.condition)}%
+            {categoryLabel(car.category)} · {Math.round(car.mileage)} mi · Condition {Math.round(car.condition)}%
           </p>
           <p className="text-xs text-sky-200">Plate {car.licensePlate}</p>
           <div className="flex flex-wrap gap-2">

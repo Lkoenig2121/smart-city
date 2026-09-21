@@ -45,6 +45,11 @@ interface HudProps {
   careerLabel: string;
   mallExists?: boolean;
   canSwitchCities?: boolean;
+  level?: number;
+  levelInto?: number;
+  levelNeed?: number;
+  levelPct?: number;
+  levelToast?: string | null;
   onTool: (tool: Tool) => void;
   onClose: () => void;
   onEnterStreet: () => void;
@@ -73,6 +78,11 @@ export function CityHud({
   careerLabel,
   mallExists = false,
   canSwitchCities = false,
+  level = 1,
+  levelInto = 0,
+  levelNeed = 40,
+  levelPct = 0,
+  levelToast = null,
   onTool,
   onClose,
   onEnterStreet,
@@ -124,6 +134,23 @@ export function CityHud({
         </div>
 
         <div className="pointer-events-auto flex items-center gap-2">
+          <div className="min-w-[9.5rem] rounded-2xl border border-white/10 bg-[#101826]/72 px-3 py-2 shadow-2xl backdrop-blur-md">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-amber-200/80">
+              Level {level}
+              {!canSwitchCities ? (
+                <span className="text-white/40"> · Dustfall at 10</span>
+              ) : null}
+            </p>
+            <p className="mt-0.5 text-xs tabular-nums text-white/70">
+              {levelNeed > 0 ? `${levelInto} / ${levelNeed} XP` : "Max"}
+            </p>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-300 to-emerald-400"
+                style={{ width: `${Math.max(4, Math.min(100, levelPct))}%` }}
+              />
+            </div>
+          </div>
           <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#101826]/72 px-3 py-2 text-sm text-white/90 shadow-2xl backdrop-blur-md">
             <Stat label="Population" value={population.toLocaleString()} />
             <span className="h-8 w-px bg-white/10" />
@@ -156,6 +183,17 @@ export function CityHud({
           </button>
         </div>
       </header>
+
+      {levelToast ? (
+        <div className="pointer-events-none absolute left-1/2 top-24 z-30 -translate-x-1/2">
+          <div className="rounded-2xl border border-amber-300/30 bg-[#1a1408]/92 px-5 py-3 text-center shadow-2xl backdrop-blur-md">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-200/80">
+              Level up
+            </p>
+            <p className="mt-0.5 text-sm font-semibold text-white">{levelToast}</p>
+          </div>
+        </div>
+      ) : null}
 
       {events.length ? (
         <div className="pointer-events-none absolute left-4 top-24 z-20 w-[min(22rem,calc(100vw-2rem))] space-y-1.5">

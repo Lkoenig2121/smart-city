@@ -1,8 +1,10 @@
 /** Character XP needed to go from `level` to `level + 1`. Easy to retune. */
 export function xpToNextLevel(level: number) {
-  if (level < 1) return 100;
+  if (level < 1) return 40;
   if (level >= 100) return 0;
-  return 100 + 50 * (level - 1);
+  // Fast climb through Dustfall unlock at 10 (~1,000 XP total), then steeper.
+  if (level < 10) return 40 + 18 * (level - 1);
+  return 120 + 45 * (level - 10);
 }
 
 export function characterProgress(xp: number) {

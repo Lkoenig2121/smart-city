@@ -22,6 +22,12 @@ import { announceConstruction } from "@/lib/simulation/events/cityEvents";
 import { removeTrafficAt, startRoadWorks, toggleTrafficLight } from "@/lib/simulation/traffic/roadNetwork";
 import { createInitialCity, getBuildingAt, recountPopulation } from "./cityState";
 import { tickCity } from "./cityTick";
+import {
+  awardBankConvertXp,
+  awardBuildingXp,
+  awardHotelStackXp,
+  awardTileXp,
+} from "@/lib/city/cityProgress";
 
 export class CityEngine {
   state: CityState;
@@ -134,6 +140,7 @@ export class CityEngine {
       }
       this.reconnectRoads();
       this.mapRev += 1;
+      awardTileXp("road");
       return true;
     }
 
@@ -141,6 +148,7 @@ export class CityEngine {
       if (tile.road || tile.buildingId || tile.terrain === "water") return false;
       tile.tree = { variant: Math.floor(Math.random() * 6), scale: 0.9 + Math.random() * 0.3 };
       this.mapRev += 1;
+      awardTileXp("tree");
       return true;
     }
 
@@ -149,6 +157,7 @@ export class CityEngine {
       tile.terrain = "park";
       if (!tile.tree) tile.tree = { variant: 2, scale: 1 };
       this.mapRev += 1;
+      awardTileXp("park");
       return true;
     }
 
@@ -159,6 +168,7 @@ export class CityEngine {
         return false;
       }
       this.mapRev += 1;
+      awardTileXp("signal");
       return true;
     }
 
@@ -169,6 +179,7 @@ export class CityEngine {
         return false;
       }
       this.mapRev += 1;
+      awardTileXp("works");
       return true;
     }
 
@@ -177,6 +188,7 @@ export class CityEngine {
       tile.terrain = "lot";
       tile.tree = null;
       this.mapRev += 1;
+      awardTileXp("parking");
       return true;
     }
 
@@ -185,6 +197,7 @@ export class CityEngine {
       tile.terrain = "sand";
       tile.tree = null;
       this.mapRev += 1;
+      awardTileXp("sand");
       return true;
     }
 
@@ -232,6 +245,7 @@ export class CityEngine {
     this.state.budget.treasury -= HOTEL_COST;
     this.mapRev += 1;
     announceConstruction(this.state, building);
+    awardBuildingXp("skyscraper", building.id, { lodging: "hotel" });
     return true;
   }
 
@@ -248,13 +262,14 @@ export class CityEngine {
         this.selectedId = existing.id;
         this.placementHint = `${existing.name} is open for deposits`;
         this.mapRev += 1;
+        awardBankConvertXp(existing.id);
         return true;
       }
       this.placementHint = "Needs a clear lot, or click a shop to convert it";
       return false;
     }
 
-    const placed = this.placeBuilding("shop", x, y);
+    const placed = this.placeBuilding("shop", x, y, false);
     if (!placed) {
       this.placementHint = "Needs a clear lot";
       return false;
@@ -264,6 +279,7 @@ export class CityEngine {
     markBank(building, nextBankName(this.state));
     this.placementHint = `${building.name} is open for deposits`;
     this.mapRev += 1;
+    awardBuildingXp("shop", building.id, { venue: "bank" });
     return true;
   }
 
@@ -295,6 +311,7 @@ export class CityEngine {
     this.placementHint = `${building.name} is under construction`;
     this.mapRev += 1;
     announceConstruction(this.state, building);
+    awardBuildingXp("shop", building.id, { venue: "mall" });
     return true;
   }
 
@@ -321,6 +338,7 @@ export class CityEngine {
     this.selectedId = building.id;
     this.placementHint = `${building.name} is now ${building.floors} floors`;
     this.mapRev += 1;
+    awardHotelStackXp(building.id, building.floors);
     return true;
   }
 
@@ -358,6 +376,7 @@ export class CityEngine {
       building.stats.status = "closed";
       announceConstruction(this.state, building);
     }
+    awardBuildingXp(kind, id);
     return true;
   }
 

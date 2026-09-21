@@ -83,8 +83,6 @@ import { markMissionDustfall, markMissionHighway, markMissionRamp } from "@/lib/
 import { DustfallWorld } from "@/lib/street/DustfallWorld";
 import { DUSTFALL_ARRIVAL, generateDustfall } from "@/lib/city/generateDustfall";
 import { writePlayer } from "@/lib/city/player";
-import { driveStats } from "@/lib/city/vehicles";
-
 type Interior =
   | { kind: "stadium" }
   | { kind: "lodging"; buildingId: string; zone: LodgingZone; roomId?: string }
@@ -663,8 +661,7 @@ export function StreetView({
       }
       world.syncOwnedCars(live.ownedVehicles, world.drivingVehicleId);
       if (world.isDriving && activeCar) {
-        const stats = driveStats(activeCar);
-        world.setDriveFuelEmpty(stats.empty);
+        world.setDriveFuelEmpty(false);
         if (world.nearHighwayRamp()) markMissionRamp();
         if (!inDustfall && world.atHighwayPortal() && !dustfallTripRef.current) {
           markMissionHighway();
@@ -849,8 +846,7 @@ export function StreetView({
       tickRef.current(dt * 0.35);
       const live = readPlayer();
       const activeCar = activeOwnedVehicle(live);
-      const empty = activeCar ? driveStats(activeCar).empty : false;
-      world.render(dt, empty);
+      world.render(dt);
       positionRef.current = world.tilePosition;
       if (activeCar) {
         writePlayer(applyDriveTick(live, activeCar.id, dt, world.mph() / 2.15));
@@ -1712,8 +1708,7 @@ export function StreetView({
               <span className="text-sm font-medium text-white/50">MPH</span>
             </p>
             <p className="mt-1 text-xs text-slate-300">
-              Fuel {Math.round(activeOwnedVehicle(player)?.fuel ?? 0)}% · Condition{" "}
-              {Math.round(activeOwnedVehicle(player)?.condition ?? 0)}%
+              Condition {Math.round(activeOwnedVehicle(player)?.condition ?? 0)}%
             </p>
             <p className="mt-1 text-[0.65rem] text-slate-400">
               W gas · S brake · A/D steer · Space handbrake · Shift boost

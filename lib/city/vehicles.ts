@@ -216,7 +216,6 @@ export function applyDriveTick(
   if (!car) return player;
   const miles = (Math.abs(speed) * dt) / 160;
   car.mileage += miles;
-  car.fuel = Math.max(0, car.fuel - miles * 0.35);
   if (Math.abs(speed) > 1) car.condition = Math.max(35, car.condition - miles * 0.02);
   if (pos) {
     car.parkX = pos.x;
@@ -233,7 +232,7 @@ export function driveStats(car: OwnedVehicle) {
   return {
     topSpeed: (catalog?.topSpeed ?? 30) * boost * condition,
     accel: (catalog?.accel ?? 18) * boost * condition,
-    empty: car.fuel <= 0.5,
+    empty: false,
   };
 }
 

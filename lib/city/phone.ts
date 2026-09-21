@@ -13,6 +13,7 @@ import { lodgingGateTile, lodgingUse } from "./lodging";
 import { isSubwayStation, subwayGateTile } from "./subway";
 import { findMall, findVenue, venueGateTile, venueRole } from "./venues";
 import { formatClockMinutes } from "@/lib/simulation/weather/weather";
+import { DUSTFALL_UNLOCK_LEVEL } from "./cityProgress";
 
 const STORAGE = "smartcity-phone";
 
@@ -261,12 +262,12 @@ export function phoneInbox(state: CityState, player: PlayerState): PhoneMessage[
     messages.push(
       makeMessage(save, {
         id: "hwy-tease",
-        sender: "Unknown Number",
-        handle: "unknown",
+        sender: "City Planning Desk",
+        handle: "planning",
         timeMin: 19 * 60 + 12,
         body: [
-          "If you want to see what's beyond Riverside, meet me at the old highway.",
-          "North end of the main arterial — look for the green 93 sign. You'll need a car.",
+          `Grow Riverside to Level ${DUSTFALL_UNLOCK_LEVEL} — place homes, shops, and parks, and welcome more residents.`,
+          "Hit Level 10 and Dustfall opens on the city map. Highway 93 is still there when you want the scenic route.",
         ],
         location: { x: 20, y: 3, label: "Highway 93 ramp" },
       }),
