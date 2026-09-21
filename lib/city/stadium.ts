@@ -35,6 +35,11 @@ export function stadiumGateTile(building: Building) {
 export function isGameNight(state: CityState) {
   const stadium = findStadium(state);
   if (!stadium || !stadiumIsOpen(stadium)) return false;
+  return isBroadcastWindow(state);
+}
+
+/** True during first-pitch hours — used for TV even in cities without a ballpark. */
+export function isBroadcastWindow(state: CityState) {
   const minute = state.clock.minuteOfDay;
   return minute >= GAME_START_MINUTE && minute < GAME_END_MINUTE;
 }
@@ -117,6 +122,16 @@ export function stadiumGame(state: CityState): StadiumGame | null {
 export function stadiumFinal(state: CityState): StadiumGame | null {
   const stadium = findStadium(state);
   if (!stadium || !stadiumIsOpen(stadium)) return null;
+  return broadcastFinal(state);
+}
+
+/** Box score / live game for hotel TVs — works in any city (RNV Sport is a network feed). */
+export function stadiumOnTv(state: CityState) {
+  if (isBroadcastWindow(state)) return simulateGame(state.clock, state.clock.minuteOfDay);
+  return broadcastFinal(state);
+}
+
+function broadcastFinal(state: CityState): StadiumGame | null {
   const minute = state.clock.minuteOfDay;
   if (minute >= GAME_START_MINUTE && minute < GAME_END_MINUTE) return null;
   if (minute >= GAME_END_MINUTE) return simulateGame(state.clock, GAME_END_MINUTE);
@@ -133,11 +148,6 @@ export function stadiumWinner(game: StadiumGame) {
   if (game.ravens > game.visitors) return "Ravens";
   if (game.visitors > game.ravens) return "Bears";
   return null;
-}
-
-/** Live game if one is on, otherwise the most recent final. */
-export function stadiumOnTv(state: CityState) {
-  return stadiumGame(state) ?? stadiumFinal(state);
 }
 
 export interface StadiumBigPlay {

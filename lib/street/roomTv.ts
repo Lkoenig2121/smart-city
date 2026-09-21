@@ -3,7 +3,7 @@ import { advanceDay, weekdayOf } from "@/lib/city/calendar";
 import { DAYS, type CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
 import { forecastFor, weatherEmoji } from "@/lib/simulation/weather/weather";
-import { stadiumBigPlay, stadiumOnTv, stadiumWinner } from "@/lib/city/stadium";
+import { isBroadcastWindow, stadiumBigPlay, stadiumOnTv, stadiumWinner } from "@/lib/city/stadium";
 
 export interface RoomTv {
   update: (dt: number, state: CityState) => void;
@@ -123,10 +123,20 @@ export function addRoomTelevision(
   const draw = (dt: number, state: CityState) => {
     if (!ctx || !texture) return;
     elapsed += dt;
+    const clock = formatClock(state);
+
+    // During the live game window, lock onto RNV Sport — no channel surfing.
+    if (isBroadcastWindow(state)) {
+      drawBaseball(ctx, elapsed, clock, state);
+      glow.color.set(0x8fd48a);
+      glow.intensity = 2.4;
+      texture.needsUpdate = true;
+      return;
+    }
+
     const slot = elapsed % (CYCLE * CHANNELS.length);
     const index = Math.floor(slot / CYCLE) % CHANNELS.length;
     const local = slot % CYCLE;
-    const clock = formatClock(state);
 
     if (local < SWITCH_SECS) {
       drawZap(ctx, CHANNELS[index], local / SWITCH_SECS);
