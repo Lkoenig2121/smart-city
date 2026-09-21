@@ -161,6 +161,14 @@ export class VenueWorld {
     ) ?? null;
   }
 
+  nearFurnish() {
+    return this.interior.nearFurnish?.(
+      this.controls.position.x,
+      this.controls.position.z,
+      this.controls.position.y - EYE_HEIGHT,
+    ) ?? null;
+  }
+
   nearSnack() {
     return this.interior.nearSnack?.(
       this.controls.position.x,

@@ -5,6 +5,8 @@ import { lodgingUse, type LodgingRoom, type LodgingZone } from "@/lib/city/lodgi
 import type { Blocker } from "./buildCity";
 import { MeshBuilder } from "./meshBuilder";
 import { addRoomTelevision, type RoomTv } from "./roomTv";
+import { resolveRoomStyle } from "@/lib/city/furnishings";
+import { readPlayer } from "@/lib/city/player";
 
 export interface LodgingInterior {
   group: THREE.Group;
@@ -17,6 +19,8 @@ export interface LodgingInterior {
   nearDesk: (x: number, z: number) => boolean;
   nearComputer: (x: number, z: number) => boolean;
   nearBed: (x: number, z: number) => boolean;
+  /** True when standing by the dresser PlayStation. */
+  nearConsole: (x: number, z: number) => boolean;
   nearExit: (x: number, z: number) => boolean;
   computerHit: THREE.Object3D | null;
   windowMesh: THREE.Mesh | null;
@@ -196,6 +200,7 @@ function buildLobby(building: Building): LodgingInterior {
     nearDesk: (x, z) => Math.abs(x) < 8 && z > -4.4 && z < 1.6,
     nearComputer: () => false,
     nearBed: () => false,
+    nearConsole: () => false,
     nearExit: (x, z) => z > 12.4 && Math.abs(x) < 8,
     computerHit: null,
     windowMesh: null,
@@ -232,7 +237,10 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
   const winY0 = 1.05;
   const winY1 = 3.55;
   const doorH = 3.18;
-  const carpet = new THREE.Color(club ? "#3d3a48" : hotel ? "#d8d0c4" : "#cfc4b4");
+  const style = resolveRoomStyle(readPlayer());
+  const carpet = new THREE.Color(
+    style.floorColor ?? (club ? "#3d3a48" : hotel ? "#d8d0c4" : "#cfc4b4"),
+  );
   const goldWall = new THREE.Color(club ? "#2c3344" : hotel ? "#c9b17a" : "#d4c4a8");
   const wood = new THREE.Color(club ? "#2a2420" : "#5a3d28");
   const white = new THREE.Color(club ? "#e8e2d4" : "#f4f1ea");
@@ -339,7 +347,21 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
   assemble(group, floorB, wallB, trimB, disposables);
 
   const computer = addDeskComputer(group, disposables);
-  const tv = addRoomTelevision(group, disposables);
+  const tv = addRoomTelevision(group, disposables, {
+    scale: style.tvScale,
+    hasConsole: style.nuketown,
+  });
+
+  // Optional console under the TV when equipped.
+  if (style.nuketown) {
+    const deck = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55, 0.08, 0.36),
+      new THREE.MeshStandardMaterial({ color: "#1a1a1e", roughness: 0.35, metalness: 0.4 }),
+    );
+    deck.position.set(4.58, 0.92, -3.05);
+    group.add(deck);
+    disposables.push(deck.geometry, deck.material);
+  }
 
   return {
     group,
@@ -359,6 +381,8 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
     nearBed: (x, z) =>
       (x > -1.5 && x < -0.12 && z > -1.6 && z < 5.35) ||
       (x > -6.5 && x < -1.15 && z > 5.05 && z < 6.4),
+    nearConsole: (x, z) =>
+      Boolean(style.nuketown) && x > 3.2 && x < 6.2 && z > -4.8 && z < -2.2,
     nearExit: (_x, z) => z > 6.6,
     computerHit: computer,
     windowMesh: glass,
@@ -1519,6 +1543,7 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
     nearDesk: (x, z) => x > -12.05 && x < -8.7 && z > -9.35 && z < -4.6,
     nearComputer: () => false,
     nearBed: () => false,
+    nearConsole: () => false,
     nearExit: (_x, z) => z > 12.8,
     computerHit: null,
     windowMesh: null,

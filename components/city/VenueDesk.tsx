@@ -296,12 +296,12 @@ function MallDesk({ building }: { building: Building }) {
       <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Mall</p>
       <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
       <p className="mt-2 text-sm text-slate-300">
-        First floor is the clothing concourse. Ride the south escalators to second-floor shops and snack huts, then east or west to the third-floor food court. Press E at a stall to buy hamburgers, hot dogs, nachos, and drinks. Press E at a rack to browse, I for inventory.
+        First floor has clothing plus Living Room Co, Harbor Cinema, Floor Studio, and Harbor Estate for homes. Ride the escalators for more shops and the food court. Press E at a stall or rack to buy.
       </p>
       <ul className="mt-3 space-y-1 text-left text-sm text-slate-200">
         <li className="rounded-lg bg-black/30 px-3 py-1.5">
           <span className="font-semibold text-amber-200">Level 1</span>
-          <span className="text-slate-400"> · Fashion, jewelry, sneakers, kids, luxury, department</span>
+          <span className="text-slate-400"> · Fashion · furniture · TVs · flooring · estates</span>
         </li>
         <li className="rounded-lg bg-black/30 px-3 py-1.5">
           <span className="font-semibold text-amber-200">Level 2</span>

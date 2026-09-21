@@ -9,6 +9,14 @@ import {
   type LifeState,
 } from "./character";
 import { parseOwnedVehicles, type OwnedVehicle } from "./vehicles";
+import {
+  emptyRoomLoadout,
+  parseOwnedFurnishings,
+  parseOwnedHomes,
+  parseRoomLoadout,
+  type OwnedHome,
+  type RoomLoadout,
+} from "./furnishings";
 
 const STORAGE = "smartcity-player";
 const STARTING_WALLET = 500;
@@ -74,6 +82,10 @@ export interface PlayerState {
   ownedVehicles: OwnedVehicle[];
   activeVehicleId: string | null;
   dustfallUnlocked: boolean;
+  ownedFurnishings: string[];
+  equippedFurnish: RoomLoadout;
+  ownedHomes: OwnedHome[];
+  activeHomeId: string | null;
 }
 
 export function emptyPlayer(): PlayerState {
@@ -88,6 +100,10 @@ export function emptyPlayer(): PlayerState {
     ownedVehicles: [],
     activeVehicleId: null,
     dustfallUnlocked: false,
+    ownedFurnishings: [],
+    equippedFurnish: emptyRoomLoadout(),
+    ownedHomes: [],
+    activeHomeId: null,
   };
 }
 
@@ -450,6 +466,10 @@ function parsePlayer(value: unknown): PlayerState {
     ownedVehicles: parseOwnedVehicles(raw.ownedVehicles),
     activeVehicleId: typeof raw.activeVehicleId === "string" ? raw.activeVehicleId : null,
     dustfallUnlocked: Boolean(raw.dustfallUnlocked),
+    ownedFurnishings: parseOwnedFurnishings(raw.ownedFurnishings),
+    equippedFurnish: parseRoomLoadout(raw.equippedFurnish),
+    ownedHomes: parseOwnedHomes(raw.ownedHomes),
+    activeHomeId: typeof raw.activeHomeId === "string" ? raw.activeHomeId : null,
   };
 }
 

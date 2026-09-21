@@ -7,6 +7,12 @@ import { isBroadcastWindow, stadiumBigPlay, stadiumOnTv, stadiumWinner } from "@
 
 export interface RoomTv {
   update: (dt: number, state: CityState) => void;
+  /** True when a console is present under the TV. */
+  hasConsole: () => boolean;
+  /** Whether the console feed is currently on screen. */
+  isNuketown: () => boolean;
+  /** Flip between TV channels and Nuketown. Returns false if no console. */
+  toggleNuketown: () => boolean;
   dispose: () => void;
 }
 
@@ -26,9 +32,13 @@ const CHANNELS = [
 export function addRoomTelevision(
   group: THREE.Group,
   disposables: Array<{ dispose: () => void }>,
+  options: { scale?: number; hasConsole?: boolean } = {},
 ): RoomTv {
   const tv = new THREE.Group();
   tv.name = "television";
+  const scale = Math.max(0.85, Math.min(2.2, options.scale ?? 1));
+  const hasConsole = Boolean(options.hasConsole);
+  let nuketownMode = false;
 
   const black = new THREE.MeshStandardMaterial({
     color: "#121417",
@@ -57,8 +67,8 @@ export function addRoomTelevision(
     return mesh;
   };
 
-  const screenW = 2.28;
-  const screenH = 1.28;
+  const screenW = 2.28 * scale;
+  const screenH = 1.28 * scale;
   const bezel = 0.055;
   const chin = 0.09;
   const cx = 4.58;
@@ -125,6 +135,15 @@ export function addRoomTelevision(
     elapsed += dt;
     const clock = formatClock(state);
 
+    // Console feed — player toggles this with P beside the PlayStation.
+    if (hasConsole && nuketownMode) {
+      drawNuketown(ctx, elapsed, clock);
+      glow.color.set(0xe8a060);
+      glow.intensity = 2.6;
+      texture.needsUpdate = true;
+      return;
+    }
+
     // During the live game window, lock onto RNV Sport — no channel surfing.
     if (isBroadcastWindow(state)) {
       drawBaseball(ctx, elapsed, clock, state);
@@ -155,6 +174,13 @@ export function addRoomTelevision(
 
   return {
     update: draw,
+    hasConsole: () => hasConsole,
+    isNuketown: () => nuketownMode,
+    toggleNuketown: () => {
+      if (!hasConsole) return false;
+      nuketownMode = !nuketownMode;
+      return true;
+    },
     dispose: () => undefined,
   };
 }
@@ -704,6 +730,109 @@ function drawWeather(
   ctx.font = "600 12px system-ui, sans-serif";
   ctx.textAlign = "right";
   ctx.fillText(clock.time, W - 24, 36);
+}
+
+function drawNuketown(
+  ctx: CanvasRenderingContext2D,
+  t: number,
+  clock: ReturnType<typeof formatClock>,
+) {
+  const loop = 8.5;
+  const u = (t % loop) / loop;
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, "#6a7a48");
+  sky.addColorStop(0.45, "#9aaa62");
+  sky.addColorStop(1, "#c4b48a");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+
+  // Dust bowl ground.
+  ctx.fillStyle = "#b89a62";
+  ctx.fillRect(0, 210, W, H - 210);
+  ctx.fillStyle = "#9a7a48";
+  ctx.beginPath();
+  ctx.moveTo(0, 210);
+  ctx.quadraticCurveTo(220, 188, 640, 218);
+  ctx.lineTo(640, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fill();
+
+  // Ruined houses.
+  const houses = [
+    { x: 40, w: 110, h: 78 },
+    { x: 190, w: 96, h: 64 },
+    { x: 360, w: 128, h: 86 },
+    { x: 520, w: 90, h: 70 },
+  ];
+  for (const house of houses) {
+    ctx.fillStyle = "#d8c8a0";
+    ctx.fillRect(house.x, 210 - house.h, house.w, house.h);
+    ctx.fillStyle = "#6a5030";
+    ctx.beginPath();
+    ctx.moveTo(house.x - 8, 210 - house.h);
+    ctx.lineTo(house.x + house.w / 2, 210 - house.h - 28);
+    ctx.lineTo(house.x + house.w + 8, 210 - house.h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#1a1410";
+    ctx.fillRect(house.x + 18, 210 - house.h + 22, 28, 34);
+    ctx.fillRect(house.x + house.w - 42, 210 - house.h + 18, 24, 22);
+  }
+
+  // Bus / car husk.
+  const busX = 240 + Math.sin(t * 0.4) * 6;
+  ctx.fillStyle = "#4a6a3a";
+  ctx.fillRect(busX, 236, 150, 42);
+  ctx.fillStyle = "#2a3a22";
+  ctx.fillRect(busX + 12, 242, 36, 18);
+  ctx.fillRect(busX + 58, 242, 36, 18);
+  ctx.fillRect(busX + 104, 242, 30, 18);
+
+  // Muzzle flash / gunfire spark.
+  if (u > 0.2 && u < 0.28) {
+    ctx.fillStyle = "#ffe08a";
+    ctx.beginPath();
+    ctx.arc(420, 250, 18, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Soldiers.
+  const bob = Math.sin(t * 9) * 2;
+  drawBallplayer(ctx, 180 + Math.sin(t * 1.4) * 40, 268 + bob, "#3d5a40", 1.05);
+  drawBallplayer(ctx, 460 - Math.cos(t * 1.1) * 30, 272 - bob, "#5a4030", 1.05);
+
+  roundRectPath(ctx, 14, 10, 220, 54, 8);
+  ctx.fillStyle = "#10233f";
+  ctx.fill();
+  ctx.fillStyle = "#e8a060";
+  ctx.font = "800 12px system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("PS4  ·  LIVE", 26, 30);
+  ctx.fillStyle = "#f4f1ea";
+  ctx.font = "800 18px system-ui, sans-serif";
+  ctx.fillText("NUKETOWN", 26, 52);
+
+  roundRectPath(ctx, 430, 10, 196, 40, 8);
+  ctx.fillStyle = "rgba(10,14,22,0.78)";
+  ctx.fill();
+  ctx.fillStyle = "#e8dcc8";
+  ctx.font = "600 13px system-ui, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText(clock.time, 610, 36);
+
+  ctx.fillStyle = "#1a1206";
+  ctx.fillRect(0, H - 42, W, 42);
+  ctx.fillStyle = "#e67e22";
+  ctx.fillRect(0, H - 42, 108, 42);
+  ctx.fillStyle = "#fff8f2";
+  ctx.font = "800 13px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("MP", 54, H - 16);
+  ctx.fillStyle = "#f4e6c0";
+  ctx.font = "700 15px system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("Team Deathmatch  ·  Nuketown  ·  Harbor Cinema", 122, H - 16);
 }
 
 function cloud(ctx: CanvasRenderingContext2D, x: number, y: number, w: number) {

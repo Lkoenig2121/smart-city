@@ -180,6 +180,22 @@ export class LodgingWorld {
     return this.interior.nearBed(this.controls.position.x, this.controls.position.z);
   }
 
+  nearConsole() {
+    return this.interior.nearConsole(this.controls.position.x, this.controls.position.z);
+  }
+
+  hasConsole() {
+    return Boolean(this.interior.tv?.hasConsole());
+  }
+
+  isNuketown() {
+    return Boolean(this.interior.tv?.isNuketown());
+  }
+
+  toggleNuketown() {
+    return this.interior.tv?.toggleNuketown() ?? false;
+  }
+
   nearSlider() {
     return Boolean(this.interior.slider?.near(this.controls.position.x, this.controls.position.z));
   }

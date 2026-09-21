@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Building } from "@/lib/city/types";
 import type { ClothStore } from "@/lib/city/clothing";
+import type { FurnishStore } from "@/lib/city/furnishings";
 import { FOOD_COURT_MENU } from "@/lib/city/consumables";
 import { venueRole, type VenueRole } from "@/lib/city/venues";
 import type { Blocker } from "./buildCity";
@@ -15,6 +16,7 @@ export interface VenueInterior {
   nearDesk: (x: number, z: number) => boolean;
   nearExit: (x: number, z: number, feetY?: number) => boolean;
   nearStore?: (x: number, z: number, feetY?: number) => ClothStore | null;
+  nearFurnish?: (x: number, z: number, feetY?: number) => FurnishStore | null;
   nearSnack?: (x: number, z: number, feetY?: number) => { id: string; name: string; items: string[] } | null;
   update?: (dt: number) => void;
   rideAt?: (x: number, z: number, feetY?: number) => { x: number; z: number } | null;
@@ -157,6 +159,34 @@ const MALL_BAYS: {
   { id: "toys", minX: 6.2, maxX: 38.4, minZ: MALL_SHOP, maxZ: 61.4, y0: MALL_L3, front: "z-", color: "#e67e22", name: "Sky Toys", blurb: "Packs · play" },
 ];
 
+/** Furniture / home shops filling leftover mall frontage. */
+const FURNISH_BAYS: {
+  id: FurnishStore;
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  y0: number;
+  front: StoreFront;
+  color: string;
+  name: string;
+  blurb: string;
+}[] = [
+  // Level 1 north — was empty beside the directory.
+  { id: "living", minX: -38.4, maxX: -12.8, minZ: MALL_SHOP, maxZ: 61.4, y0: 0, front: "z-", color: "#8a6a4a", name: "Living Room Co", blurb: "Floors · living kits" },
+  { id: "cinema", minX: 6.2, maxX: 38.4, minZ: MALL_SHOP, maxZ: 61.4, y0: 0, front: "z-", color: "#1f4d8c", name: "Harbor Cinema", blurb: "TVs · consoles" },
+  // Level 1 south center gap between luxury / department.
+  { id: "floors", minX: -4.2, maxX: 4.2, minZ: -61.4, maxZ: -MALL_SHOP, y0: 0, front: "z+", color: "#b8956a", name: "Floor Studio", blurb: "Carpet · hardwood" },
+  // Level 1 mid-west corridor that used to be a solid partition.
+  { id: "estate", minX: -61.4, maxX: -MALL_SHOP, minZ: -2.6, maxZ: 2.6, y0: 0, front: "x+", color: "#c9a44c", name: "Harbor Estate", blurb: "Houses · mansions" },
+];
+
+type MallBay = (typeof MALL_BAYS)[number] | (typeof FURNISH_BAYS)[number];
+
+function allMallBays(): MallBay[] {
+  return [...MALL_BAYS, ...FURNISH_BAYS];
+}
+
 const HUT_W = 4.6;
 const HUT_D = 3.35;
 const HUT_H = 2.72;
@@ -275,7 +305,7 @@ function buildMallInterior(): VenueInterior {
   addDirectory(wallB, trimB, blockers, gold, marble);
   addSnackHuts(group, wallB, trimB, blockers, disposables, gold);
 
-  for (const bay of MALL_BAYS) {
+  for (const bay of allMallBays()) {
     const midX = (bay.minX + bay.maxX) / 2;
     const midZ = (bay.minZ + bay.maxZ) / 2;
     const y = bay.y0 + 4.2;
@@ -284,7 +314,7 @@ function buildMallInterior(): VenueInterior {
     else if (bay.front === "z-") addMallSign(group, disposables, bay.name, bay.blurb, bay.color, midX, y, bay.minZ - 0.08, Math.PI, 8.4);
     else addMallSign(group, disposables, bay.name, bay.blurb, bay.color, midX, y, bay.maxZ + 0.08, 0, 8.4);
   }
-  addMallSign(group, disposables, "HARBOR MALL", "Three floors · Stores · Food court", "#5a6570", 0, 4.4, 60.2, Math.PI, 11.2);
+  addMallSign(group, disposables, "HARBOR MALL", "Three floors · Stores · Homes · Food court", "#5a6570", 0, 4.4, 60.2, Math.PI, 11.2);
   addMallSign(group, disposables, "HARBOR MALL", "Atrium galleries", "#5a6570", 0, 20.6, 0, 0, 12.4);
 
   assemble(group, floorB, wallB, trimB, disposables, true);
@@ -300,6 +330,18 @@ function buildMallInterior(): VenueInterior {
     nearExit: (x, z, feetY = 0) => feetY < 1.5 && z > 58.8 && Math.abs(x) < 4.4,
     nearStore: (x, z, feetY = 0) => {
       const bay = MALL_BAYS.find(
+        (item) =>
+          x >= item.minX &&
+          x <= item.maxX &&
+          z >= item.minZ &&
+          z <= item.maxZ &&
+          feetY >= item.y0 - 0.6 &&
+          feetY < item.y0 + MALL_STORE_H,
+      );
+      return bay?.id ?? null;
+    },
+    nearFurnish: (x, z, feetY = 0) => {
+      const bay = FURNISH_BAYS.find(
         (item) =>
           x >= item.minX &&
           x <= item.maxX &&
@@ -965,7 +1007,7 @@ function addMallStores(
   wall: THREE.Color,
   gold: THREE.Color,
 ) {
-  for (const bay of MALL_BAYS) {
+  for (const bay of allMallBays()) {
     const y0 = bay.y0;
     const y1 = bay.y0 + MALL_STORE_H;
     const lintel = new THREE.Color(bay.color);
@@ -989,11 +1031,11 @@ function addMallStores(
       partition(wallB, blockers, bay.minX - 0.28, bay.minZ, bay.minX, bay.maxZ, y0, y1, wall);
     }
   }
-  partition(wallB, blockers, -4.2, -MALL_SHOP - 0.28, 4.2, -MALL_SHOP, 0, MALL_STORE_H, wall);
+  // Remaining mid-east L1 strip (estate took the west mid corridor).
+  partition(wallB, blockers, MALL_SHOP, -2.6, 61.4, 2.6, 0, MALL_STORE_H, wall);
+  // Upper-level north center gaps stay closed.
   partition(wallB, blockers, -6.2, MALL_SHOP, 6.2, MALL_SHOP + 0.28, MALL_L2, MALL_L2 + MALL_STORE_H, wall);
   partition(wallB, blockers, -6.2, MALL_SHOP, 6.2, MALL_SHOP + 0.28, MALL_L3, MALL_L3 + MALL_STORE_H, wall);
-  partition(wallB, blockers, -61.4, -2.6, -MALL_SHOP, 2.6, 0, MALL_STORE_H, wall);
-  partition(wallB, blockers, MALL_SHOP, -2.6, 61.4, 2.6, 0, MALL_STORE_H, wall);
 }
 
 function storefrontX(
@@ -1074,7 +1116,7 @@ function partition(
 }
 
 function furnishMallStores(wallB: MeshBuilder, trimB: MeshBuilder, blockers: Blocker[], gold: THREE.Color) {
-  for (const bay of MALL_BAYS) {
+  for (const bay of allMallBays()) {
     const cloth = new THREE.Color(bay.color);
     const midX = (bay.minX + bay.maxX) / 2;
     const midZ = (bay.minZ + bay.maxZ) / 2;

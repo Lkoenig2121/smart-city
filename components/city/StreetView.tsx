@@ -49,6 +49,12 @@ import {
 } from "@/lib/city/phone";
 import { discoverPlace } from "@/lib/city/wardrobe";
 import { STORES, type ClothStore } from "@/lib/city/clothing";
+import {
+  FURNISH_STORES,
+  makeOwnedHomeBuilding,
+  type FurnishStore,
+} from "@/lib/city/furnishings";
+import { FurnitureShop } from "./FurnitureShop";
 import type { MoveMode } from "@/lib/street/controls";
 import { StreetWorld } from "@/lib/street/StreetWorld";
 import { StadiumWorld } from "@/lib/street/StadiumWorld";
@@ -137,7 +143,9 @@ export function StreetView({
   const sleepingRef = useRef(false);
   const characterMenuRef = useRef<CharacterTab | null>(null);
   const mallShopRef = useRef<ClothStore | null>(null);
+  const mallFurnishRef = useRef<FurnishStore | null>(null);
   const mallSnackRef = useRef<{ name: string; items: string[] } | null>(null);
+  const ownedHomeBuildingRef = useRef<Building | null>(null);
   const barMenuRef = useRef(false);
   const phoneOpenRef = useRef(false);
   const tickRef = useRef(onTick);
@@ -166,6 +174,8 @@ export function StreetView({
   const [pickingRoom, setPickingRoom] = useState(false);
   const [atBed, setAtBed] = useState(false);
   const [atSlider, setAtSlider] = useState(false);
+  const [atConsole, setAtConsole] = useState(false);
+  const [nuketownOn, setNuketownOn] = useState(false);
   const [sliderOpen, setSliderOpen] = useState(false);
   const [sleeping, setSleeping] = useState(false);
   const [sleepPhase, setSleepPhase] = useState<"night" | "morning">("night");
@@ -182,7 +192,9 @@ export function StreetView({
   const sipTimerRef = useRef(0);
   const [characterMenu, setCharacterMenu] = useState<CharacterTab | null>(null);
   const [mallShop, setMallShop] = useState<ClothStore | null>(null);
+  const [mallFurnish, setMallFurnish] = useState<FurnishStore | null>(null);
   const [mallStore, setMallStore] = useState<ClothStore | null>(null);
+  const [mallFurnishNear, setMallFurnishNear] = useState<FurnishStore | null>(null);
   const [mallHut, setMallHut] = useState<string | null>(null);
   const [mallSnack, setMallSnack] = useState<{ name: string; items: string[] } | null>(null);
   const [motorsOpen, setMotorsOpen] = useState(false);
@@ -223,7 +235,12 @@ export function StreetView({
 
   const inside = interior !== null;
   const lodgingBuilding =
-    interior?.kind === "lodging" ? findLodging(state, interior.buildingId) : null;
+    interior?.kind === "lodging"
+      ? (findLodging(state, interior.buildingId) ??
+        (ownedHomeBuildingRef.current?.id === interior.buildingId
+          ? ownedHomeBuildingRef.current
+          : null))
+      : null;
   const subwayBuilding =
     interior?.kind === "subway" ? findSubwayStation(state, interior.stationId) : null;
   const venueBuilding =
@@ -231,6 +248,7 @@ export function StreetView({
   const busyUi =
     Boolean(characterMenu) ||
     Boolean(mallShop) ||
+    Boolean(mallFurnish) ||
     Boolean(mallSnack) ||
     barMenu ||
     phoneOpen ||
@@ -266,18 +284,19 @@ export function StreetView({
   useEffect(() => {
     characterMenuRef.current = characterMenu;
     mallShopRef.current = mallShop;
+    mallFurnishRef.current = mallFurnish;
     mallSnackRef.current = mallSnack;
     barMenuRef.current = barMenu;
     phoneOpenRef.current = phoneOpen;
     motorsOpenRef.current = motorsOpen;
     drivingRef.current = driving;
-  }, [characterMenu, mallShop, mallSnack, barMenu, phoneOpen, motorsOpen, driving]);
+  }, [characterMenu, mallShop, mallFurnish, mallSnack, barMenu, phoneOpen, motorsOpen, driving]);
 
   const openPhone = (threadId: string | null = null) => {
     if (sleepingRef.current) return;
     if (atComputerRef.current || atOfficeComputerRef.current) return;
     if (pickingStop || pickingRoom || riding) return;
-    if (mallShopRef.current || mallSnackRef.current) return;
+    if (mallShopRef.current || mallFurnishRef.current || mallSnackRef.current) return;
     if (characterMenuRef.current) {
       characterMenuRef.current = null;
       setCharacterMenu(null);
@@ -383,6 +402,12 @@ export function StreetView({
           setMallShop(null);
           return;
         }
+        if (mallFurnishRef.current) {
+          event.preventDefault();
+          mallFurnishRef.current = null;
+          setMallFurnish(null);
+          return;
+        }
         if (mallSnackRef.current) {
           event.preventDefault();
           mallSnackRef.current = null;
@@ -408,7 +433,7 @@ export function StreetView({
         if (sleepingRef.current) return;
         if (atComputerRef.current || atOfficeComputerRef.current) return;
         if (pickingStop || pickingRoom || riding) return;
-        if (mallShopRef.current || mallSnackRef.current) return;
+        if (mallShopRef.current || mallFurnishRef.current || mallSnackRef.current) return;
         event.preventDefault();
         if (phoneOpenRef.current) closePhone();
         else openPhone();
@@ -419,7 +444,7 @@ export function StreetView({
         if (phoneOpenRef.current) return;
         if (atComputerRef.current || atOfficeComputerRef.current) return;
         if (pickingStop || pickingRoom || riding) return;
-        if (mallShopRef.current || mallSnackRef.current) return;
+        if (mallShopRef.current || mallFurnishRef.current || mallSnackRef.current) return;
         event.preventDefault();
         const next = characterMenuRef.current ? null : "inventory";
         characterMenuRef.current = next;
@@ -431,8 +456,18 @@ export function StreetView({
         if (phoneOpenRef.current) return;
         if (atComputerRef.current || atOfficeComputerRef.current) return;
         if (pickingStop || pickingRoom || riding) return;
-        if (mallShopRef.current || mallSnackRef.current) return;
-        if (interiorRef.current?.kind !== "lodging" || interiorRef.current.zone !== "pool") return;
+        if (mallShopRef.current || mallFurnishRef.current || mallSnackRef.current) return;
+        const lodging = lodgingRef.current;
+        const zone = interiorRef.current?.kind === "lodging" ? interiorRef.current.zone : null;
+        // In a guest room: P beside the PlayStation toggles Nuketown on the TV.
+        if (zone === "room" && lodging?.nearConsole()) {
+          event.preventDefault();
+          if (lodging.toggleNuketown()) {
+            setNuketownOn(lodging.isNuketown());
+          }
+          return;
+        }
+        if (zone !== "pool") return;
         event.preventDefault();
         if (characterMenuRef.current) {
           characterMenuRef.current = null;
@@ -472,7 +507,7 @@ export function StreetView({
     const onDown = (event: globalThis.MouseEvent) => {
       if (event.button !== 0) return;
       if (!document.pointerLockElement) return;
-      if (sleepingRef.current || characterMenuRef.current || mallShopRef.current || mallSnackRef.current || phoneOpenRef.current) return;
+      if (sleepingRef.current || characterMenuRef.current || mallShopRef.current || mallFurnishRef.current || mallSnackRef.current || phoneOpenRef.current) return;
       if (atComputerRef.current || atOfficeComputerRef.current || atDeskRef.current) return;
       const item = consumableById(heldRef.current ?? "");
       if (!item) return;
@@ -985,6 +1020,8 @@ export function StreetView({
     setPickingRoom(false);
     setAtBed(false);
     setAtSlider(false);
+    setAtConsole(false);
+    setNuketownOn(false);
     setSliderOpen(false);
     setSleeping(false);
     setSleepPhase("night");
@@ -1001,7 +1038,13 @@ export function StreetView({
     ro.observe(wrap);
 
     const leaveStreet = () => {
-      setSpawn(lodgingGateTile(building));
+      if (ownedHomeBuildingRef.current?.id === building.id) {
+        ownedHomeBuildingRef.current = null;
+        const mall = [...state.buildings.values()].find((b) => venueRole(b) === "mall");
+        setSpawn(mall ? venueGateTile(mall) : entry);
+      } else {
+        setSpawn(lodgingGateTile(building));
+      }
       setInterior(null);
       setAtDesk(false);
     };
@@ -1098,6 +1141,9 @@ export function StreetView({
       const slider = interior.zone === "room" && !atComputerRef.current && world.nearSlider();
       setAtSlider((prev) => (prev === slider ? prev : slider));
       setSliderOpen(world.sliderOpen());
+      const consoleNear = interior.zone === "room" && !atComputerRef.current && world.nearConsole();
+      setAtConsole((prev) => (prev === consoleNear ? prev : consoleNear));
+      setNuketownOn(world.isNuketown());
       const aiming = interior.zone === "room" && !atComputerRef.current && !sleepingRef.current && world.aimedAtComputer();
       setAimComputer((prev) => (prev === aiming ? prev : aiming));
       clockAcc += dt;
@@ -1168,9 +1214,12 @@ export function StreetView({
       setAtDesk(false);
       setAtOfficeComputer(false);
       mallShopRef.current = null;
+      mallFurnishRef.current = null;
       mallSnackRef.current = null;
       setMallShop(null);
+      setMallFurnish(null);
       setMallStore(null);
+      setMallFurnishNear(null);
       setMallHut(null);
       setMallSnack(null);
     };
@@ -1181,7 +1230,7 @@ export function StreetView({
         if (atOfficeComputerRef.current) return true;
         if (event.code !== "KeyE") return false;
         event.preventDefault();
-        if (characterMenuRef.current || mallShopRef.current || mallSnackRef.current) return true;
+        if (characterMenuRef.current || mallShopRef.current || mallFurnishRef.current || mallSnackRef.current) return true;
         if (world.nearExit()) leaveStreet();
         else {
           const hut = world.nearSnack();
@@ -1191,11 +1240,18 @@ export function StreetView({
             setMallSnack(menu);
             if (document.pointerLockElement === canvas) document.exitPointerLock();
           } else {
-            const store = world.nearStore();
-            if (store) {
-              mallShopRef.current = store;
-              setMallShop(store);
+            const furnish = world.nearFurnish();
+            if (furnish) {
+              mallFurnishRef.current = furnish;
+              setMallFurnish(furnish);
               if (document.pointerLockElement === canvas) document.exitPointerLock();
+            } else {
+              const store = world.nearStore();
+              if (store) {
+                mallShopRef.current = store;
+                setMallShop(store);
+                if (document.pointerLockElement === canvas) document.exitPointerLock();
+              }
             }
           }
         }
@@ -1214,12 +1270,14 @@ export function StreetView({
       world.render(dt);
       const desk = world.nearDesk();
       if (!desk) deskDismissedRef.current = false;
-      const showDesk = desk && !deskDismissedRef.current && !mallShopRef.current && !mallSnackRef.current && !characterMenuRef.current;
+      const showDesk = desk && !deskDismissedRef.current && !mallShopRef.current && !mallFurnishRef.current && !mallSnackRef.current && !characterMenuRef.current;
       atDeskRef.current = showDesk;
       setAtDesk((prev) => (prev === showDesk ? prev : showDesk));
       if (showDesk && document.pointerLockElement === canvas) document.exitPointerLock();
       const store = world.nearStore();
       setMallStore((prev) => (prev === store ? prev : store));
+      const furnish = world.nearFurnish();
+      setMallFurnishNear((prev) => (prev === furnish ? prev : furnish));
       const hut = world.nearSnack();
       setMallHut((prev) => (prev === (hut?.name ?? null) ? prev : hut?.name ?? null));
       clockAcc += dt;
@@ -1338,14 +1396,14 @@ export function StreetView({
   }, [active, interior, state]);
 
   const requestLock = () => {
-    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallSnack || phoneOpen) return;
+    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallFurnish || mallSnack || phoneOpen) return;
     const canvas = inside ? canvasRef.current : outdoorCanvasRef.current;
     if (!canvas) return;
     void canvas.requestPointerLock();
   };
 
   const onCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallSnack || phoneOpen) return;
+    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallFurnish || mallSnack || phoneOpen) return;
 
     // Outdoor street: click the white-highlighted building to walk in.
     if (!inside && !dustfallTrip && !driving) {
@@ -1619,7 +1677,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom && !sleeping && !atOfficeComputer && !characterMenu && !mallShop && !mallSnack && !phoneOpen && !motorsOpen ? (
+      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom && !sleeping && !atOfficeComputer && !characterMenu && !mallShop && !mallFurnish && !mallSnack && !phoneOpen && !motorsOpen ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
           <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
             {driving || dustfallTrip ? (
@@ -2052,7 +2110,18 @@ export function StreetView({
         </div>
       ) : null}
 
-      {atSlider && !atBed && !sleeping && !atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
+      {atConsole && !sleeping && !atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-xl border border-sky-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
+            <p className="text-xs text-slate-200">
+              Press <span className="font-semibold text-white">P</span> to{" "}
+              {nuketownOn ? "return to TV" : "play Nuketown"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {atSlider && !atBed && !atConsole && !sleeping && !atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-sky-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
@@ -2077,12 +2146,17 @@ export function StreetView({
         </div>
       ) : null}
 
-      {interior?.kind === "venue" && !atDesk && !atOfficeComputer && !mallShop && !mallSnack && !characterMenu ? (
+      {interior?.kind === "venue" && !atDesk && !atOfficeComputer && !mallShop && !mallFurnish && !mallSnack && !characterMenu ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
             {mallHut ? (
               <p className="text-xs text-slate-200">
                 {mallHut} · press <span className="font-semibold text-white">E</span> to order
+              </p>
+            ) : mallFurnishNear ? (
+              <p className="text-xs text-slate-200">
+                {FURNISH_STORES.find((item) => item.id === mallFurnishNear)?.name} · press{" "}
+                <span className="font-semibold text-white">E</span> to browse
               </p>
             ) : mallStore ? (
               <p className="text-xs text-slate-200">
@@ -2103,7 +2177,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer && !pickingRoom && !sleeping && !atBed && !atSlider && !atDesk ? (
+      {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer && !pickingRoom && !sleeping && !atBed && !atSlider && !atConsole && !atDesk ? (
         <div className="pointer-events-auto absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="flex flex-col items-center gap-2">
             {interior.zone === "room" ? (
@@ -2181,6 +2255,33 @@ export function StreetView({
           onClose={() => {
             mallShopRef.current = null;
             setMallShop(null);
+          }}
+        />
+      ) : null}
+
+      {mallFurnish && venueBuilding && interior?.kind === "venue" ? (
+        <FurnitureShop
+          store={mallFurnish}
+          player={player}
+          clock={state.clock}
+          onPlayer={setPlayer}
+          onClose={() => {
+            mallFurnishRef.current = null;
+            setMallFurnish(null);
+          }}
+          onVisitHome={(homeId) => {
+            const home = player.ownedHomes.find((item) => item.id === homeId);
+            if (!home) return;
+            const fake = makeOwnedHomeBuilding(home);
+            ownedHomeBuildingRef.current = fake;
+            mallFurnishRef.current = null;
+            setMallFurnish(null);
+            setInterior({
+              kind: "lodging",
+              buildingId: fake.id,
+              zone: "room",
+              roomId: "2-2A",
+            });
           }}
         />
       ) : null}
