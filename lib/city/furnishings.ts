@@ -1,8 +1,8 @@
 import type { CityClock } from "./types";
 import { readPlayer, spendWallet, writePlayer, type PlayerState } from "./player";
 
-export type FurnishSlot = "tv" | "console" | "floor";
-export type FurnishStore = "living" | "cinema" | "floors" | "estate";
+export type FurnishSlot = "tv" | "console" | "floor" | "bed";
+export type FurnishStore = "living" | "cinema" | "floors" | "beds" | "estate";
 
 export interface FurnishItem {
   id: string;
@@ -15,6 +15,10 @@ export interface FurnishItem {
   tvScale?: number;
   /** Floor / carpet tint applied in hotel & owned homes. */
   floorColor?: string;
+  /** Bedsheet / duvet tint. */
+  bedColor?: string;
+  /** Optional wood / metal frame tint. */
+  bedFrameColor?: string;
   /** Extra TV channel pack when this console is equipped. */
   channels?: "default" | "nuketown";
 }
@@ -23,6 +27,7 @@ export interface RoomLoadout {
   tvId: string | null;
   consoleId: string | null;
   floorId: string | null;
+  bedId: string | null;
 }
 
 export type HomeKind = "house" | "mansion";
@@ -48,6 +53,7 @@ export const FURNISH_STORES: { id: FurnishStore; name: string; blurb: string }[]
   { id: "living", name: "Living Room Co", blurb: "Sofas, dressers, and living-room kits." },
   { id: "cinema", name: "Harbor Cinema", blurb: "Bigger TVs and game consoles." },
   { id: "floors", name: "Floor Studio", blurb: "Carpet, hardwood, and tile." },
+  { id: "beds", name: "Harbor Beds", blurb: "Colored linens and frames." },
   { id: "estate", name: "Harbor Estate", blurb: "Houses and mansions for sale." },
 ];
 
@@ -142,6 +148,66 @@ export const FURNISHINGS: FurnishItem[] = [
     store: "living",
     floorColor: "#2a6b5a",
   },
+  {
+    id: "bed-ivory",
+    name: "Ivory Duvet",
+    description: "Soft hotel white with a warm oak frame.",
+    price: 280,
+    slot: "bed",
+    store: "beds",
+    bedColor: "#f4f1ea",
+    bedFrameColor: "#5a3d28",
+  },
+  {
+    id: "bed-navy",
+    name: "Harbor Navy",
+    description: "Deep blue linens for a quieter sleep.",
+    price: 340,
+    slot: "bed",
+    store: "beds",
+    bedColor: "#1e3a6b",
+    bedFrameColor: "#2a2420",
+  },
+  {
+    id: "bed-blush",
+    name: "River Blush",
+    description: "Soft rose duvet with light maple rails.",
+    price: 320,
+    slot: "bed",
+    store: "beds",
+    bedColor: "#d4a0a8",
+    bedFrameColor: "#8a6a4a",
+  },
+  {
+    id: "bed-sage",
+    name: "Park Sage",
+    description: "Muted green bedding and a charcoal frame.",
+    price: 360,
+    slot: "bed",
+    store: "beds",
+    bedColor: "#6a8f72",
+    bedFrameColor: "#2c2c2c",
+  },
+  {
+    id: "bed-ember",
+    name: "Ember Quilt",
+    description: "Warm terracotta linens for Dustfall nights.",
+    price: 390,
+    slot: "bed",
+    store: "beds",
+    bedColor: "#c45c4a",
+    bedFrameColor: "#3a2a1c",
+  },
+  {
+    id: "bed-sky",
+    name: "Sky Stripe",
+    description: "Light blue sheets with a pale birch frame.",
+    price: 310,
+    slot: "bed",
+    store: "beds",
+    bedColor: "#7eb3e0",
+    bedFrameColor: "#b8956a",
+  },
 ];
 
 export const HOME_LISTINGS: HomeListing[] = [
@@ -180,7 +246,7 @@ export const HOME_LISTINGS: HomeListing[] = [
 ];
 
 export function emptyRoomLoadout(): RoomLoadout {
-  return { tvId: null, consoleId: null, floorId: null };
+  return { tvId: null, consoleId: null, floorId: null, bedId: null };
 }
 
 export function furnishById(id: string) {
@@ -208,6 +274,7 @@ export function buyFurnishing(itemId: string, clock: CityClock): PlayerState | s
   if (item.slot === "tv") latest.equippedFurnish.tvId = itemId;
   if (item.slot === "console") latest.equippedFurnish.consoleId = itemId;
   if (item.slot === "floor") latest.equippedFurnish.floorId = itemId;
+  if (item.slot === "bed") latest.equippedFurnish.bedId = itemId;
   writePlayer(latest);
   return latest;
 }
@@ -220,6 +287,7 @@ export function equipFurnishing(itemId: string): PlayerState | string {
   if (item.slot === "tv") player.equippedFurnish.tvId = itemId;
   if (item.slot === "console") player.equippedFurnish.consoleId = itemId;
   if (item.slot === "floor") player.equippedFurnish.floorId = itemId;
+  if (item.slot === "bed") player.equippedFurnish.bedId = itemId;
   writePlayer(player);
   return player;
 }
@@ -229,6 +297,7 @@ export function clearFurnishSlot(slot: FurnishSlot): PlayerState {
   if (slot === "tv") player.equippedFurnish.tvId = null;
   if (slot === "console") player.equippedFurnish.consoleId = null;
   if (slot === "floor") player.equippedFurnish.floorId = null;
+  if (slot === "bed") player.equippedFurnish.bedId = null;
   writePlayer(player);
   return player;
 }
@@ -270,18 +339,49 @@ export function activeOwnedHome(player: PlayerState = readPlayer()) {
   return player.ownedHomes.find((home) => home.id === player.activeHomeId) ?? player.ownedHomes[0] ?? null;
 }
 
+/**
+ * Temporary room look while browsing Customize — does not write save data.
+ * Keys present in the partial override the equipped loadout for that slot
+ * (including `null` to preview stock).
+ */
+let roomStylePreview: Partial<RoomLoadout> | null = null;
+
+export function setRoomStylePreview(preview: Partial<RoomLoadout> | null) {
+  roomStylePreview = preview;
+}
+
+export function clearRoomStylePreview() {
+  roomStylePreview = null;
+}
+
 /** Resolved visuals for the player's current hotel / home loadout. */
 export function resolveRoomStyle(player: PlayerState = readPlayer()) {
-  const loadout = player.equippedFurnish;
+  const base = player.equippedFurnish;
+  const loadout: RoomLoadout = roomStylePreview
+    ? {
+        tvId: "tvId" in roomStylePreview ? roomStylePreview.tvId ?? null : base.tvId,
+        consoleId:
+          "consoleId" in roomStylePreview
+            ? roomStylePreview.consoleId ?? null
+            : base.consoleId,
+        floorId:
+          "floorId" in roomStylePreview ? roomStylePreview.floorId ?? null : base.floorId,
+        bedId: "bedId" in roomStylePreview ? roomStylePreview.bedId ?? null : base.bedId,
+      }
+    : base;
   const tv = loadout.tvId ? furnishById(loadout.tvId) : null;
   const consoleItem = loadout.consoleId ? furnishById(loadout.consoleId) : null;
   const floor = loadout.floorId ? furnishById(loadout.floorId) : null;
+  const bed = loadout.bedId ? furnishById(loadout.bedId) : null;
   return {
     tvScale: tv?.tvScale ?? 1,
     floorColor: floor?.floorColor ?? null,
+    bedColor: bed?.bedColor ?? null,
+    bedFrameColor: bed?.bedFrameColor ?? null,
     nuketown: consoleItem?.channels === "nuketown",
     tvName: tv?.name ?? null,
     consoleName: consoleItem?.name ?? null,
+    bedName: bed?.name ?? null,
   };
 }
 
@@ -297,7 +397,8 @@ export function parseRoomLoadout(value: unknown): RoomLoadout {
   const tvId = typeof raw.tvId === "string" && furnishById(raw.tvId) ? raw.tvId : null;
   const consoleId = typeof raw.consoleId === "string" && furnishById(raw.consoleId) ? raw.consoleId : null;
   const floorId = typeof raw.floorId === "string" && furnishById(raw.floorId) ? raw.floorId : null;
-  return { tvId, consoleId, floorId };
+  const bedId = typeof raw.bedId === "string" && furnishById(raw.bedId) ? raw.bedId : null;
+  return { tvId, consoleId, floorId, bedId };
 }
 
 export function parseOwnedHomes(value: unknown): OwnedHome[] {

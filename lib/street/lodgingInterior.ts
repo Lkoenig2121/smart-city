@@ -244,6 +244,8 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
   const goldWall = new THREE.Color(club ? "#2c3344" : hotel ? "#c9b17a" : "#d4c4a8");
   const wood = new THREE.Color(club ? "#2a2420" : "#5a3d28");
   const white = new THREE.Color(club ? "#e8e2d4" : "#f4f1ea");
+  const bedFrame = new THREE.Color(style.bedFrameColor ?? (club ? "#2a2420" : "#5a3d28"));
+  const bedSheets = new THREE.Color(style.bedColor ?? (club ? "#e8e2d4" : "#f4f1ea"));
   const navy = new THREE.Color(club ? "#c9a44c" : "#1e3a6b");
   const charcoal = new THREE.Color("#2c2c2c");
   const ceiling = new THREE.Color(club ? "#1c1a22" : "#efe8dc");
@@ -310,11 +312,11 @@ function buildRoom(building: Building, state: CityState, room: LodgingRoom | nul
     addRoomBalcony(floorB, trimB, blockers, winX0, winX1, minX, maxX, minZ, balZ0);
   }
 
-  // Bed.
-  trimB.box(-6.6, -1.4, -1.1, 5.2, 0, 0.55, wood);
-  wallB.box(-6.5, -1.2, -1.2, 5.0, 0.55, 0.82, white);
-  wallB.box(-6.5, 3.6, -1.2, 5.0, 0.82, 1.15, white);
-  trimB.box(-6.7, -1.5, -1.0, -1.15, 0.4, 1.7, wood);
+  // Bed (sheet / frame colors from equipped Harbor Beds loadout).
+  trimB.box(-6.6, -1.4, -1.1, 5.2, 0, 0.55, bedFrame);
+  wallB.box(-6.5, -1.2, -1.2, 5.0, 0.55, 0.82, bedSheets);
+  wallB.box(-6.5, 3.6, -1.2, 5.0, 0.82, 1.15, bedSheets);
+  trimB.box(-6.7, -1.5, -1.0, -1.15, 0.4, 1.7, bedFrame);
   blockers.push({ minX: -6.7, maxX: -1.0, minZ: -1.5, maxZ: 5.2 });
 
   // Nightstand + lamp.

@@ -69,10 +69,12 @@ import { discoverPlace } from "@/lib/city/wardrobe";
 import { STORES, type ClothStore } from "@/lib/city/clothing";
 import {
   FURNISH_STORES,
+  clearRoomStylePreview,
   makeOwnedHomeBuilding,
   type FurnishStore,
 } from "@/lib/city/furnishings";
 import { FurnitureShop } from "./FurnitureShop";
+import { RoomCustomize } from "./RoomCustomize";
 import type { MoveMode } from "@/lib/street/controls";
 import { StreetWorld } from "@/lib/street/StreetWorld";
 import { StadiumWorld } from "@/lib/street/StadiumWorld";
@@ -208,6 +210,8 @@ export function StreetView({
   const [aimComputer, setAimComputer] = useState(false);
   const [hasKey, setHasKey] = useState(false);
   const [pickingRoom, setPickingRoom] = useState(false);
+  const [roomCustomize, setRoomCustomize] = useState(false);
+  const [lodgingStyleTick, setLodgingStyleTick] = useState(0);
   const [atBed, setAtBed] = useState(false);
   const [atSlider, setAtSlider] = useState(false);
   const [atConsole, setAtConsole] = useState(false);
@@ -372,6 +376,7 @@ export function StreetView({
     atOfficeComputer ||
     pickingStop ||
     pickingRoom ||
+    roomCustomize ||
     riding;
   /** Highway almost finished toward Dustfall — unlock desert overview exit. */
   const besideDesertCity =
@@ -540,6 +545,13 @@ export function StreetView({
           setMallFurnish(null);
           return;
         }
+        if (roomCustomize) {
+          event.preventDefault();
+          clearRoomStylePreview();
+          setLodgingStyleTick((n) => n + 1);
+          setRoomCustomize(false);
+          return;
+        }
         if (mallSnackRef.current) {
           event.preventDefault();
           mallSnackRef.current = null;
@@ -655,7 +667,7 @@ export function StreetView({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, atDesk, pickingStop, pickingRoom, riding]);
+  }, [active, atDesk, pickingStop, pickingRoom, roomCustomize, riding]);
 
   useEffect(() => {
     if (!active) return;
@@ -1501,7 +1513,7 @@ export function StreetView({
       world.dispose();
       lodgingRef.current = null;
     };
-  }, [active, interior, state]);
+  }, [active, interior, state, lodgingStyleTick]);
 
   useEffect(() => {
     if (!active || interior?.kind !== "venue") return;
@@ -2096,6 +2108,16 @@ export function StreetView({
               {interior?.kind === "lodging" && interior.zone === "room" ? (
                 <>
                   <button
+                    onClick={() => {
+                      setRoomCustomize(true);
+                      if (document.pointerLockElement)
+                        document.exitPointerLock();
+                    }}
+                    className="rounded-xl bg-amber-400/90 px-3.5 py-2 text-xs font-semibold text-[#1a1206] backdrop-blur"
+                  >
+                    Customize
+                  </button>
+                  <button
                     onClick={() => goLodgingZone("pool")}
                     className="rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20"
                   >
@@ -2151,6 +2173,7 @@ export function StreetView({
       !pickingStop &&
       !riding &&
       !pickingRoom &&
+      !roomCustomize &&
       !sleeping &&
       !atOfficeComputer &&
       !characterMenu &&
@@ -2807,6 +2830,7 @@ export function StreetView({
       !atComputer &&
       !aimComputer &&
       !pickingRoom &&
+      !roomCustomize &&
       !sleeping &&
       !atBed &&
       !atSlider &&
@@ -2815,13 +2839,25 @@ export function StreetView({
         <div className="pointer-events-auto absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="flex flex-col items-center gap-2">
             {interior.zone === "room" ? (
-              <button
-                type="button"
-                onClick={() => goLodgingZone("pool")}
-                className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-[#1a1206] shadow-2xl"
-              >
-                Go to the roof deck pool
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRoomCustomize(true);
+                    if (document.pointerLockElement) document.exitPointerLock();
+                  }}
+                  className="rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold text-white shadow-2xl backdrop-blur"
+                >
+                  Customize room
+                </button>
+                <button
+                  type="button"
+                  onClick={() => goLodgingZone("pool")}
+                  className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-[#1a1206] shadow-2xl"
+                >
+                  Go to the roof deck pool
+                </button>
+              </>
             ) : stayRoom ? (
               <button
                 type="button"
@@ -2919,6 +2955,21 @@ export function StreetView({
               zone: "room",
               roomId: "2-2A",
             });
+          }}
+        />
+      ) : null}
+
+      {roomCustomize &&
+      interior?.kind === "lodging" &&
+      interior.zone === "room" ? (
+        <RoomCustomize
+          player={player}
+          onPlayer={setPlayer}
+          onApplied={() => setLodgingStyleTick((n) => n + 1)}
+          onClose={() => {
+            clearRoomStylePreview();
+            setLodgingStyleTick((n) => n + 1);
+            setRoomCustomize(false);
           }}
         />
       ) : null}

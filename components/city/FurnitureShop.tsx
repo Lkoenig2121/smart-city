@@ -147,7 +147,8 @@ export function FurnitureShop({ store, player, clock, onPlayer, onClose, onVisit
   const equipped =
     (item.slot === "tv" && player.equippedFurnish.tvId === item.id) ||
     (item.slot === "console" && player.equippedFurnish.consoleId === item.id) ||
-    (item.slot === "floor" && player.equippedFurnish.floorId === item.id);
+    (item.slot === "floor" && player.equippedFurnish.floorId === item.id) ||
+    (item.slot === "bed" && player.equippedFurnish.bedId === item.id);
 
   return (
     <div className="pointer-events-auto absolute inset-0 z-40 grid place-items-center bg-black/50 p-4 backdrop-blur-sm">
@@ -199,7 +200,9 @@ export function FurnitureShop({ store, player, clock, onPlayer, onClose, onVisit
                 background:
                   item.slot === "floor"
                     ? item.floorColor ?? "#c4a882"
-                    : "linear-gradient(160deg, #1a2434, #0c121c)",
+                    : item.slot === "bed"
+                      ? item.bedColor ?? "#f4f1ea"
+                      : "linear-gradient(160deg, #1a2434, #0c121c)",
               }}
             >
               {item.slot === "tv" ? (
@@ -213,6 +216,16 @@ export function FurnitureShop({ store, player, clock, onPlayer, onClose, onVisit
               ) : item.slot === "console" ? (
                 <div className="rounded-lg bg-[#1a1a1e] px-6 py-3 text-center text-xs font-semibold text-sky-200">
                   PS4 · Nuketown
+                </div>
+              ) : item.slot === "bed" ? (
+                <div className="flex flex-col items-center gap-2">
+                  <div
+                    className="h-3 w-28 rounded-sm border border-black/20"
+                    style={{ background: item.bedFrameColor ?? "#5a3d28" }}
+                  />
+                  <p className="rounded-lg bg-black/35 px-3 py-1 text-xs font-semibold text-white/90">
+                    Bed sample
+                  </p>
                 </div>
               ) : (
                 <p className="rounded-lg bg-black/35 px-3 py-1 text-xs font-semibold text-white/90">Floor sample</p>

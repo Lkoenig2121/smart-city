@@ -179,6 +179,8 @@ const FURNISH_BAYS: {
   { id: "floors", minX: -4.2, maxX: 4.2, minZ: -61.4, maxZ: -MALL_SHOP, y0: 0, front: "z+", color: "#b8956a", name: "Floor Studio", blurb: "Carpet · hardwood" },
   // Level 1 mid-west corridor that used to be a solid partition.
   { id: "estate", minX: -61.4, maxX: -MALL_SHOP, minZ: -2.6, maxZ: 2.6, y0: 0, front: "x+", color: "#c9a44c", name: "Harbor Estate", blurb: "Houses · mansions" },
+  // Level 1 mid-east corridor opposite Estate.
+  { id: "beds", minX: MALL_SHOP, maxX: 61.4, minZ: -2.6, maxZ: 2.6, y0: 0, front: "x-", color: "#d48aa0", name: "Harbor Beds", blurb: "Linens · colors" },
 ];
 
 type MallBay = (typeof MALL_BAYS)[number] | (typeof FURNISH_BAYS)[number];
