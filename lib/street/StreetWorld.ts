@@ -714,7 +714,7 @@ export class StreetWorld {
    * Pass null to clear.
    */
   setSuspiciousActivity(phase: PoliceCallPhase | null) {
-    if (!phase) {
+    if (!phase || phase === "completed") {
       this.clearSuspiciousActivity();
       return;
     }

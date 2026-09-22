@@ -668,10 +668,14 @@ function PoliceView({
 
       {active ? (
         <div className="mt-3 rounded-2xl border border-sky-400/30 bg-sky-500/10 px-3 py-3">
-          <p className="text-[0.65rem] uppercase tracking-[0.16em] text-sky-200">Active call</p>
+          <p className="text-[0.65rem] uppercase tracking-[0.16em] text-sky-200">
+            {active.phase === "completed" ? "Ready to finish" : "Active call"}
+          </p>
           <p className="mt-1 text-sm font-semibold">{active.title}</p>
           <p className="text-xs text-white/65">
-            {active.locationLabel} · {active.phase.replaceAll("_", " ")}
+            {active.phase === "completed"
+              ? "Return to the station desk and click Finish to collect pay."
+              : `${active.locationLabel} · ${active.phase.replaceAll("_", " ")}`}
           </p>
           <p className="mt-1 text-xs text-amber-100">
             Reward {formatDollars(active.reward)} · +{active.xp} XP

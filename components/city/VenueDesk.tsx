@@ -21,6 +21,7 @@ import {
 import {
   availablePoliceCalls,
   endPoliceShift,
+  finishPoliceCall,
   onPoliceDuty,
   policeRank,
   startPoliceShift,
@@ -407,13 +408,30 @@ function PoliceDesk({
     onPlayerChange?.(next);
   };
 
+  const finish = () => {
+    const pending = live.policeCall;
+    const next = finishPoliceCall(state);
+    if (typeof next === "string") {
+      setNote(next);
+      return;
+    }
+    setNote(
+      `${pending?.title ?? "Call"} finished · ${formatDollars(pending?.reward ?? 0)} added to wallet.`,
+    );
+    onPlayerChange?.(next);
+  };
+
+  const pendingFinish = live.policeCall?.phase === "completed";
+
   return (
     <div className="rounded-2xl border border-sky-400/35 bg-[#0e1520]/94 p-5 text-center shadow-2xl backdrop-blur">
       <p className="text-[0.65rem] uppercase tracking-[0.28em] text-sky-300">Duty Officer</p>
       <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
       <p className="mt-2 text-sm text-slate-300">
         {onDuty
-          ? `On duty as ${rank.label}. Complete calls, then end your shift here.`
+          ? pendingFinish
+            ? `Call complete — click Finish to collect ${formatDollars(live.policeCall?.reward ?? 0)}.`
+            : `On duty as ${rank.label}. Complete calls, then end your shift here.`
           : "Start a police shift to wear the duty uniform and take dispatch calls."}
       </p>
       {live.policeCareer ? (
@@ -436,13 +454,23 @@ function PoliceDesk({
         </button>
       ) : (
         <div className="mt-4 grid gap-2">
-          <button
-            type="button"
-            onClick={() => onOpenDispatch?.()}
-            className="w-full rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-semibold text-[#0a1220]"
-          >
-            Open dispatch ({calls.length} calls)
-          </button>
+          {pendingFinish ? (
+            <button
+              type="button"
+              onClick={finish}
+              className="w-full rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-semibold text-[#0a1220]"
+            >
+              Finish · collect {formatDollars(live.policeCall?.reward ?? 0)}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onOpenDispatch?.()}
+              className="w-full rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-semibold text-[#0a1220]"
+            >
+              Open dispatch ({calls.length} calls)
+            </button>
+          )}
           <button
             type="button"
             onClick={end}

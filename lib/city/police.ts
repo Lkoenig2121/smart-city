@@ -183,7 +183,10 @@ export function endPoliceShift(
 ): PlayerState | { player: PlayerState; summary: PoliceShiftSummary } | string {
   const player = readPlayer();
   if (!player.policeShift) return "You are not on a police shift.";
-  if (player.policeCall && player.policeCall.phase !== "completed") {
+  if (player.policeCall) {
+    if (player.policeCall.phase === "completed") {
+      return "Click Finish on your completed call at the desk to collect pay first.";
+    }
     return "Finish or cancel your active call before ending the shift.";
   }
 
@@ -343,20 +346,34 @@ export function policeCallPrompt(
   }
 }
 
-export function completePoliceCall(state: CityState): PlayerState | string {
+/**
+ * Field work is done — no pay yet. Waypoint returns to the station so the
+ * officer can click Finish at the desk and collect the reward.
+ */
+export function reportPoliceCallDone(state: CityState): PlayerState | string {
   const player = readPlayer();
   const call = player.policeCall;
   if (!call) return "No active call.";
+  if (!player.policeShift) return "You are not on a police shift.";
+  if (call.phase === "completed") return player;
 
-  if (call.phase !== "completed") {
-    const prompt = policeCallPrompt(call);
-    if (prompt?.next === "completed" || call.phase === "clearing" || call.phase === "resolving") {
-      call.phase = "completed";
-    } else {
-      return "Keep working the call.";
-    }
+  const prompt = policeCallPrompt(call);
+  if (prompt?.next !== "completed") {
+    return "Keep working the call.";
   }
 
+  call.phase = "completed";
+  writePlayer(player);
+  setStationFinishWaypoint(state, player.policeShift.stationId, call);
+  return readPlayer();
+}
+
+/** Collect pay for a completed call at the station desk. */
+export function finishPoliceCall(state: CityState): PlayerState | string {
+  const player = readPlayer();
+  const call = player.policeCall;
+  if (!call) return "No completed call to finish.";
+  if (call.phase !== "completed") return "Finish the field work on this call first.";
   if (!player.policeCareer) player.policeCareer = emptyPoliceCareer();
   if (!player.policeShift) return "You are not on a police shift.";
 
@@ -383,6 +400,32 @@ export function completePoliceCall(state: CityState): PlayerState | string {
   awardXp(Math.round(xp * 0.6), `police:${callId}`, "career");
   setPhoneWaypoint(null);
   return readPlayer();
+}
+
+/** @deprecated Use reportPoliceCallDone + finishPoliceCall. */
+export function completePoliceCall(state: CityState): PlayerState | string {
+  return finishPoliceCall(state);
+}
+
+function setStationFinishWaypoint(
+  state: CityState,
+  stationId: string,
+  call: PoliceCall,
+) {
+  const station = state.buildings.get(stationId);
+  if (!station) {
+    setPhoneWaypoint({
+      x: call.tileX,
+      y: call.tileY,
+      label: `Finish · ${call.title}`,
+    });
+    return;
+  }
+  setPhoneWaypoint({
+    x: station.origin.x + station.width / 2,
+    y: station.origin.y + station.depth / 2,
+    label: `Finish · ${station.name}`,
+  });
 }
 
 export { wardrobeLockedWhileOnDuty };

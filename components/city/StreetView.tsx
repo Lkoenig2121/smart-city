@@ -42,11 +42,12 @@ import {
 } from "@/lib/city/player";
 import {
   advancePoliceCall,
-  completePoliceCall,
+  finishPoliceCall,
   nearPoliceCallObjective,
   onPoliceDuty,
   policeCallPrompt,
   policeRank,
+  reportPoliceCallDone,
   syncPoliceCallArrival,
 } from "@/lib/city/police";
 import { consumeHeld } from "@/lib/city/bag";
@@ -295,7 +296,7 @@ export function StreetView({
     const prompt = policeCallPrompt(call, { x: pos.x, y: pos.y });
     if (!prompt) return false;
     if (prompt.next === "completed") {
-      const next = completePoliceCall(playState);
+      const next = reportPoliceCallDone(playState);
       if (typeof next === "string") {
         setPoliceNote(next);
         return true;
@@ -304,8 +305,11 @@ export function StreetView({
       worldRef.current?.setLostResidentEscort(null);
       worldRef.current?.setSuspiciousActivity(null);
       setPlayer(next);
-      setPoliceNote(`${call.title} complete · ${formatDollars(call.reward)}`);
+      setPoliceNote(
+        `${call.title} done · return to the station and click Finish for ${formatDollars(call.reward)}`,
+      );
       setPolicePrompt(null);
+      setWaypoint(readPhone().waypoint);
       refreshPhoneChrome(next);
       return true;
     }
@@ -2027,8 +2031,9 @@ export function StreetView({
               </p>
               {player.policeCall ? (
                 <p className="mt-1 text-[0.7rem] text-amber-100">
-                  Active · {player.policeCall.title} ·{" "}
-                  {player.policeCall.phase.replaceAll("_", " ")}
+                  {player.policeCall.phase === "completed"
+                    ? `Ready to Finish · ${player.policeCall.title} · ${formatDollars(player.policeCall.reward)}`
+                    : `Active · ${player.policeCall.title} · ${player.policeCall.phase.replaceAll("_", " ")}`}
                 </p>
               ) : (
                 <p className="mt-1 text-[0.7rem] text-white/55">No active call · open Police on phone</p>
