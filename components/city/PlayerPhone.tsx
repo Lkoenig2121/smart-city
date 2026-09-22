@@ -33,6 +33,14 @@ import {
   totalBalance,
   type PlayerState,
 } from "@/lib/city/player";
+import {
+  acceptPoliceCall,
+  availablePoliceCalls,
+  cancelPoliceCall,
+  nextPoliceRank,
+  onPoliceDuty,
+  policeRank,
+} from "@/lib/city/police";
 import { characterProgress } from "@/lib/city/progression";
 import { forecastFor, weatherEmoji } from "@/lib/simulation/weather/weather";
 import { formatClock } from "@/lib/simulation/city/cityTick";
@@ -58,6 +66,7 @@ const APPS: { id: PhoneApp; name: string; icon: string; tint: string }[] = [
   { id: "contacts", name: "Contacts", icon: "👥", tint: "from-slate-300 to-slate-600" },
   { id: "city", name: "City 311", icon: "🏛️", tint: "from-teal-200 to-emerald-700" },
   { id: "vehicles", name: "Vehicles", icon: "🚗", tint: "from-sky-400 to-blue-700" },
+  { id: "police", name: "Police", icon: "🚓", tint: "from-blue-400 to-indigo-800" },
   { id: "settings", name: "Settings", icon: "⚙️", tint: "from-zinc-400 to-zinc-700" },
 ];
 
@@ -213,6 +222,8 @@ export function PlayerPhone({
                 <CityView state={state} onWaypoint={waypoint} />
               ) : app === "vehicles" ? (
                 <VehiclesView player={player} onPlayer={onPlayer} onWaypoint={waypoint} onNote={setNote} note={note} />
+              ) : app === "police" ? (
+                <PoliceView player={player} onPlayer={onPlayer} onNote={setNote} note={note} onChanged={onChanged} />
               ) : (
                 <SettingsView muted={save.muted} waypoint={save.waypoint?.label ?? null} onMute={(muted) => { setPhoneMuted(muted); refresh(); }} onClear={() => { setPhoneWaypoint(null); refresh(); }} />
               )}
@@ -601,6 +612,126 @@ function JobsView({
   );
 }
 
+function PoliceView({
+  player,
+  onPlayer,
+  onNote,
+  note,
+  onChanged,
+}: {
+  player: PlayerState;
+  onPlayer: (player: PlayerState) => void;
+  onNote: (note: string | null) => void;
+  note: string | null;
+  onChanged?: () => void;
+}) {
+  const duty = onPoliceDuty(player);
+  const career = player.policeCareer;
+  const rank = policeRank(career?.xp ?? 0);
+  const next = nextPoliceRank(career?.xp ?? 0);
+  const calls = availablePoliceCalls(player);
+  const active = player.policeCall;
+
+  return (
+    <div className="pt-2">
+      <AppTitle>Police</AppTitle>
+      <div className="mt-2 rounded-2xl bg-white/5 px-3 py-3">
+        <p className="text-sm font-semibold">{duty ? "ON DUTY" : "Off duty"}</p>
+        <p className="text-xs text-white/60">
+          {rank.label}
+          {career ? ` · ${career.completedCalls} calls · ${formatDollars(career.totalEarnings)}` : ""}
+        </p>
+        {rank.payMult > 1 ? (
+          <p className="mt-1 text-xs text-emerald-200">
+            Call pay ×{Number(rank.payMult.toFixed(2))} at this rank
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-white/45">Promotions raise call pay.</p>
+        )}
+        {career ? (
+          <p className="mt-1 text-xs text-sky-200">
+            Police XP {career.xp}
+            {next ? ` / ${next.xp} → ${next.label}` : " · max rank"}
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-white/55">Start a shift at the police station desk.</p>
+        )}
+        {player.policeShift ? (
+          <p className="mt-1 text-xs text-emerald-200">
+            Shift earnings {formatDollars(player.policeShift.earnings)} · {player.policeShift.callsCompleted} calls
+          </p>
+        ) : null}
+        {career?.unlockedVehicles.includes("police_cruiser") ? (
+          <p className="mt-1 text-xs text-amber-200">Patrol cruiser unlocked (garage coming soon).</p>
+        ) : null}
+      </div>
+
+      {active ? (
+        <div className="mt-3 rounded-2xl border border-sky-400/30 bg-sky-500/10 px-3 py-3">
+          <p className="text-[0.65rem] uppercase tracking-[0.16em] text-sky-200">Active call</p>
+          <p className="mt-1 text-sm font-semibold">{active.title}</p>
+          <p className="text-xs text-white/65">
+            {active.locationLabel} · {active.phase.replaceAll("_", " ")}
+          </p>
+          <p className="mt-1 text-xs text-amber-100">
+            Reward {formatDollars(active.reward)} · +{active.xp} XP
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              const nextPlayer = cancelPoliceCall();
+              if (typeof nextPlayer === "string") onNote(nextPlayer);
+              else {
+                onPlayer(nextPlayer);
+                onChanged?.();
+                onNote("Call cancelled.");
+              }
+            }}
+            className="mt-2 text-xs text-rose-200"
+          >
+            Cancel call
+          </button>
+        </div>
+      ) : null}
+
+      <p className="mt-4 text-[0.65rem] uppercase tracking-[0.16em] text-white/40">Dispatch</p>
+      {!duty ? (
+        <p className="mt-2 text-sm text-white/65">Go on duty at the station to accept calls.</p>
+      ) : (
+        <div className="mt-1 space-y-2">
+          {calls.map((call) => (
+            <div key={call.kind} className="rounded-2xl bg-white/5 px-3 py-3">
+              <p className="text-sm font-semibold">{call.title}</p>
+              <p className="text-xs text-white/55">{call.locationLabel}</p>
+              <p className="mt-1 text-xs text-white/70">{call.blurb}</p>
+              <p className="mt-1 text-xs text-amber-100">
+                Reward {formatDollars(call.reward)} · +{call.xp} XP
+              </p>
+              <button
+                type="button"
+                disabled={Boolean(active)}
+                onClick={() => {
+                  const nextPlayer = acceptPoliceCall(call.kind);
+                  if (typeof nextPlayer === "string") onNote(nextPlayer);
+                  else {
+                    onPlayer(nextPlayer);
+                    onChanged?.();
+                    onNote(`Assignment accepted · ${call.title}`);
+                  }
+                }}
+                className="mt-2 rounded-lg bg-sky-400 px-3 py-1.5 text-xs font-semibold text-[#0a1220] disabled:opacity-40"
+              >
+                Accept
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {note ? <p className="mt-2 text-xs text-amber-200">{note}</p> : null}
+    </div>
+  );
+}
+
 function ProfileView({ player, onCharacter }: { player: PlayerState; onCharacter?: () => void }) {
   const progress = characterProgress(player.life.xp);
   const slots = ["head", "upper", "lower", "feet", "accessory"] as const;
@@ -623,6 +754,7 @@ function ProfileView({ player, onCharacter }: { player: PlayerState; onCharacter
       )}
       <p className="mt-4 text-sm">
         {formatDollars(totalBalance(player))} · {player.career ? officeRank(player.career.xp).label : "Unemployed"}
+        {player.policeCareer ? ` · Police ${policeRank(player.policeCareer.xp).label}` : ""}
       </p>
       <p className="mt-3 text-[0.65rem] uppercase tracking-[0.16em] text-white/40">Wearing</p>
       <div className="mt-1 space-y-1">

@@ -14,8 +14,12 @@ import { skyTexture } from "./textures";
 import { StreetWeatherFx } from "./weatherFx";
 import { StreetFireworks } from "./streetFireworks";
 import { HeldItemView } from "./heldItem";
+import { DutyUniformView } from "./dutyUniform";
 import type { PhoneWaypoint } from "@/lib/city/phone";
 import type { OwnedVehicle } from "@/lib/city/vehicles";
+import { TRAFFIC_INCIDENT_SITE, LOST_RESIDENT_MEETUP, SUSPICIOUS_ACTIVITY_SITE } from "@/lib/city/police";
+import type { PoliceCallPhase } from "@/lib/city/player";
+import { buildStreetPerson, disposeObject3D } from "./streetPerson";
 import { DUSTFALL_RETURN_BRIDGE, DUSTFALL_RETURN_PORTAL_Y, HIGHWAY_PORTAL_Y, HIGHWAY_RAMP, driveStats } from "@/lib/city/vehicles";
 import { findPath, nearestRoad } from "@/lib/simulation/traffic/pathfinding";
 import { DriveControls } from "./driveControls";
@@ -59,6 +63,13 @@ export class StreetWorld {
   private fireworks = new StreetFireworks();
   private fireworkOrigin = new THREE.Vector3();
   private heldView = new HeldItemView();
+  private dutyView = new DutyUniformView();
+  private policeIncident: THREE.Group | null = null;
+  private policeIncidentPhase: PoliceCallPhase | null = null;
+  private suspiciousScene: THREE.Group | null = null;
+  private escortNpc: THREE.Group | null = null;
+  private escortMode: "waiting" | "following" | null = null;
+  private escortBob = 0;
   private glow = new BuildingGlow();
   private pinnedId: string | null = null;
   private aimedId: string | null = null;
@@ -98,6 +109,7 @@ export class StreetWorld {
     this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 1400);
     this.scene.add(this.camera);
     this.heldView.attach(this.camera);
+    this.dutyView.attach(this.camera);
 
     this.city = buildCity(state);
     this.scene.add(this.city.group);
@@ -621,6 +633,162 @@ export class StreetWorld {
     this.heldView.setHeld(id, sips);
   }
 
+  setPoliceDuty(on: boolean) {
+    this.dutyView.setOnDuty(on);
+  }
+
+  /**
+   * Spawn or update the traffic-incident prop scene inside the downtown plaza square.
+   * Pass null to clear after the call is completed.
+   */
+  setPoliceIncident(phase: PoliceCallPhase | null) {
+    if (!phase || phase === "completed") {
+      this.clearPoliceIncident();
+      return;
+    }
+    if (!this.policeIncident) {
+      this.policeIncident = buildTrafficIncidentProps();
+      this.policeIncident.position.set(
+        (TRAFFIC_INCIDENT_SITE.x + 0.5) * TILE,
+        0,
+        (TRAFFIC_INCIDENT_SITE.y + 0.5) * TILE,
+      );
+      this.scene.add(this.policeIncident);
+    }
+    this.policeIncidentPhase = phase;
+    const cones = this.policeIncident.getObjectByName("cones");
+    if (cones) {
+      cones.visible = phase === "placing_cones" || phase === "clearing";
+    }
+    const car = this.policeIncident.getObjectByName("disabled-car");
+    if (car) {
+      car.visible = phase !== "clearing";
+    }
+    const driver = this.policeIncident.getObjectByName("driver");
+    if (driver) {
+      driver.visible = phase !== "clearing";
+    }
+  }
+
+  private clearPoliceIncident() {
+    if (!this.policeIncident) return;
+    this.scene.remove(this.policeIncident);
+    disposeObject3D(this.policeIncident);
+    this.policeIncident = null;
+    this.policeIncidentPhase = null;
+  }
+
+  /**
+   * Suspicious-activity scene: reporting NPC + clue pile inside the park square.
+   * Pass null to clear.
+   */
+  setSuspiciousActivity(phase: PoliceCallPhase | null) {
+    if (!phase) {
+      this.clearSuspiciousActivity();
+      return;
+    }
+    if (!this.suspiciousScene) {
+      this.suspiciousScene = buildSuspiciousActivityProps();
+      this.suspiciousScene.position.set(
+        (SUSPICIOUS_ACTIVITY_SITE.x + 0.5) * TILE,
+        0,
+        (SUSPICIOUS_ACTIVITY_SITE.y + 0.5) * TILE,
+      );
+      this.scene.add(this.suspiciousScene);
+    }
+    const clue = this.suspiciousScene.getObjectByName("clue");
+    if (clue) {
+      clue.visible = phase === "arrived" || phase === "inspecting" || phase === "resolving";
+    }
+    const marker = this.suspiciousScene.getObjectByName("square-marker");
+    if (marker) {
+      marker.visible = true;
+    }
+  }
+
+  private clearSuspiciousActivity() {
+    if (!this.suspiciousScene) return;
+    this.scene.remove(this.suspiciousScene);
+    disposeObject3D(this.suspiciousScene);
+    this.suspiciousScene = null;
+  }
+
+  /**
+   * Lost-resident escort: NPC waits at the meetup, then follows the player home.
+   * Pass null to clear.
+   */
+  setLostResidentEscort(
+    mode: "waiting" | "following" | null,
+    opts?: { name?: string; shirt?: string; hair?: string },
+  ) {
+    if (!mode) {
+      this.clearEscortNpc();
+      return;
+    }
+    if (!this.escortNpc) {
+      const seed = (opts?.name ?? "resident").length;
+      const shirts = ["#c45c4a", "#3d5a80", "#2f5d4a", "#8a4b2f"];
+      const hairs = ["#3a2a22", "#1c1410", "#6b4423", "#8a3a28"];
+      this.escortNpc = buildStreetPerson({
+        shirt: opts?.shirt ?? shirts[seed % shirts.length],
+        pants: "#243656",
+        hair: opts?.hair ?? hairs[seed % hairs.length],
+        skin: "#e2c4a6",
+      });
+      this.escortNpc.name = "lost-resident";
+      this.scene.add(this.escortNpc);
+    }
+    this.escortMode = mode;
+    if (mode === "waiting") {
+      const ground = this.controls.groundAt(
+        (LOST_RESIDENT_MEETUP.x + 0.5) * TILE,
+        (LOST_RESIDENT_MEETUP.y + 0.5) * TILE,
+      );
+      this.escortNpc.position.set(
+        (LOST_RESIDENT_MEETUP.x + 0.5) * TILE,
+        ground,
+        (LOST_RESIDENT_MEETUP.y + 0.5) * TILE,
+      );
+      this.escortNpc.rotation.y = Math.PI * 0.15;
+    }
+  }
+
+  private clearEscortNpc() {
+    if (!this.escortNpc) return;
+    this.scene.remove(this.escortNpc);
+    disposeObject3D(this.escortNpc);
+    this.escortNpc = null;
+    this.escortMode = null;
+  }
+
+  private updateEscortNpc(dt: number) {
+    if (!this.escortNpc || !this.escortMode) return;
+    this.escortBob += dt;
+    if (this.escortMode === "waiting") {
+      this.escortNpc.position.y =
+        this.controls.groundAt(this.escortNpc.position.x, this.escortNpc.position.z) +
+        Math.sin(this.escortBob * 2.1) * 0.02;
+      this.escortNpc.rotation.y += Math.sin(this.escortBob * 0.7) * 0.004;
+      return;
+    }
+    // Follow a step behind the player.
+    const pos = this.drive?.position ?? this.controls.position;
+    const yaw = this.drive?.yaw ?? this.controls.yaw;
+    const back = 1.15;
+    const side = 0.55;
+    const tx = pos.x - Math.sin(yaw) * back + Math.cos(yaw) * side;
+    const tz = pos.z - Math.cos(yaw) * back - Math.sin(yaw) * side;
+    const npc = this.escortNpc.position;
+    npc.x += (tx - npc.x) * Math.min(1, dt * 5.5);
+    npc.z += (tz - npc.z) * Math.min(1, dt * 5.5);
+    npc.y = this.controls.groundAt(npc.x, npc.z) + Math.sin(this.escortBob * 9) * 0.035;
+    const facing = Math.atan2(pos.x - npc.x, pos.z - npc.z);
+    let dy = facing - this.escortNpc.rotation.y;
+    while (dy > Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    this.escortNpc.rotation.y += dy * Math.min(1, dt * 8);
+  }
+
   playSip() {
     this.heldView.playSip();
   }
@@ -628,6 +796,9 @@ export class StreetWorld {
   /** Phone Maps waypoint in tile coordinates; arrows glow toward it on the ground. */
   setWaypoint(target: PhoneWaypoint | null) {
     this.navTarget = target;
+    this.controls.hopFocus = target
+      ? { x: Math.round(target.x), z: Math.round(target.y) }
+      : null;
     if (!target) {
       this.navPath = [];
       this.navPathKey = "";
@@ -635,15 +806,31 @@ export class StreetWorld {
     }
   }
 
-  /** True when the walker is on (or beside) the road approach to the current waypoint. */
+  /**
+   * True when the walker has reached the waypoint itself. Off-street pins
+   * (plaza / park police squares) require standing inside the square — not
+   * merely on the surrounding ring road.
+   */
   arrivedAtWaypoint() {
     const target = this.navTarget;
     if (!target) return false;
     const px = this.controls.position.x / TILE;
     const pz = this.controls.position.z / TILE;
+    const tx = Math.round(target.x);
+    const ty = Math.round(target.y);
+    const tile = this.state.tiles[ty]?.[tx];
+    const targetOnStreet = Boolean(tile?.road || tile?.bridge);
+
+    if (!targetOnStreet) {
+      const cx = Number.isInteger(target.x) ? target.x + 0.5 : target.x;
+      const cy = Number.isInteger(target.y) ? target.y + 0.5 : target.y;
+      const dx = px - cx;
+      const dy = pz - cy;
+      return dx * dx + dy * dy <= 1.65 * 1.65;
+    }
+
     const goal =
-      nearestRoad(this.state, Math.round(target.x), Math.round(target.y)) ??
-      this.nearestRoad(Math.round(target.x), Math.round(target.y));
+      nearestRoad(this.state, tx, ty) ?? this.nearestRoad(tx, ty);
     if (!goal) {
       const dx = px - target.x;
       const dy = pz - target.y;
@@ -671,6 +858,8 @@ export class StreetWorld {
       this.controls.applyTo(this.camera);
     }
     this.heldView.update(dt);
+    this.dutyView.update(dt);
+    this.updateEscortNpc(dt);
 
     // Narrow the lens slightly as a hop travels, the way Street View pushes in
     // between panoramas. Skipped in free-walk mode, where it would feel odd.
@@ -756,13 +945,13 @@ export class StreetWorld {
     }
 
     if (this.navPath.length < 2) {
-      this.navArrows.visible = false;
+      this.pointNavIntoSquare(target);
       return;
     }
 
     const samples = sampleRoadPath(this.navPath, px, pz, NAV_SPACING, NAV_ARROWS);
     if (samples.length === 0) {
-      this.navArrows.visible = false;
+      this.pointNavIntoSquare(target);
       return;
     }
 
@@ -785,6 +974,47 @@ export class StreetWorld {
       this.navDummy.position.set(sample.x, ground + 0.08, sample.z);
       this.navDummy.rotation.set(0, sample.yaw, 0);
       this.navDummy.scale.set(scale, 1, scale);
+      this.navDummy.updateMatrix();
+      this.navArrows.setMatrixAt(i, this.navDummy.matrix);
+    }
+    this.navArrows.instanceMatrix.needsUpdate = true;
+  }
+
+  /**
+   * When the road path is done but the pin sits inside a plaza / park square,
+   * keep one arrow pointing into the block so hop can finish the last step.
+   */
+  private pointNavIntoSquare(target: PhoneWaypoint) {
+    const px = this.controls.position.x;
+    const pz = this.controls.position.z;
+    const cx = (Number.isInteger(target.x) ? target.x + 0.5 : target.x) * TILE;
+    const cz = (Number.isInteger(target.y) ? target.y + 0.5 : target.y) * TILE;
+    const dx = cx - px;
+    const dz = cz - pz;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 1.1 || dist > TILE * 5.5) {
+      this.navArrows.visible = false;
+      return;
+    }
+
+    this.navArrows.visible = true;
+    const pulse = 0.85 + Math.sin(this.time * 4.2) * 0.15;
+    this.navMat.emissiveIntensity = 1.8 + Math.sin(this.time * 5.5) * 0.9;
+    this.navMat.opacity = 0.72 + Math.sin(this.time * 3.4) * 0.18;
+    const yaw = Math.atan2(dx, dz);
+    const step = Math.min(dist * 0.45, TILE * 0.85);
+    const ax = px + (dx / dist) * step;
+    const az = pz + (dz / dist) * step;
+    const ground = this.controls.groundAt(ax, az);
+    const scale = 0.95 + pulse * 0.2;
+    this.navDummy.position.set(ax, ground + 0.08, az);
+    this.navDummy.rotation.set(0, yaw, 0);
+    this.navDummy.scale.set(scale, 1, scale);
+    this.navDummy.updateMatrix();
+    this.navArrows.setMatrixAt(0, this.navDummy.matrix);
+    for (let i = 1; i < NAV_ARROWS; i++) {
+      this.navDummy.position.set(0, -40, 0);
+      this.navDummy.scale.set(0.001, 0.001, 0.001);
       this.navDummy.updateMatrix();
       this.navArrows.setMatrixAt(i, this.navDummy.matrix);
     }
@@ -893,6 +1123,10 @@ export class StreetWorld {
 
   dispose() {
     this.heldView.dispose();
+    this.dutyView.dispose();
+    this.clearPoliceIncident();
+    this.clearSuspiciousActivity();
+    this.clearEscortNpc();
     this.agents.dispose();
     this.glow.dispose();
     this.weatherFx.dispose();
@@ -1058,4 +1292,111 @@ function sampleRoadPath(
     });
   }
   return samples;
+}
+
+function buildTrafficIncidentProps() {
+  const group = new THREE.Group();
+  group.name = "police-traffic-incident";
+
+  const bodyMat = new THREE.MeshStandardMaterial({ color: "#6a7180", roughness: 0.55, metalness: 0.25 });
+  const dark = new THREE.MeshStandardMaterial({ color: "#1a1c20", roughness: 0.85 });
+  const orange = new THREE.MeshStandardMaterial({ color: "#e67e22", roughness: 0.7 });
+  const white = new THREE.MeshStandardMaterial({ color: "#f4f1ea", roughness: 0.65 });
+  const skin = new THREE.MeshStandardMaterial({ color: "#c4a484", roughness: 0.8 });
+  const shirt = new THREE.MeshStandardMaterial({ color: "#3d5a80", roughness: 0.75 });
+
+  const car = new THREE.Group();
+  car.name = "disabled-car";
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.55, 4.0), bodyMat);
+  body.position.y = 0.55;
+  body.castShadow = true;
+  car.add(body);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.5, 2.0), dark);
+  cabin.position.set(0, 1.0, -0.1);
+  car.add(cabin);
+  car.rotation.y = 0.55;
+  car.position.set(0.4, 0, -0.2);
+  group.add(car);
+
+  const driver = new THREE.Group();
+  driver.name = "driver";
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.55, 3, 6), shirt);
+  torso.position.set(-1.6, 0.95, 0.9);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), skin);
+  head.position.set(-1.6, 1.55, 0.9);
+  driver.add(torso, head);
+  group.add(driver);
+
+  const cones = new THREE.Group();
+  cones.name = "cones";
+  cones.visible = false;
+  const coneGeo = new THREE.ConeGeometry(0.22, 0.55, 8);
+  for (const [x, z] of [
+    [-2.2, 1.6],
+    [-1.1, 2.0],
+    [0.2, 2.3],
+    [1.4, 1.9],
+    [2.2, 1.2],
+    [-2.0, -1.8],
+    [0.0, -2.1],
+    [2.0, -1.5],
+  ] as const) {
+    const cone = new THREE.Mesh(coneGeo, orange);
+    cone.position.set(x, 0.28, z);
+    cone.castShadow = true;
+    const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.06, 8), white);
+    stripe.position.set(x, 0.22, z);
+    cones.add(cone, stripe);
+  }
+  group.add(cones);
+
+  return group;
+}
+
+function buildSuspiciousActivityProps() {
+  const group = new THREE.Group();
+  group.name = "police-suspicious-activity";
+
+  const reporter = buildStreetPerson({
+    shirt: "#8a4b2f",
+    pants: "#2a3344",
+    hair: "#1c1410",
+  });
+  reporter.name = "reporter";
+  reporter.position.set(-1.1, 0, 0.6);
+  reporter.rotation.y = Math.PI * 0.35;
+  group.add(reporter);
+
+  const clue = new THREE.Group();
+  clue.name = "clue";
+  const crateMat = new THREE.MeshStandardMaterial({ color: "#6b5344", roughness: 0.9 });
+  const bagMat = new THREE.MeshStandardMaterial({ color: "#3a3f48", roughness: 0.85 });
+  const crate = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 0.7), crateMat);
+  crate.position.set(1.2, 0.28, -0.4);
+  crate.rotation.y = 0.4;
+  crate.castShadow = true;
+  const bag = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.35, 0.4), bagMat);
+  bag.position.set(1.55, 0.2, 0.25);
+  bag.rotation.y = -0.5;
+  clue.add(crate, bag);
+  group.add(clue);
+
+  const marker = new THREE.Mesh(
+    new THREE.RingGeometry(1.35, 1.7, 32),
+    new THREE.MeshStandardMaterial({
+      color: "#39ff6a",
+      emissive: new THREE.Color("#22ff66"),
+      emissiveIntensity: 1.4,
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
+  );
+  marker.name = "square-marker";
+  marker.rotation.x = -Math.PI / 2;
+  marker.position.y = 0.04;
+  group.add(marker);
+
+  return group;
 }

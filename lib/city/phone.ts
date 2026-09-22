@@ -31,6 +31,7 @@ export type PhoneApp =
   | "contacts"
   | "city"
   | "vehicles"
+  | "police"
   | "settings";
 
 export type PhoneChoice = "accept" | "maybe" | "decline";

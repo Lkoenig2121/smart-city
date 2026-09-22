@@ -1,7 +1,18 @@
-import { clothingById, type ClothSlot, type OutfitSlots, type SavedOutfit } from "./clothing";
+import {
+  clothingById,
+  POLICE_UNIFORM_IDS,
+  POLICE_UNIFORM_SLOTS,
+  type ClothSlot,
+  type OutfitSlots,
+  type SavedOutfit,
+} from "./clothing";
 import { characterStats, type LifeState } from "./character";
 import { awardXp, readPlayer, spendWallet, writePlayer, type PlayerState } from "./player";
 import type { CityClock } from "./types";
+
+export function wardrobeLockedWhileOnDuty(player: PlayerState) {
+  return Boolean(player.policeShift);
+}
 
 export function itemLocked(_life: LifeState, itemId: string) {
   if (!clothingById(itemId)) return "Unknown item.";
@@ -34,6 +45,7 @@ export function buyClothing(itemId: string, clock: CityClock): PlayerState | str
 
 export function equipOwned(itemId: string): PlayerState | string {
   const player = readPlayer();
+  if (wardrobeLockedWhileOnDuty(player)) return "Change clothes after your police shift.";
   const item = clothingById(itemId);
   if (!item) return "Unknown item.";
   if (!player.life.owned.includes(itemId)) return "You do not own that.";
@@ -42,8 +54,9 @@ export function equipOwned(itemId: string): PlayerState | string {
   return player;
 }
 
-export function unequipSlot(slot: ClothSlot): PlayerState {
+export function unequipSlot(slot: ClothSlot): PlayerState | string {
   const player = readPlayer();
+  if (wardrobeLockedWhileOnDuty(player)) return "Change clothes after your police shift.";
   player.life.equipped[slot] = null;
   writePlayer(player);
   return player;
@@ -51,6 +64,7 @@ export function unequipSlot(slot: ClothSlot): PlayerState {
 
 export function wearOutfit(outfitId: string): PlayerState | string {
   const player = readPlayer();
+  if (wardrobeLockedWhileOnDuty(player)) return "Change clothes after your police shift.";
   const outfit = player.life.outfits.find((item) => item.id === outfitId);
   if (!outfit) return "No such outfit.";
   const next: OutfitSlots = { ...outfit.slots };
@@ -63,8 +77,39 @@ export function wearOutfit(outfitId: string): PlayerState | string {
   return player;
 }
 
+/**
+ * Snapshot civilian slots, grant police pieces, and equip the duty uniform.
+ * Returns the stashed outfit separately so the shift can restore it exactly.
+ */
+export function equipPoliceDutyUniform(
+  player: PlayerState = readPlayer(),
+): (PlayerState & { civilianOutfit: OutfitSlots }) | string {
+  const civilianOutfit: OutfitSlots = { ...player.life.equipped };
+  for (const id of POLICE_UNIFORM_IDS) {
+    if (!player.life.owned.includes(id)) player.life.owned.push(id);
+  }
+  let outfit = player.life.outfits.find((item) => item.id === "police_uniform");
+  if (!outfit) {
+    outfit = { id: "police_uniform", name: "Police Uniform", slots: { ...POLICE_UNIFORM_SLOTS } };
+    player.life.outfits.push(outfit);
+  } else {
+    outfit.slots = { ...POLICE_UNIFORM_SLOTS };
+  }
+  player.life.equipped = { ...POLICE_UNIFORM_SLOTS };
+  writePlayer(player);
+  return { ...readPlayer(), civilianOutfit };
+}
+
+export function restoreStashedOutfit(slots: OutfitSlots): PlayerState {
+  const player = readPlayer();
+  player.life.equipped = { ...slots };
+  writePlayer(player);
+  return player;
+}
+
 export function saveCurrentOutfit(name: string): PlayerState | string {
   const player = readPlayer();
+  if (wardrobeLockedWhileOnDuty(player)) return "Save outfits after your police shift.";
   const label = name.trim() || `Look ${player.life.outfits.length + 1}`;
   const outfit: SavedOutfit = {
     id: `look-${Date.now()}`,

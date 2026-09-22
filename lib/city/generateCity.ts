@@ -296,7 +296,9 @@ export function generateCity(seed = 20260903): CityState {
     if (building && x === 25 && y === 13) markLodging(building, "residences");
   }
 
-  fillRect(tiles, 14, 22, 25, 31, "park");
+  // Park fills the full road-bounded blocks (incl. the strip south of y=20)
+  // so Street View can hop straight into the square from the avenue.
+  fillRect(tiles, 14, 21, 25, 31, "park");
   fillRect(tiles, 16, 15, 22, 19, "plaza");
   fillRect(tiles, 28, 6, 33, 11, "lot");
   fillRect(tiles, 28, 19, 30, 19, "playground");
@@ -348,6 +350,15 @@ export function generateCity(seed = 20260903): CityState {
     for (let x = 13; x <= 26; x++) {
       const tile = tiles[y][x];
       if (tile.road || tile.buildingId || tile.terrain === "water") continue;
+      // Keep plaza / park / playground open so Street View can hop into the square.
+      if (
+        tile.terrain === "plaza" ||
+        tile.terrain === "park" ||
+        tile.terrain === "playground" ||
+        tile.terrain === "lot"
+      ) {
+        continue;
+      }
       if ((x + y) % 3 === 0) place("office", x, y);
       else if (rand() < 0.38) place("shop", x, y);
     }

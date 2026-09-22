@@ -5,6 +5,7 @@ import { lightingFor } from "@/lib/renderer/palette";
 import { InteriorControls, EYE_HEIGHT } from "./interiorControls";
 import { buildVenueInterior, type VenueInterior } from "./venueInterior";
 import { HeldItemView } from "./heldItem";
+import { DutyUniformView } from "./dutyUniform";
 import { TILE } from "./buildCity";
 
 export class VenueWorld {
@@ -19,6 +20,7 @@ export class VenueWorld {
   private sun: THREE.DirectionalLight;
   private fill: THREE.PointLight;
   private heldView = new HeldItemView();
+  private dutyView = new DutyUniformView();
   private mall: boolean;
   private borrowedCity: THREE.Group | null = null;
 
@@ -39,6 +41,7 @@ export class VenueWorld {
     this.camera = new THREE.PerspectiveCamera(74, 1, 0.1, this.mall ? 1400 : 80);
     this.scene.add(this.camera);
     this.heldView.attach(this.camera);
+    this.dutyView.attach(this.camera);
     this.interior = buildVenueInterior(building);
     this.scene.add(this.interior.group);
 
@@ -187,6 +190,10 @@ export class VenueWorld {
     this.heldView.setHeld(id, sips);
   }
 
+  setPoliceDuty(on: boolean) {
+    this.dutyView.setOnDuty(on);
+  }
+
   playSip() {
     this.heldView.playSip();
   }
@@ -202,6 +209,7 @@ export class VenueWorld {
     this.controls.update(dt);
     this.controls.applyTo(this.camera);
     this.heldView.update(dt);
+    this.dutyView.update(dt);
     const night = this.isNight();
     if (this.mall) {
       const light = lightingFor(this.state);
@@ -244,6 +252,7 @@ export class VenueWorld {
   dispose() {
     this.detachCity();
     this.heldView.dispose();
+    this.dutyView.dispose();
     this.interior.dispose();
     this.renderer.dispose();
   }

@@ -57,6 +57,12 @@ export class StreetControls {
   mode: MoveMode = "hop";
   enabled = true;
   boost = { walk: 1, run: 1, jump: 1, hop: 1 };
+  /**
+   * Optional tile the player is navigating toward (phone / police waypoint).
+   * When set, hops prefer stepping off the street into the open square that
+   * gets you closer — so you can land inside a plaza / park block.
+   */
+  hopFocus: { x: number; z: number } | null = null;
 
   private velocity = new THREE.Vector3();
   private keys = new InputKeys();
@@ -208,13 +214,15 @@ export class StreetControls {
 
   /**
    * Travels along the street and lands on the next intersection, so a hop never
-   * overshoots a turning point. If the road ends first, it stops at the last
-   * tile you can stand on.
+   * overshoots a turning point. Hopping off a street into an open plaza / park
+   * square lands on the first square tile. If the road ends first, it stops at
+   * the last tile you can stand on.
    */
   private beginHop(sign: 1 | -1) {
     const cardinal = this.hopCardinal(sign);
     const fromTileX = Math.floor(this.position.x / TILE);
     const fromTileZ = Math.floor(this.position.z / TILE);
+    const fromStreet = this.isStreet(fromTileX, fromTileZ);
     const maxSteps = this.state.size;
 
     let reachedX = fromTileX;
@@ -228,6 +236,8 @@ export class StreetControls {
       if (!this.tileHoppable(nx, nz)) break;
       reachedX = nx;
       reachedZ = nz;
+      // Street → open square: hop into the square, don't skip across it.
+      if (fromStreet && this.isOpenSquare(nx, nz)) break;
       if (this.isJunction(nx, nz)) {
         junctionX = nx;
         junctionZ = nz;
@@ -259,6 +269,7 @@ export class StreetControls {
   /**
    * Picks a compass heading for the hop. Street View always steps onto the
    * road closest to the look direction, even if you are glancing at a facade.
+   * From a street you can also hop into an open plaza / park square.
    */
   private hopCardinal(sign: 1 | -1) {
     const fx = -Math.sin(this.yaw) * sign;
@@ -270,12 +281,31 @@ export class StreetControls {
     const fromX = Math.floor(this.position.x / TILE);
     const fromZ = Math.floor(this.position.z / TILE);
     const onRoad = this.isStreet(fromX, fromZ);
+    const inSquare = this.isOpenSquare(fromX, fromZ);
+
+    // Near a waypoint: prefer hopping into the open square toward the pin
+    // instead of skating past on the ring road.
+    if (onRoad && this.hopFocus) {
+      const focus = this.hopFocus;
+      const before = Math.hypot(focus.x + 0.5 - (fromX + 0.5), focus.z + 0.5 - (fromZ + 0.5));
+      for (const candidate of ranked) {
+        const look = candidate.x * fx + candidate.z * fz;
+        if (look < 0.05) continue;
+        const nx = fromX + candidate.x;
+        const nz = fromZ + candidate.z;
+        if (!this.isOpenSquare(nx, nz)) continue;
+        const after = Math.hypot(focus.x + 0.5 - (nx + 0.5), focus.z + 0.5 - (nz + 0.5));
+        if (after < before - 0.05) return candidate;
+      }
+    }
 
     for (const candidate of ranked) {
       const nx = fromX + candidate.x;
       const nz = fromZ + candidate.z;
       if (onRoad) {
-        if (this.isStreet(nx, nz)) return candidate;
+        if (this.isStreet(nx, nz) || this.isOpenSquare(nx, nz)) return candidate;
+      } else if (inSquare) {
+        if (this.isOpenSquare(nx, nz) || this.isStreet(nx, nz)) return candidate;
       } else if (this.tileHoppable(nx, nz)) {
         return candidate;
       }
@@ -287,6 +317,27 @@ export class StreetControls {
   private isStreet(tx: number, tz: number) {
     const tile = this.state.tiles[tz]?.[tx];
     return Boolean(tile?.road || tile?.bridge);
+  }
+
+  /**
+   * Open block interiors ringed by streets — plazas, parks, lots, playgrounds,
+   * and clear grass lots. These are the squares you can hop into from the road.
+   */
+  private isOpenSquare(tx: number, tz: number) {
+    const tile = this.state.tiles[tz]?.[tx];
+    if (!tile || tile.road || tile.bridge) return false;
+    if (tile.terrain === "water") return false;
+    if (tile.buildingId) {
+      const building = this.state.buildings.get(tile.buildingId);
+      if (building && building.kind !== "park_pavilion") return false;
+    }
+    return (
+      tile.terrain === "plaza" ||
+      tile.terrain === "park" ||
+      tile.terrain === "playground" ||
+      tile.terrain === "lot" ||
+      tile.terrain === "grass"
+    );
   }
 
   /**
@@ -316,8 +367,11 @@ export class StreetControls {
     }
     const fromX = Math.floor(this.position.x / TILE);
     const fromZ = Math.floor(this.position.z / TILE);
-    // Once you are on a street, hops stay on the street.
-    if (this.isStreet(fromX, fromZ)) return this.isStreet(tx, tz);
+    const fromStreet = this.isStreet(fromX, fromZ);
+    const fromSquare = this.isOpenSquare(fromX, fromZ);
+    // Streets link to open squares so you can hop into a plaza / park block.
+    if (fromStreet) return this.isStreet(tx, tz) || this.isOpenSquare(tx, tz);
+    if (fromSquare) return this.isOpenSquare(tx, tz) || this.isStreet(tx, tz);
     return true;
   }
 

@@ -86,6 +86,12 @@ export const CLOTHING: ClothingItem[] = [
   { id: "kicks-court", name: "Court Lows", description: "Grippy indoor-outdoor shoes.", price: 120, slot: "feet", category: "clothing", store: "sneaker", collection: "athletic", level: 10, skill: { path: "athletics", level: 2 }, color: "#f4f1ea", accent: "#c0392b", bonus: { stat: "jump", amount: 0.04 } },
   { id: "band-sweat", name: "Sweat Band", description: "Keeps hair and rain off.", price: 18, slot: "head", category: "accessories", store: "sneaker", collection: "athletic", level: 10, color: "#c0392b", accent: "#f4f1ea" },
 
+  // Career: Riverside / Dustfall police duty kit (granted on shift, not sold).
+  { id: "police-shirt", name: "Police Shirt", description: "Navy duty shirt with shoulder patches.", price: 0, slot: "upper", category: "clothing", store: "department", collection: "professional", level: 1, color: "#1f4d8c", accent: "#c9a44c" },
+  { id: "police-pants", name: "Police Pants", description: "Dark duty trousers with a reinforced seat.", price: 0, slot: "lower", category: "clothing", store: "department", collection: "professional", level: 1, color: "#1a2433", accent: "#c9a44c" },
+  { id: "police-boots", name: "Police Boots", description: "Black duty boots.", price: 0, slot: "feet", category: "clothing", store: "department", collection: "professional", level: 1, color: "#12151a", accent: "#3a3a3a" },
+  { id: "police-badge", name: "Police Badge", description: "Shield badge and radio mic.", price: 0, slot: "accessory", category: "accessories", store: "department", collection: "professional", level: 1, color: "#c9a44c", accent: "#1f4d8c" },
+
   { id: "blazer-navy", name: "Navy Blazer", description: "Office-ready wool blend.", price: 320, slot: "upper", category: "clothing", store: "fashion", collection: "professional", level: 25, skill: { path: "career", level: 4 }, color: "#1d2d4f", accent: "#c9a44c", bonus: { stat: "salary", amount: 0.03 } },
   { id: "shirt-poplin", name: "Poplin Shirt", description: "Crisp white for the tower.", price: 110, slot: "upper", category: "clothing", store: "department", collection: "professional", level: 25, color: "#f7f4ea", accent: "#3d5a80" },
   { id: "trouser-char", name: "Charcoal Trousers", description: "Tapered office trousers.", price: 160, slot: "lower", category: "clothing", store: "fashion", collection: "professional", level: 25, color: "#2c3036", accent: "#c9a44c" },
@@ -152,12 +158,15 @@ export const CLOTHING: ClothingItem[] = [
 
 export const STARTER_CLOTHING = ["tee-harbor", "jeans-indigo", "kicks-river"];
 
+/** Multi-slot duty look granted when a police shift starts. */
+export const POLICE_UNIFORM_IDS = ["police-shirt", "police-pants", "police-boots", "police-badge"] as const;
+
 export function clothingById(id: string) {
   return CLOTHING.find((item) => item.id === id) ?? null;
 }
 
 export function clothingInStore(store: ClothStore) {
-  return CLOTHING.filter((item) => item.store === store);
+  return CLOTHING.filter((item) => item.store === store && item.price > 0);
 }
 
 export const EMPTY_SLOTS: Record<ClothSlot, string | null> = {
@@ -169,6 +178,14 @@ export const EMPTY_SLOTS: Record<ClothSlot, string | null> = {
 };
 
 export type OutfitSlots = Record<ClothSlot, string | null>;
+
+export const POLICE_UNIFORM_SLOTS: OutfitSlots = {
+  head: null,
+  upper: "police-shirt",
+  lower: "police-pants",
+  feet: "police-boots",
+  accessory: "police-badge",
+};
 
 /** Worn slots after an optional shop/menu preview override. */
 export function wornSlots(slots: OutfitSlots, previewId?: string | null): OutfitSlots {

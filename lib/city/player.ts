@@ -8,6 +8,7 @@ import {
   parseLife,
   type LifeState,
 } from "./character";
+import { EMPTY_SLOTS, type OutfitSlots } from "./clothing";
 import { parseOwnedVehicles, type OwnedVehicle } from "./vehicles";
 import {
   emptyRoomLoadout,
@@ -71,12 +72,63 @@ export interface ActiveShift {
   taskEarnings: number;
 }
 
+export type PoliceCallKind = "traffic_incident" | "lost_resident" | "suspicious_activity";
+
+export type PoliceCallPhase =
+  | "accepted"
+  | "traveling"
+  | "arrived"
+  | "inspecting"
+  | "placing_cones"
+  | "clearing"
+  | "resolving"
+  | "completed";
+
+export interface PoliceCareer {
+  xp: number;
+  completedCalls: number;
+  totalEarnings: number;
+  unlockedVehicles: string[];
+  unlockedDistricts: string[];
+}
+
+export interface PoliceShift {
+  stationId: string;
+  stationName: string;
+  dayKey: string;
+  startMinute: number;
+  callsCompleted: number;
+  earnings: number;
+  xpEarned: number;
+  civilianOutfit: OutfitSlots;
+}
+
+export interface PoliceCall {
+  id: string;
+  kind: PoliceCallKind;
+  phase: PoliceCallPhase;
+  title: string;
+  locationLabel: string;
+  tileX: number;
+  tileY: number;
+  /** Home / drop-off tile for escort calls. */
+  destTileX?: number;
+  destTileY?: number;
+  residentName?: string;
+  reward: number;
+  xp: number;
+  acceptedAt: number;
+}
+
 export interface PlayerState {
   wallet: number;
   bank: number;
   ledger: LedgerEntry[];
   career: OfficeCareer | null;
   shift: ActiveShift | null;
+  policeCareer: PoliceCareer | null;
+  policeShift: PoliceShift | null;
+  policeCall: PoliceCall | null;
   lastInterestDay: string | null;
   life: LifeState;
   ownedVehicles: OwnedVehicle[];
@@ -95,6 +147,9 @@ export function emptyPlayer(): PlayerState {
     ledger: [],
     career: null,
     shift: null,
+    policeCareer: null,
+    policeShift: null,
+    policeCall: null,
     lastInterestDay: null,
     life: emptyLife(),
     ownedVehicles: [],
@@ -177,6 +232,7 @@ export function quitJob(): PlayerState | string {
 
 export function startOfficeShift(building: Building, state: CityState): PlayerState | string {
   const player = readPlayer();
+  if (player.policeShift) return "End your police shift before clocking into the office.";
   if (venueRole(building) !== "office") return "This is not an office.";
   if (player.career && player.career.id !== "office_worker") {
     return `Quit your job at ${player.career.employerName} first.`;
@@ -369,6 +425,14 @@ export function spendWallet(amount: number, clock: CityClock, description: strin
   return player;
 }
 
+/** Credit wallet (police calls, jobs, etc.) and record a ledger earn. */
+export function earnCash(amount: number, clock: CityClock, description: string): PlayerState {
+  const player = readPlayer();
+  credit(player, Math.max(0, Math.round(amount)), description, clock);
+  writePlayer(player);
+  return player;
+}
+
 export function nextBankInterest(bank: number, extraRate = 0) {
   if (bank <= 0) return 0;
   return Math.round(bank * (BANK_DAILY_RATE + extraRate));
@@ -461,6 +525,9 @@ function parsePlayer(value: unknown): PlayerState {
     ledger: Array.isArray(raw.ledger) ? raw.ledger.filter(isLedgerEntry).slice(0, LEDGER_LIMIT) : [],
     career: parseCareer(raw.career),
     shift: parseShift(raw.shift),
+    policeCareer: parsePoliceCareer(raw.policeCareer),
+    policeShift: parsePoliceShift(raw.policeShift),
+    policeCall: parsePoliceCall(raw.policeCall),
     lastInterestDay: typeof raw.lastInterestDay === "string" ? raw.lastInterestDay : null,
     life: parseLife(raw.life),
     ownedVehicles: parseOwnedVehicles(raw.ownedVehicles),
@@ -524,4 +591,92 @@ function parseShift(value: unknown): ActiveShift | null {
       : [],
     taskEarnings: Number.isFinite(taskEarnings) && taskEarnings >= 0 ? taskEarnings : 0,
   };
+}
+
+function parsePoliceCareer(value: unknown): PoliceCareer | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<PoliceCareer>;
+  const xp = Number(raw.xp);
+  const completedCalls = Number(raw.completedCalls);
+  const totalEarnings = Number(raw.totalEarnings);
+  return {
+    xp: Number.isFinite(xp) && xp >= 0 ? xp : 0,
+    completedCalls: Number.isFinite(completedCalls) && completedCalls >= 0 ? Math.floor(completedCalls) : 0,
+    totalEarnings: Number.isFinite(totalEarnings) && totalEarnings >= 0 ? totalEarnings : 0,
+    unlockedVehicles: Array.isArray(raw.unlockedVehicles)
+      ? raw.unlockedVehicles.filter((id): id is string => typeof id === "string")
+      : [],
+    unlockedDistricts: Array.isArray(raw.unlockedDistricts)
+      ? raw.unlockedDistricts.filter((id): id is string => typeof id === "string")
+      : ["riverside_downtown"],
+  };
+}
+
+function parsePoliceShift(value: unknown): PoliceShift | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<PoliceShift>;
+  if (typeof raw.stationId !== "string" || typeof raw.stationName !== "string") return null;
+  if (typeof raw.dayKey !== "string") return null;
+  const startMinute = Number(raw.startMinute);
+  const callsCompleted = Number(raw.callsCompleted);
+  const earnings = Number(raw.earnings);
+  const xpEarned = Number(raw.xpEarned);
+  return {
+    stationId: raw.stationId,
+    stationName: raw.stationName,
+    dayKey: raw.dayKey,
+    startMinute: Number.isFinite(startMinute) ? startMinute : 0,
+    callsCompleted: Number.isFinite(callsCompleted) && callsCompleted >= 0 ? Math.floor(callsCompleted) : 0,
+    earnings: Number.isFinite(earnings) && earnings >= 0 ? earnings : 0,
+    xpEarned: Number.isFinite(xpEarned) && xpEarned >= 0 ? xpEarned : 0,
+    civilianOutfit: parseOutfitSlots(raw.civilianOutfit),
+  };
+}
+
+function parsePoliceCall(value: unknown): PoliceCall | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<PoliceCall>;
+  if (
+    raw.kind !== "traffic_incident" &&
+    raw.kind !== "lost_resident" &&
+    raw.kind !== "suspicious_activity"
+  ) {
+    return null;
+  }
+  if (typeof raw.id !== "string" || typeof raw.title !== "string") return null;
+  if (typeof raw.locationLabel !== "string") return null;
+  const tileX = Number(raw.tileX);
+  const tileY = Number(raw.tileY);
+  const reward = Number(raw.reward);
+  const xp = Number(raw.xp);
+  const acceptedAt = Number(raw.acceptedAt);
+  const destTileX = Number(raw.destTileX);
+  const destTileY = Number(raw.destTileY);
+  const phase = typeof raw.phase === "string" ? (raw.phase as PoliceCallPhase) : "accepted";
+  return {
+    id: raw.id,
+    kind: raw.kind,
+    phase,
+    title: raw.title,
+    locationLabel: raw.locationLabel,
+    tileX: Number.isFinite(tileX) ? tileX : 0,
+    tileY: Number.isFinite(tileY) ? tileY : 0,
+    destTileX: Number.isFinite(destTileX) ? destTileX : undefined,
+    destTileY: Number.isFinite(destTileY) ? destTileY : undefined,
+    residentName: typeof raw.residentName === "string" ? raw.residentName : undefined,
+    reward: Number.isFinite(reward) ? reward : 0,
+    xp: Number.isFinite(xp) ? xp : 0,
+    acceptedAt: Number.isFinite(acceptedAt) ? acceptedAt : Date.now(),
+  };
+}
+
+function parseOutfitSlots(value: unknown): OutfitSlots {
+  const slots: OutfitSlots = { ...EMPTY_SLOTS };
+  if (!value || typeof value !== "object") return slots;
+  const raw = value as Partial<OutfitSlots>;
+  for (const key of Object.keys(EMPTY_SLOTS) as (keyof OutfitSlots)[]) {
+    const id = raw[key];
+    slots[key] = typeof id === "string" ? id : null;
+  }
+  return slots;
 }

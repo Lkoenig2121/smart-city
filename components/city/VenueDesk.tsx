@@ -18,6 +18,14 @@ import {
   withdrawFromBank,
   type PlayerState,
 } from "@/lib/city/player";
+import {
+  availablePoliceCalls,
+  endPoliceShift,
+  onPoliceDuty,
+  policeRank,
+  startPoliceShift,
+  type PoliceShiftSummary,
+} from "@/lib/city/police";
 import { venueLabel, venueRole, type VenueRole } from "@/lib/city/venues";
 import type { Building, CityState } from "@/lib/city/types";
 import { formatMoney } from "@/lib/simulation/buildings/buildings";
@@ -30,6 +38,7 @@ interface Props {
   onPlayerChange?: (player: PlayerState) => void;
   onOpenWorkstation?: () => void;
   onOpenMotors?: () => void;
+  onOpenDispatch?: () => void;
   onClose?: () => void;
 }
 
@@ -40,6 +49,7 @@ export function VenueDesk({
   onPlayerChange,
   onOpenWorkstation,
   onOpenMotors,
+  onOpenDispatch,
   onClose,
 }: Props) {
   const role = venueRole(building) ?? "office";
@@ -52,6 +62,14 @@ export function VenueDesk({
       <MallDesk building={building} />
     ) : role === "dealership" ? (
       <MotorsDesk building={building} onOpenMotors={onOpenMotors} />
+    ) : role === "police" ? (
+      <PoliceDesk
+        building={building}
+        state={state}
+        player={player}
+        onPlayerChange={onPlayerChange}
+        onOpenDispatch={onOpenDispatch}
+      />
     ) : (
       <FlavorDesk building={building} state={state} role={role} />
     );
@@ -343,6 +361,112 @@ function MotorsDesk({
   );
 }
 
+function PoliceDesk({
+  building,
+  state,
+  player,
+  onPlayerChange,
+  onOpenDispatch,
+}: {
+  building: Building;
+  state: CityState;
+  player?: PlayerState;
+  onPlayerChange?: (player: PlayerState) => void;
+  onOpenDispatch?: () => void;
+}) {
+  const [note, setNote] = useState<string | null>(null);
+  const [summary, setSummary] = useState<PoliceShiftSummary | null>(null);
+  const live = player ?? readPlayer();
+  const onDuty = onPoliceDuty(live);
+  const rank = policeRank(live.policeCareer?.xp ?? 0);
+  const calls = availablePoliceCalls(live);
+
+  const start = () => {
+    const next = startPoliceShift(building, state);
+    if (typeof next === "string") {
+      setNote(next);
+      return;
+    }
+    setSummary(null);
+    setNote("Uniform equipped. Check dispatch for available calls.");
+    onPlayerChange?.(next);
+  };
+
+  const end = () => {
+    const next = endPoliceShift(state);
+    if (typeof next === "string") {
+      setNote(next);
+      return;
+    }
+    if ("summary" in next) {
+      setSummary(next.summary);
+      setNote("Civilian outfit restored.");
+      onPlayerChange?.(next.player);
+      return;
+    }
+    onPlayerChange?.(next);
+  };
+
+  return (
+    <div className="rounded-2xl border border-sky-400/35 bg-[#0e1520]/94 p-5 text-center shadow-2xl backdrop-blur">
+      <p className="text-[0.65rem] uppercase tracking-[0.28em] text-sky-300">Duty Officer</p>
+      <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
+      <p className="mt-2 text-sm text-slate-300">
+        {onDuty
+          ? `On duty as ${rank.label}. Complete calls, then end your shift here.`
+          : "Start a police shift to wear the duty uniform and take dispatch calls."}
+      </p>
+      {live.policeCareer ? (
+        <p className="mt-2 text-sm font-semibold text-sky-200">
+          {rank.label} · {live.policeCareer.completedCalls} calls · {formatDollars(live.policeCareer.totalEarnings)} earned
+        </p>
+      ) : null}
+      {live.policeCareer && rank.payMult > 1 ? (
+        <p className="mt-1 text-xs text-emerald-200">
+          Call pay ×{Number(rank.payMult.toFixed(2))} at this rank
+        </p>
+      ) : null}
+      {!onDuty ? (
+        <button
+          type="button"
+          onClick={start}
+          className="mt-4 w-full rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-semibold text-[#0a1220]"
+        >
+          Start police shift
+        </button>
+      ) : (
+        <div className="mt-4 grid gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenDispatch?.()}
+            className="w-full rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-semibold text-[#0a1220]"
+          >
+            Open dispatch ({calls.length} calls)
+          </button>
+          <button
+            type="button"
+            onClick={end}
+            className="w-full rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white"
+          >
+            End shift
+          </button>
+        </div>
+      )}
+      {summary ? (
+        <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-3 text-left text-sm text-slate-200">
+          <p className="font-semibold text-white">Police shift complete</p>
+          <p className="mt-1">Rank: {summary.rankLabel}</p>
+          <p>Calls completed: {summary.callsCompleted}</p>
+          <p>Money earned: {formatDollars(summary.moneyEarned)}</p>
+          <p>Police XP: +{summary.xpEarned}</p>
+        </div>
+      ) : null}
+      {note ? <p className="mt-3 text-sm text-sky-200">{note}</p> : null}
+      <p className="mt-3 text-[0.65rem] text-slate-500">Walk back to the doors and press E to leave</p>
+    </div>
+  );
+}
+
 function FlavorDesk({ building, state, role }: { building: Building; state: CityState; role: VenueRole }) {
   const [note, setNote] = useState<string | null>(null);
   const copy = deskCopy(role, building, state);
@@ -392,7 +516,7 @@ function deskCopy(role: VenueRole, building: Building, state: CityState) {
       };
     case "police":
       return {
-        body: "A sergeant nods from behind the glass. The holding cell is empty tonight.",
+        body: "A sergeant nods from behind the glass.",
         stat: null,
         action: "File a report",
         actionNote: "They take your name and thank you. Riverside stays quiet.",

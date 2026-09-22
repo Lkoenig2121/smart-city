@@ -37,8 +37,18 @@ import {
   formatDollars,
   readPlayer,
   awardXp,
+  writePlayer,
   type PlayerState,
 } from "@/lib/city/player";
+import {
+  advancePoliceCall,
+  completePoliceCall,
+  nearPoliceCallObjective,
+  onPoliceDuty,
+  policeCallPrompt,
+  policeRank,
+  syncPoliceCallArrival,
+} from "@/lib/city/police";
 import { consumeHeld } from "@/lib/city/bag";
 import { characterStats } from "@/lib/city/character";
 import { consumableById } from "@/lib/city/consumables";
@@ -50,6 +60,7 @@ import {
   PHONE_TIME_SCALE,
   readPhone,
   setPhoneWaypoint,
+  type PhoneApp,
   type PhoneMessage,
   type PhoneWaypoint,
 } from "@/lib/city/phone";
@@ -111,7 +122,6 @@ import {
   DUSTFALL_ARRIVAL,
   generateDustfall,
 } from "@/lib/city/generateDustfall";
-import { writePlayer } from "@/lib/city/player";
 type Interior =
   | { kind: "stadium" }
   | { kind: "lodging"; buildingId: string; zone: LodgingZone; roomId?: string }
@@ -254,8 +264,11 @@ export function StreetView({
   const resumeDriveAfterDustfallRef = useRef(false);
   const [barMenu, setBarMenu] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
+  const [phoneStartApp, setPhoneStartApp] = useState<PhoneApp>("home");
   const [phoneToast, setPhoneToast] = useState<PhoneMessage | null>(null);
   const [phoneThread, setPhoneThread] = useState<string | null>(null);
+  const [policePrompt, setPolicePrompt] = useState<string | null>(null);
+  const [policeNote, setPoliceNote] = useState<string | null>(null);
   const [waypoint, setWaypoint] = useState<PhoneWaypoint | null>(
     () => readPhone().waypoint,
   );
@@ -269,6 +282,61 @@ export function StreetView({
     waypointRef.current = null;
     setWaypoint(null);
     worldRef.current?.setWaypoint(null);
+  };
+
+  const tryPoliceCallAction = () => {
+    const live = readPlayer();
+    const call = live.policeCall;
+    if (!call) return false;
+    const pos = worldRef.current?.tilePosition ?? positionRef.current;
+    if (!pos) return false;
+    if (!nearPoliceCallObjective(call, pos.x, pos.y)) return false;
+    const prompt = policeCallPrompt(call, { x: pos.x, y: pos.y });
+    if (!prompt) return false;
+    if (prompt.next === "completed") {
+      const next = completePoliceCall(playState);
+      if (typeof next === "string") {
+        setPoliceNote(next);
+        return true;
+      }
+      worldRef.current?.setPoliceIncident(null);
+      worldRef.current?.setLostResidentEscort(null);
+      worldRef.current?.setSuspiciousActivity(null);
+      setPlayer(next);
+      setPoliceNote(`${call.title} complete · ${formatDollars(call.reward)}`);
+      setPolicePrompt(null);
+      refreshPhoneChrome(next);
+      return true;
+    }
+    const next = advancePoliceCall(prompt.next);
+    if (typeof next === "string") {
+      setPoliceNote(next);
+      return true;
+    }
+    if (next.policeCall?.kind === "traffic_incident") {
+      worldRef.current?.setPoliceIncident(next.policeCall.phase);
+    }
+    if (next.policeCall?.kind === "suspicious_activity") {
+      worldRef.current?.setSuspiciousActivity(next.policeCall.phase);
+    }
+    if (next.policeCall?.kind === "lost_resident") {
+      if (next.policeCall.phase === "resolving") {
+        worldRef.current?.setLostResidentEscort("following", {
+          name: next.policeCall.residentName,
+        });
+        setPoliceNote(
+          `${next.policeCall.residentName ?? "Resident"} is following you home.`,
+        );
+        setWaypoint(readPhone().waypoint);
+      } else {
+        worldRef.current?.setLostResidentEscort("waiting", {
+          name: next.policeCall.residentName,
+        });
+      }
+    }
+    setPlayer(next);
+    setPoliceNote(prompt.label);
+    return true;
   };
 
   const inside = interior !== null;
@@ -318,8 +386,9 @@ export function StreetView({
 
   useEffect(() => {
     if (!interior) return;
-    clearNavWaypoint();
-    // Clear route chrome when stepping indoors.
+    // Hide street arrows indoors, but keep the phone / minimap pin so the
+    // green destination is still there when you step back outside.
+    worldRef.current?.setWaypoint(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interior]);
 
@@ -343,7 +412,7 @@ export function StreetView({
     driving,
   ]);
 
-  const openPhone = (threadId: string | null = null) => {
+  const openPhone = (threadId: string | null = null, startApp: PhoneApp = "home") => {
     if (sleepingRef.current) return;
     if (atComputerRef.current || atOfficeComputerRef.current) return;
     if (pickingStop || pickingRoom || riding) return;
@@ -359,6 +428,7 @@ export function StreetView({
       setAtDesk(false);
     }
     setPhoneThread(threadId);
+    setPhoneStartApp(threadId ? "thread" : startApp);
     phoneOpenRef.current = true;
     setPhoneOpen(true);
     if (document.pointerLockElement) document.exitPointerLock();
@@ -780,6 +850,7 @@ export function StreetView({
           markMissionRamp();
           return true;
         }
+        if (tryPoliceCallAction()) return true;
         return enterStreetDoor();
       },
     });
@@ -845,6 +916,49 @@ export function StreetView({
         world.setDriveFuelEmpty(false);
       }
       if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
+      world.setPoliceDuty(Boolean(live.policeShift));
+      if (live.policeCall && live.policeCall.kind === "traffic_incident") {
+        world.setPoliceIncident(live.policeCall.phase);
+      } else {
+        world.setPoliceIncident(null);
+      }
+      if (live.policeCall && live.policeCall.kind === "suspicious_activity") {
+        world.setSuspiciousActivity(live.policeCall.phase);
+      } else {
+        world.setSuspiciousActivity(null);
+      }
+      if (live.policeCall && live.policeCall.kind === "lost_resident") {
+        const phase = live.policeCall.phase;
+        if (phase === "accepted" || phase === "traveling" || phase === "arrived") {
+          world.setLostResidentEscort("waiting", {
+            name: live.policeCall.residentName,
+          });
+        } else if (phase === "resolving") {
+          world.setLostResidentEscort("following", {
+            name: live.policeCall.residentName,
+          });
+        } else {
+          world.setLostResidentEscort(null);
+        }
+      } else {
+        world.setLostResidentEscort(null);
+      }
+      {
+        const pos = world.tilePosition;
+        const arrived = syncPoliceCallArrival(pos.x, pos.y);
+        if (arrived) setPlayer(arrived);
+        const callNow = readPlayer().policeCall;
+        const prompt = callNow ? policeCallPrompt(callNow, { x: pos.x, y: pos.y }) : null;
+        const near =
+          callNow &&
+          nearPoliceCallObjective(callNow, pos.x, pos.y) &&
+          (callNow.phase === "arrived" ||
+            callNow.phase === "inspecting" ||
+            callNow.phase === "placing_cones" ||
+            callNow.phase === "clearing" ||
+            callNow.phase === "resolving");
+        setPolicePrompt(near && prompt ? prompt.label : null);
+      }
       world.render(dt);
       positionRef.current = world.tilePosition;
       if (world.isDriving && activeCar) {
@@ -873,7 +987,11 @@ export function StreetView({
         }
       }
       const pin = waypointRef.current;
-      if (pin && world.arrivedAtWaypoint()) clearNavWaypoint();
+      // Police dispatch pins stay on the minimap for the whole call; only
+      // ground arrows fade once you reach the approach. Other waypoints clear.
+      if (pin && world.arrivedAtWaypoint() && !live.policeCall) {
+        clearNavWaypoint();
+      }
       const gate = world.nearStadiumGate();
       atGateRef.current = gate;
       setAtGate((prev) => (prev === gate ? prev : gate));
@@ -1477,6 +1595,7 @@ export function StreetView({
       last = now;
       tickRef.current(dt);
       if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
+      world.setPoliceDuty(Boolean(readPlayer().policeShift));
       world.render(dt);
       const desk = world.nearDesk();
       if (!desk) deskDismissedRef.current = false;
@@ -1878,6 +1997,28 @@ export function StreetView({
           <div className="pointer-events-auto">
             <PlayerStatus player={player} />
           </div>
+          {onPoliceDuty(player) ? (
+            <div className="pointer-events-auto rounded-xl border border-sky-400/30 bg-[#0e1520]/9 px-3.5 py-2 text-sky-50 backdrop-blur">
+              <p className="text-[0.6rem] uppercase tracking-[0.2em] text-sky-300">
+                {playState.id === "dustfall" ? "Dustfall Police" : "Riverside Police"}
+              </p>
+              <p className="text-sm font-semibold">
+                {policeRank(player.policeCareer?.xp ?? 0).label}
+              </p>
+              <p className="text-[0.7rem] text-sky-100/85">
+                Calls {player.policeShift?.callsCompleted ?? 0} · Earnings{" "}
+                {formatDollars(player.policeShift?.earnings ?? 0)}
+              </p>
+              {player.policeCall ? (
+                <p className="mt-1 text-[0.7rem] text-amber-100">
+                  Active · {player.policeCall.title} ·{" "}
+                  {player.policeCall.phase.replaceAll("_", " ")}
+                </p>
+              ) : (
+                <p className="mt-1 text-[0.7rem] text-white/55">No active call · open Police on phone</p>
+              )}
+            </div>
+          ) : null}
         </div>
 
         <div className="pointer-events-auto flex items-center gap-2">
@@ -2211,6 +2352,22 @@ export function StreetView({
         </div>
       ) : null}
 
+      {policePrompt && !inside && !failed && !phoneOpen && !highwayHint ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="max-w-sm rounded-2xl border border-sky-400/40 bg-[#0e1520]/9 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-sky-300">
+              Police call
+            </p>
+            <p className="mt-1 text-sm text-white">
+              Press <span className="font-semibold">E</span> · {policePrompt}
+            </p>
+            {policeNote ? (
+              <p className="mt-1 text-xs text-sky-100/80">{policeNote}</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       {atGate && !carAndDoorChoice && !inside && !failed ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
@@ -2406,7 +2563,11 @@ export function StreetView({
           building={venueBuilding}
           state={state}
           player={player}
-          onPlayerChange={setPlayer}
+          onPlayerChange={(next) => {
+            setPlayer(next);
+            worldRef.current?.setPoliceDuty(Boolean(next.policeShift));
+            venueRef.current?.setPoliceDuty(Boolean(next.policeShift));
+          }}
           onClose={() => {
             deskDismissedRef.current = true;
             setAtDesk(false);
@@ -2419,6 +2580,10 @@ export function StreetView({
           onOpenMotors={() => {
             setMotorsOpen(true);
             setAtDesk(false);
+          }}
+          onOpenDispatch={() => {
+            setAtDesk(false);
+            openPhone(null, "police");
           }}
         />
       ) : null}
@@ -2759,6 +2924,34 @@ export function StreetView({
           player={player}
           onPlayer={(next) => {
             setPlayer(next);
+            worldRef.current?.setPoliceDuty(Boolean(next.policeShift));
+            venueRef.current?.setPoliceDuty(Boolean(next.policeShift));
+            if (next.policeCall?.kind === "traffic_incident") {
+              worldRef.current?.setPoliceIncident(next.policeCall.phase);
+            } else if (!next.policeCall) {
+              worldRef.current?.setPoliceIncident(null);
+              worldRef.current?.setLostResidentEscort(null);
+              worldRef.current?.setSuspiciousActivity(null);
+            }
+            if (next.policeCall?.kind === "suspicious_activity") {
+              worldRef.current?.setSuspiciousActivity(next.policeCall.phase);
+            }
+            if (next.policeCall?.kind === "lost_resident") {
+              const phase = next.policeCall.phase;
+              if (phase === "resolving") {
+                worldRef.current?.setLostResidentEscort("following", {
+                  name: next.policeCall.residentName,
+                });
+              } else if (
+                phase === "accepted" ||
+                phase === "traveling" ||
+                phase === "arrived"
+              ) {
+                worldRef.current?.setLostResidentEscort("waiting", {
+                  name: next.policeCall.residentName,
+                });
+              }
+            }
             refreshPhoneChrome(next);
           }}
           onClose={closePhone}
@@ -2768,6 +2961,7 @@ export function StreetView({
             setCharacterMenu("outfit");
           }}
           onChanged={() => refreshPhoneChrome()}
+          startApp={phoneStartApp}
           startThreadId={phoneThread}
         />
       ) : null}
