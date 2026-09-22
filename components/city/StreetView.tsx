@@ -33,7 +33,12 @@ import {
   venueLabel,
   venueRole,
 } from "@/lib/city/venues";
-import { formatDollars, readPlayer, awardXp, type PlayerState } from "@/lib/city/player";
+import {
+  formatDollars,
+  readPlayer,
+  awardXp,
+  type PlayerState,
+} from "@/lib/city/player";
 import { consumeHeld } from "@/lib/city/bag";
 import { characterStats } from "@/lib/city/character";
 import { consumableById } from "@/lib/city/consumables";
@@ -63,9 +68,19 @@ import { LodgingWorld } from "@/lib/street/LodgingWorld";
 import { SubwayWorld } from "@/lib/street/SubwayWorld";
 import { VenueWorld } from "@/lib/street/VenueWorld";
 import { attachPointerInput } from "@/lib/street/keys";
-import { canSleepNow, formatClock, sleepUntilMorning } from "@/lib/simulation/city/cityTick";
+import {
+  canSleepNow,
+  formatClock,
+  sleepUntilMorning,
+} from "@/lib/simulation/city/cityTick";
 import { weatherEmoji } from "@/lib/simulation/weather/weather";
-import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type RefObject,
+} from "react";
 import { CharacterMenu, type CharacterTab } from "./CharacterMenu";
 import { ClothingShop } from "./ClothingShop";
 import { MotorsShowroom } from "./MotorsShowroom";
@@ -86,9 +101,16 @@ import {
   snapFleetToMotorsApproach,
   type OwnedVehicle,
 } from "@/lib/city/vehicles";
-import { markMissionDustfall, markMissionHighway, markMissionRamp } from "@/lib/city/missions";
+import {
+  markMissionDustfall,
+  markMissionHighway,
+  markMissionRamp,
+} from "@/lib/city/missions";
 import { DustfallWorld } from "@/lib/street/DustfallWorld";
-import { DUSTFALL_ARRIVAL, generateDustfall } from "@/lib/city/generateDustfall";
+import {
+  DUSTFALL_ARRIVAL,
+  generateDustfall,
+} from "@/lib/city/generateDustfall";
 import { writePlayer } from "@/lib/city/player";
 type Interior =
   | { kind: "stadium" }
@@ -130,7 +152,9 @@ export function StreetView({
   const lodgingRef = useRef<LodgingWorld | null>(null);
   const subwayRef = useRef<SubwayWorld | null>(null);
   const venueRef = useRef<VenueWorld | null>(null);
-  const positionRef = useRef<{ x: number; y: number; yaw: number } | null>(null);
+  const positionRef = useRef<{ x: number; y: number; yaw: number } | null>(
+    null,
+  );
   const atGateRef = useRef(false);
   const lodgingDoorRef = useRef<Building | null>(null);
   const subwayDoorRef = useRef<Building | null>(null);
@@ -195,20 +219,31 @@ export function StreetView({
   const [mallShop, setMallShop] = useState<ClothStore | null>(null);
   const [mallFurnish, setMallFurnish] = useState<FurnishStore | null>(null);
   const [mallStore, setMallStore] = useState<ClothStore | null>(null);
-  const [mallFurnishNear, setMallFurnishNear] = useState<FurnishStore | null>(null);
+  const [mallFurnishNear, setMallFurnishNear] = useState<FurnishStore | null>(
+    null,
+  );
   const [mallHut, setMallHut] = useState<string | null>(null);
-  const [mallSnack, setMallSnack] = useState<{ name: string; items: string[] } | null>(null);
+  const [mallSnack, setMallSnack] = useState<{
+    name: string;
+    items: string[];
+  } | null>(null);
   const [motorsOpen, setMotorsOpen] = useState(false);
   const [driving, setDriving] = useState(false);
   const [nearCar, setNearCar] = useState<OwnedVehicle | null>(null);
   const [highwayHint, setHighwayHint] = useState<string | null>(null);
   const [dustfallTrip, setDustfallTrip] = useState(false);
   const [dustfallProgress, setDustfallProgress] = useState(0);
-  const [highwayToward, setHighwayToward] = useState<"dustfall" | "riverside">("dustfall");
+  const [highwayToward, setHighwayToward] = useState<"dustfall" | "riverside">(
+    "dustfall",
+  );
   const [inDustfall, setInDustfall] = useState(() => state.id === "dustfall");
   const [playState, setPlayState] = useState(state);
-  const dustfallCityRef = useRef<CityState | null>(state.id === "dustfall" ? state : null);
-  const riversideStateRef = useRef<CityState | null>(state.id === "riverside" ? state : null);
+  const dustfallCityRef = useRef<CityState | null>(
+    state.id === "dustfall" ? state : null,
+  );
+  const riversideStateRef = useRef<CityState | null>(
+    state.id === "riverside" ? state : null,
+  );
   const motorsOpenRef = useRef(false);
   const drivingRef = useRef(false);
   const dustfallRef = useRef<DustfallWorld | null>(null);
@@ -221,7 +256,9 @@ export function StreetView({
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [phoneToast, setPhoneToast] = useState<PhoneMessage | null>(null);
   const [phoneThread, setPhoneThread] = useState<string | null>(null);
-  const [waypoint, setWaypoint] = useState<PhoneWaypoint | null>(() => readPhone().waypoint);
+  const [waypoint, setWaypoint] = useState<PhoneWaypoint | null>(
+    () => readPhone().waypoint,
+  );
   const [unread, setUnread] = useState(0);
   const waypointRef = useRef(waypoint);
   waypointRef.current = waypoint;
@@ -243,7 +280,9 @@ export function StreetView({
           : null))
       : null;
   const subwayBuilding =
-    interior?.kind === "subway" ? findSubwayStation(state, interior.stationId) : null;
+    interior?.kind === "subway"
+      ? findSubwayStation(state, interior.stationId)
+      : null;
   const venueBuilding =
     interior?.kind === "venue" ? findVenue(state, interior.buildingId) : null;
   const busyUi =
@@ -263,10 +302,12 @@ export function StreetView({
     riding;
   /** Highway almost finished toward Dustfall — unlock desert overview exit. */
   const besideDesertCity =
-    inDustfall || (dustfallTrip && highwayToward === "dustfall" && dustfallProgress >= 0.88);
+    inDustfall ||
+    (dustfallTrip && highwayToward === "dustfall" && dustfallProgress >= 0.88);
 
   useEffect(() => {
-    if (riversideState?.id === "riverside") riversideStateRef.current = riversideState;
+    if (riversideState?.id === "riverside")
+      riversideStateRef.current = riversideState;
     if (state.id === "riverside") riversideStateRef.current = state;
     if (state.id === "dustfall") {
       dustfallCityRef.current = state;
@@ -291,13 +332,23 @@ export function StreetView({
     phoneOpenRef.current = phoneOpen;
     motorsOpenRef.current = motorsOpen;
     drivingRef.current = driving;
-  }, [characterMenu, mallShop, mallFurnish, mallSnack, barMenu, phoneOpen, motorsOpen, driving]);
+  }, [
+    characterMenu,
+    mallShop,
+    mallFurnish,
+    mallSnack,
+    barMenu,
+    phoneOpen,
+    motorsOpen,
+    driving,
+  ]);
 
   const openPhone = (threadId: string | null = null) => {
     if (sleepingRef.current) return;
     if (atComputerRef.current || atOfficeComputerRef.current) return;
     if (pickingStop || pickingRoom || riding) return;
-    if (mallShopRef.current || mallFurnishRef.current || mallSnackRef.current) return;
+    if (mallShopRef.current || mallFurnishRef.current || mallSnackRef.current)
+      return;
     if (characterMenuRef.current) {
       characterMenuRef.current = null;
       setCharacterMenu(null);
@@ -362,7 +413,12 @@ export function StreetView({
 
   useEffect(() => {
     const stats = characterStats(player.life);
-    const outdoor = { walk: stats.walk, run: stats.run, jump: stats.jump, hop: stats.hop };
+    const outdoor = {
+      walk: stats.walk,
+      run: stats.run,
+      jump: stats.jump,
+      hop: stats.hop,
+    };
     const indoor = { walk: stats.walk, run: stats.run, jump: stats.jump };
     if (worldRef.current) worldRef.current.controls.boost = outdoor;
     if (stadiumRef.current) stadiumRef.current.controls.boost = indoor;
@@ -421,7 +477,12 @@ export function StreetView({
           setCharacterMenu(null);
           return;
         }
-        if (barMenuRef.current || (interiorRef.current?.kind === "lodging" && interiorRef.current.zone === "pool" && atDeskRef.current)) {
+        if (
+          barMenuRef.current ||
+          (interiorRef.current?.kind === "lodging" &&
+            interiorRef.current.zone === "pool" &&
+            atDeskRef.current)
+        ) {
           event.preventDefault();
           barMenuRef.current = false;
           setBarMenu(false);
@@ -434,7 +495,12 @@ export function StreetView({
         if (sleepingRef.current) return;
         if (atComputerRef.current || atOfficeComputerRef.current) return;
         if (pickingStop || pickingRoom || riding) return;
-        if (mallShopRef.current || mallFurnishRef.current || mallSnackRef.current) return;
+        if (
+          mallShopRef.current ||
+          mallFurnishRef.current ||
+          mallSnackRef.current
+        )
+          return;
         event.preventDefault();
         if (phoneOpenRef.current) closePhone();
         else openPhone();
@@ -445,7 +511,12 @@ export function StreetView({
         if (phoneOpenRef.current) return;
         if (atComputerRef.current || atOfficeComputerRef.current) return;
         if (pickingStop || pickingRoom || riding) return;
-        if (mallShopRef.current || mallFurnishRef.current || mallSnackRef.current) return;
+        if (
+          mallShopRef.current ||
+          mallFurnishRef.current ||
+          mallSnackRef.current
+        )
+          return;
         event.preventDefault();
         const next = characterMenuRef.current ? null : "inventory";
         characterMenuRef.current = next;
@@ -457,9 +528,17 @@ export function StreetView({
         if (phoneOpenRef.current) return;
         if (atComputerRef.current || atOfficeComputerRef.current) return;
         if (pickingStop || pickingRoom || riding) return;
-        if (mallShopRef.current || mallFurnishRef.current || mallSnackRef.current) return;
+        if (
+          mallShopRef.current ||
+          mallFurnishRef.current ||
+          mallSnackRef.current
+        )
+          return;
         const lodging = lodgingRef.current;
-        const zone = interiorRef.current?.kind === "lodging" ? interiorRef.current.zone : null;
+        const zone =
+          interiorRef.current?.kind === "lodging"
+            ? interiorRef.current.zone
+            : null;
         // In a guest room: P beside the PlayStation toggles Nuketown on the TV.
         if (zone === "room" && lodging?.nearConsole()) {
           event.preventDefault();
@@ -508,8 +587,21 @@ export function StreetView({
     const onDown = (event: globalThis.MouseEvent) => {
       if (event.button !== 0) return;
       if (!document.pointerLockElement) return;
-      if (sleepingRef.current || characterMenuRef.current || mallShopRef.current || mallFurnishRef.current || mallSnackRef.current || phoneOpenRef.current) return;
-      if (atComputerRef.current || atOfficeComputerRef.current || atDeskRef.current) return;
+      if (
+        sleepingRef.current ||
+        characterMenuRef.current ||
+        mallShopRef.current ||
+        mallFurnishRef.current ||
+        mallSnackRef.current ||
+        phoneOpenRef.current
+      )
+        return;
+      if (
+        atComputerRef.current ||
+        atOfficeComputerRef.current ||
+        atDeskRef.current
+      )
+        return;
       const item = consumableById(heldRef.current ?? "");
       if (!item) return;
       if (sippingRef.current) return;
@@ -543,7 +635,9 @@ export function StreetView({
       world = new StreetWorld(canvas, playState);
     } catch (error) {
       setFailed(
-        error instanceof Error ? error.message : "WebGL is unavailable in this browser.",
+        error instanceof Error
+          ? error.message
+          : "WebGL is unavailable in this browser.",
       );
       return;
     }
@@ -604,7 +698,11 @@ export function StreetView({
         return true;
       }
       if (target.kind === "lodging") {
-        setInterior({ kind: "lodging", buildingId: target.building.id, zone: "lobby" });
+        setInterior({
+          kind: "lodging",
+          buildingId: target.building.id,
+          zone: "lobby",
+        });
         setPlayer(discoverPlace(target.building.id));
         return true;
       }
@@ -636,7 +734,13 @@ export function StreetView({
           const parked = world.stopDriving();
           const id = activeOwnedVehicle(readPlayer())?.id;
           if (parked && id) {
-            const next = applyParkVehicle(readPlayer(), id, parked.x, parked.y, parked.yaw);
+            const next = applyParkVehicle(
+              readPlayer(),
+              id,
+              parked.x,
+              parked.y,
+              parked.yaw,
+            );
             writePlayer(next);
             setPlayer(next);
           }
@@ -665,8 +769,14 @@ export function StreetView({
           setNearCar(null);
           return true;
         }
-        if (world.nearHighwayRamp() && !hasOwnedVehicle(readPlayer()) && !drivingRef.current) {
-          setHighwayHint("Too far to travel on foot. You'll need a car to continue.");
+        if (
+          world.nearHighwayRamp() &&
+          !hasOwnedVehicle(readPlayer()) &&
+          !drivingRef.current
+        ) {
+          setHighwayHint(
+            "Too far to travel on foot. You'll need a car to continue.",
+          );
           markMissionRamp();
           return true;
         }
@@ -689,7 +799,11 @@ export function StreetView({
       world.setWaypoint(waypointRef.current);
       const live = readPlayer();
       const activeCar = activeOwnedVehicle(live);
-      if (resumeDriveAfterDustfallRef.current && activeCar && !world.isDriving) {
+      if (
+        resumeDriveAfterDustfallRef.current &&
+        activeCar &&
+        !world.isDriving
+      ) {
         resumeDriveAfterDustfallRef.current = false;
         world.startDriving(activeCar);
         drivingRef.current = true;
@@ -699,19 +813,31 @@ export function StreetView({
       if (world.isDriving && activeCar) {
         world.setDriveFuelEmpty(false);
         if (world.nearHighwayRamp()) markMissionRamp();
-        if (!inDustfall && world.atHighwayPortal() && !dustfallTripRef.current) {
+        if (
+          !inDustfall &&
+          world.atHighwayPortal() &&
+          !dustfallTripRef.current
+        ) {
           markMissionHighway();
           setHighwayToward("dustfall");
           dustfallTripRef.current = true;
           setDustfallTrip(true);
-        } else if (inDustfall && world.atReturnPortal() && !dustfallTripRef.current) {
+        } else if (
+          inDustfall &&
+          world.atReturnPortal() &&
+          !dustfallTripRef.current
+        ) {
           setHighwayToward("riverside");
           dustfallTripRef.current = true;
           setDustfallTrip(true);
         } else if (!inDustfall && world.nearHighwayRamp()) {
-          setHighwayHint("Highway 93 · keep driving north onto the ramp for Dustfall");
+          setHighwayHint(
+            "Highway 93 · keep driving north onto the ramp for Dustfall",
+          );
         } else if (inDustfall && world.nearReturnBridge()) {
-          setHighwayHint("Riverside Bridge · keep driving south for Highway 93 back to Riverside");
+          setHighwayHint(
+            "Riverside Bridge · keep driving south for Highway 93 back to Riverside",
+          );
         } else {
           setHighwayHint(null);
         }
@@ -723,7 +849,13 @@ export function StreetView({
       positionRef.current = world.tilePosition;
       if (world.isDriving && activeCar) {
         const sped = world.driveMph();
-        const next = applyDriveTick(live, activeCar.id, dt, sped / 2.15, world.tilePosition);
+        const next = applyDriveTick(
+          live,
+          activeCar.id,
+          dt,
+          sped / 2.15,
+          world.tilePosition,
+        );
         writePlayer(next);
         if (Math.random() < 0.02) setPlayer(next);
       }
@@ -782,7 +914,11 @@ export function StreetView({
     try {
       world = new DustfallWorld(canvas, car?.color ?? "#1f4d8c", toward);
     } catch (error) {
-      setFailed(error instanceof Error ? error.message : "WebGL is unavailable in this browser.");
+      setFailed(
+        error instanceof Error
+          ? error.message
+          : "WebGL is unavailable in this browser.",
+      );
       setDustfallTrip(false);
       return;
     }
@@ -827,7 +963,8 @@ export function StreetView({
         writePlayer(parked);
         setPlayer(parked);
       }
-      const riverside = riversideStateRef.current ?? (state.id === "riverside" ? state : null);
+      const riverside =
+        riversideStateRef.current ?? (state.id === "riverside" ? state : null);
       resumeDriveAfterDustfallRef.current = opts.keepDriving;
       drivingRef.current = false;
       setDriving(false);
@@ -836,12 +973,15 @@ export function StreetView({
       setDustfallTrip(false);
       dustfallTripRef.current = false;
       setSpawn({ x: rampX, y: rampY + (opts.keepDriving ? 0 : 0.8) });
-      setHighwayHint("Back in Riverside — Highway 93 is north if you want Dustfall again.");
+      setHighwayHint(
+        "Back in Riverside — Highway 93 is north if you want Dustfall again.",
+      );
     };
 
     const landInDustfall = (opts: { keepDriving: boolean }) => {
       markMissionDustfall();
-      if (!dustfallCityRef.current) dustfallCityRef.current = generateDustfall();
+      if (!dustfallCityRef.current)
+        dustfallCityRef.current = generateDustfall();
       const df = dustfallCityRef.current;
       const live = readPlayer();
       const activeCar = activeOwnedVehicle(live);
@@ -925,7 +1065,11 @@ export function StreetView({
     try {
       world = new StadiumWorld(canvas, state);
     } catch (error) {
-      setFailed(error instanceof Error ? error.message : "WebGL is unavailable in this browser.");
+      setFailed(
+        error instanceof Error
+          ? error.message
+          : "WebGL is unavailable in this browser.",
+      );
       setInterior(null);
       return;
     }
@@ -947,7 +1091,11 @@ export function StreetView({
     };
     setPlayer(discoverPlace("ravens-ballpark", 48));
     if (isGameNight(state)) {
-      awardXp(28, `game:${state.clock.year}-${state.clock.dayOfYear}`, "exploration");
+      awardXp(
+        28,
+        `game:${state.clock.year}-${state.clock.dayOfYear}`,
+        "exploration",
+      );
       setPlayer(readPlayer());
     }
     const detachInput = attachPointerInput(canvas, world.controls, {
@@ -996,22 +1144,38 @@ export function StreetView({
     if (!canvas || !wrap || !building) return;
 
     const street = worldRef.current;
-    const city = interior.zone === "room" ? street?.borrowCity() ?? null : null;
+    const city =
+      interior.zone === "room" ? (street?.borrowCity() ?? null) : null;
     let world: LodgingWorld;
     try {
-      world = new LodgingWorld(canvas, state, building, interior.zone, interior.roomId);
+      world = new LodgingWorld(
+        canvas,
+        state,
+        building,
+        interior.zone,
+        interior.roomId,
+      );
       if (city) {
-        world.attachCity(city, findLodgingRoom(building, interior.roomId)?.floor ?? 8);
+        world.attachCity(
+          city,
+          findLodgingRoom(building, interior.roomId)?.floor ?? 8,
+        );
       }
     } catch (error) {
       if (city) street?.returnCity(city);
-      setFailed(error instanceof Error ? error.message : "WebGL is unavailable in this browser.");
+      setFailed(
+        error instanceof Error
+          ? error.message
+          : "WebGL is unavailable in this browser.",
+      );
       setInterior(null);
       return;
     }
     lodgingRef.current = world;
     if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
-    setHasKey(hasLodgingKey(building.id) || lodgingUse(building) === "residences");
+    setHasKey(
+      hasLodgingKey(building.id) || lodgingUse(building) === "residences",
+    );
     setPlayer(discoverPlace(building.id, 40));
     barMenuRef.current = false;
     setBarMenu(false);
@@ -1041,7 +1205,9 @@ export function StreetView({
     const leaveStreet = () => {
       if (ownedHomeBuildingRef.current?.id === building.id) {
         ownedHomeBuildingRef.current = null;
-        const mall = [...state.buildings.values()].find((b) => venueRole(b) === "mall");
+        const mall = [...state.buildings.values()].find(
+          (b) => venueRole(b) === "mall",
+        );
         setSpawn(mall ? venueGateTile(mall) : entry);
       } else {
         setSpawn(lodgingGateTile(building));
@@ -1051,7 +1217,12 @@ export function StreetView({
     };
     const timers: number[] = [];
     const beginSleep = () => {
-      if (sleepingRef.current || interior.zone !== "room" || !canSleepNow(state)) return;
+      if (
+        sleepingRef.current ||
+        interior.zone !== "room" ||
+        !canSleepNow(state)
+      )
+        return;
       sleepingRef.current = true;
       setSleeping(true);
       setSleepPhase("night");
@@ -1064,7 +1235,11 @@ export function StreetView({
           setClock(formatClock(state));
           setPlayer(night.player ?? readPlayer());
           setSleepInterest(night.interest);
-          awardXp(20, `sleep:${state.clock.year}-${state.clock.dayOfYear}`, "athletics");
+          awardXp(
+            20,
+            `sleep:${state.clock.year}-${state.clock.dayOfYear}`,
+            "athletics",
+          );
           setPlayer(readPlayer());
           setSleepPhase("morning");
           timers.push(
@@ -1094,10 +1269,14 @@ export function StreetView({
           beginSleep();
           return true;
         }
-        if (interior.zone === "room" && (world.aimedAtComputer() || world.nearComputer())) {
+        if (
+          interior.zone === "room" &&
+          (world.aimedAtComputer() || world.nearComputer())
+        ) {
           atComputerRef.current = true;
           setAtComputer(true);
-          if (document.pointerLockElement === canvas) document.exitPointerLock();
+          if (document.pointerLockElement === canvas)
+            document.exitPointerLock();
           return true;
         }
         if (interior.zone === "pool" && world.nearDesk()) {
@@ -1131,21 +1310,35 @@ export function StreetView({
         interior.zone === "lobby"
           ? world.nearDesk()
           : interior.zone === "pool"
-            ? barMenuRef.current || (world.nearDesk() && !deskDismissedRef.current)
+            ? barMenuRef.current ||
+              (world.nearDesk() && !deskDismissedRef.current)
             : false;
-      if (interior.zone === "pool" && !world.nearDesk()) deskDismissedRef.current = false;
+      if (interior.zone === "pool" && !world.nearDesk())
+        deskDismissedRef.current = false;
       atDeskRef.current = desk;
       setAtDesk((prev) => (prev === desk ? prev : desk));
-      if (desk && document.pointerLockElement === canvas) document.exitPointerLock();
-      const bed = interior.zone === "room" && !atComputerRef.current && world.nearBed();
+      if (desk && document.pointerLockElement === canvas)
+        document.exitPointerLock();
+      const bed =
+        interior.zone === "room" && !atComputerRef.current && world.nearBed();
       setAtBed((prev) => (prev === bed ? prev : bed));
-      const slider = interior.zone === "room" && !atComputerRef.current && world.nearSlider();
+      const slider =
+        interior.zone === "room" &&
+        !atComputerRef.current &&
+        world.nearSlider();
       setAtSlider((prev) => (prev === slider ? prev : slider));
       setSliderOpen(world.sliderOpen());
-      const consoleNear = interior.zone === "room" && !atComputerRef.current && world.nearConsole();
+      const consoleNear =
+        interior.zone === "room" &&
+        !atComputerRef.current &&
+        world.nearConsole();
       setAtConsole((prev) => (prev === consoleNear ? prev : consoleNear));
       setNuketownOn(world.isNuketown());
-      const aiming = interior.zone === "room" && !atComputerRef.current && !sleepingRef.current && world.aimedAtComputer();
+      const aiming =
+        interior.zone === "room" &&
+        !atComputerRef.current &&
+        !sleepingRef.current &&
+        world.aimedAtComputer();
       setAimComputer((prev) => (prev === aiming ? prev : aiming));
       clockAcc += dt;
       if (clockAcc > 0.25) {
@@ -1183,14 +1376,19 @@ export function StreetView({
     }
 
     const street = worldRef.current;
-    const city = venueRole(building) === "mall" ? street?.borrowCity() ?? null : null;
+    const city =
+      venueRole(building) === "mall" ? (street?.borrowCity() ?? null) : null;
     let world: VenueWorld;
     try {
       world = new VenueWorld(canvas, state, building);
       if (city) world.attachCity(city);
     } catch (error) {
       if (city) street?.returnCity(city);
-      setFailed(error instanceof Error ? error.message : "WebGL is unavailable in this browser.");
+      setFailed(
+        error instanceof Error
+          ? error.message
+          : "WebGL is unavailable in this browser.",
+      );
       setInterior(null);
       return;
     }
@@ -1224,14 +1422,22 @@ export function StreetView({
       setMallHut(null);
       setMallSnack(null);
     };
-    setPlayer(discoverPlace(building.id, venueRole(building) === "mall" ? 52 : 36));
+    setPlayer(
+      discoverPlace(building.id, venueRole(building) === "mall" ? 52 : 36),
+    );
     const detachInput = attachPointerInput(canvas, world.controls, {
       setLocked,
       consumeKey: (event) => {
         if (atOfficeComputerRef.current) return true;
         if (event.code !== "KeyE") return false;
         event.preventDefault();
-        if (characterMenuRef.current || mallShopRef.current || mallFurnishRef.current || mallSnackRef.current) return true;
+        if (
+          characterMenuRef.current ||
+          mallShopRef.current ||
+          mallFurnishRef.current ||
+          mallSnackRef.current
+        )
+          return true;
         if (world.nearExit()) leaveStreet();
         else {
           const hut = world.nearSnack();
@@ -1239,19 +1445,22 @@ export function StreetView({
             const menu = { name: hut.name, items: hut.items };
             mallSnackRef.current = menu;
             setMallSnack(menu);
-            if (document.pointerLockElement === canvas) document.exitPointerLock();
+            if (document.pointerLockElement === canvas)
+              document.exitPointerLock();
           } else {
             const furnish = world.nearFurnish();
             if (furnish) {
               mallFurnishRef.current = furnish;
               setMallFurnish(furnish);
-              if (document.pointerLockElement === canvas) document.exitPointerLock();
+              if (document.pointerLockElement === canvas)
+                document.exitPointerLock();
             } else {
               const store = world.nearStore();
               if (store) {
                 mallShopRef.current = store;
                 setMallShop(store);
-                if (document.pointerLockElement === canvas) document.exitPointerLock();
+                if (document.pointerLockElement === canvas)
+                  document.exitPointerLock();
               }
             }
           }
@@ -1271,16 +1480,25 @@ export function StreetView({
       world.render(dt);
       const desk = world.nearDesk();
       if (!desk) deskDismissedRef.current = false;
-      const showDesk = desk && !deskDismissedRef.current && !mallShopRef.current && !mallFurnishRef.current && !mallSnackRef.current && !characterMenuRef.current;
+      const showDesk =
+        desk &&
+        !deskDismissedRef.current &&
+        !mallShopRef.current &&
+        !mallFurnishRef.current &&
+        !mallSnackRef.current &&
+        !characterMenuRef.current;
       atDeskRef.current = showDesk;
       setAtDesk((prev) => (prev === showDesk ? prev : showDesk));
-      if (showDesk && document.pointerLockElement === canvas) document.exitPointerLock();
+      if (showDesk && document.pointerLockElement === canvas)
+        document.exitPointerLock();
       const store = world.nearStore();
       setMallStore((prev) => (prev === store ? prev : store));
       const furnish = world.nearFurnish();
       setMallFurnishNear((prev) => (prev === furnish ? prev : furnish));
       const hut = world.nearSnack();
-      setMallHut((prev) => (prev === (hut?.name ?? null) ? prev : hut?.name ?? null));
+      setMallHut((prev) =>
+        prev === (hut?.name ?? null) ? prev : (hut?.name ?? null),
+      );
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
@@ -1311,9 +1529,18 @@ export function StreetView({
 
     let world: SubwayWorld;
     try {
-      world = new SubwayWorld(canvas, state, interior.stationId, Boolean(interior.arrived));
+      world = new SubwayWorld(
+        canvas,
+        state,
+        interior.stationId,
+        Boolean(interior.arrived),
+      );
     } catch (error) {
-      setFailed(error instanceof Error ? error.message : "WebGL is unavailable in this browser.");
+      setFailed(
+        error instanceof Error
+          ? error.message
+          : "WebGL is unavailable in this browser.",
+      );
       setInterior(null);
       return;
     }
@@ -1354,7 +1581,8 @@ export function StreetView({
         if (world.isRiding()) return true;
         if (world.nearTrain()) {
           setPickingStop(true);
-          if (document.pointerLockElement === canvas) document.exitPointerLock();
+          if (document.pointerLockElement === canvas)
+            document.exitPointerLock();
           return true;
         }
         if (world.nearExit()) leaveStreet();
@@ -1397,14 +1625,42 @@ export function StreetView({
   }, [active, interior, state]);
 
   const requestLock = () => {
-    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallFurnish || mallSnack || phoneOpen) return;
+    if (
+      atDesk ||
+      atComputer ||
+      pickingStop ||
+      riding ||
+      pickingRoom ||
+      sleeping ||
+      atOfficeComputer ||
+      characterMenu ||
+      mallShop ||
+      mallFurnish ||
+      mallSnack ||
+      phoneOpen
+    )
+      return;
     const canvas = inside ? canvasRef.current : outdoorCanvasRef.current;
     if (!canvas) return;
     void canvas.requestPointerLock();
   };
 
   const onCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (atDesk || atComputer || pickingStop || riding || pickingRoom || sleeping || atOfficeComputer || characterMenu || mallShop || mallFurnish || mallSnack || phoneOpen) return;
+    if (
+      atDesk ||
+      atComputer ||
+      pickingStop ||
+      riding ||
+      pickingRoom ||
+      sleeping ||
+      atOfficeComputer ||
+      characterMenu ||
+      mallShop ||
+      mallFurnish ||
+      mallSnack ||
+      phoneOpen
+    )
+      return;
 
     // Outdoor street: click the white-highlighted building to walk in.
     if (!inside && !dustfallTrip && !driving) {
@@ -1416,11 +1672,20 @@ export function StreetView({
 
     const canvas = canvasRef.current;
     const world = lodgingRef.current;
-    if (canvas && world && interior?.kind === "lodging" && interior.zone === "room") {
+    if (
+      canvas &&
+      world &&
+      interior?.kind === "lodging" &&
+      interior.zone === "room"
+    ) {
       const rect = canvas.getBoundingClientRect();
       const lockedNow = document.pointerLockElement === canvas;
-      const ndcX = lockedNow ? 0 : ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      const ndcY = lockedNow ? 0 : -(((event.clientY - rect.top) / rect.height) * 2 - 1);
+      const ndcX = lockedNow
+        ? 0
+        : ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = lockedNow
+        ? 0
+        : -(((event.clientY - rect.top) / rect.height) * 2 - 1);
       if (world.aimedAtComputer(ndcX, ndcY)) {
         atComputerRef.current = true;
         setAtComputer(true);
@@ -1438,17 +1703,26 @@ export function StreetView({
 
   const stayRoomId =
     interior?.kind === "lodging"
-      ? (interior.roomId ?? (lodgingBuilding ? findLodgingRoom(lodgingBuilding)?.id : null) ?? null)
+      ? (interior.roomId ??
+        (lodgingBuilding ? findLodgingRoom(lodgingBuilding)?.id : null) ??
+        null)
       : null;
-  const stayRoom = lodgingBuilding ? findLodgingRoom(lodgingBuilding, stayRoomId) : null;
-  const hotelStay = lodgingBuilding ? lodgingUse(lodgingBuilding) === "hotel" : false;
+  const stayRoom = lodgingBuilding
+    ? findLodgingRoom(lodgingBuilding, stayRoomId)
+    : null;
+  const hotelStay = lodgingBuilding
+    ? lodgingUse(lodgingBuilding) === "hotel"
+    : false;
   const stayLabel = stayRoom
     ? `${hotelStay ? "Room" : "Apt"} ${stayRoom.label}`
     : hotelStay
       ? "your room"
       : "your apartment";
 
-  const goLodgingZone = (zone: LodgingZone, roomId: string | null = stayRoomId) => {
+  const goLodgingZone = (
+    zone: LodgingZone,
+    roomId: string | null = stayRoomId,
+  ) => {
     if (interior?.kind !== "lodging") return;
     if (zone === "room" && !roomId) {
       setPickingRoom(true);
@@ -1467,15 +1741,25 @@ export function StreetView({
   const enterLodgingRoom = (room: LodgingRoom) => {
     if (!lodgingBuilding) return;
     const hotelStay = lodgingUse(lodgingBuilding) === "hotel";
-    if (!canEnterLodgingRoom(lodgingBuilding.id, room, hotelStay, hasKey)) return;
-    if (interior?.kind === "lodging" && interior.zone === "room" && interior.roomId === room.id) {
+    if (!canEnterLodgingRoom(lodgingBuilding.id, room, hotelStay, hasKey))
+      return;
+    if (
+      interior?.kind === "lodging" &&
+      interior.zone === "room" &&
+      interior.roomId === room.id
+    ) {
       setPickingRoom(false);
       return;
     }
     grantLodgingKey(lodgingBuilding.id, room.id);
     setHasKey(true);
     setPickingRoom(false);
-    setInterior({ kind: "lodging", buildingId: lodgingBuilding.id, zone: "room", roomId: room.id });
+    setInterior({
+      kind: "lodging",
+      buildingId: lodgingBuilding.id,
+      zone: "room",
+      roomId: room.id,
+    });
   };
 
   const currentRoom =
@@ -1486,14 +1770,15 @@ export function StreetView({
   const ballclub = ballclubFor(state);
   const stadiumBuilding = findStadium(state);
   const doorNearby = Boolean(venueDoor || lodgingDoor || subwayDoor || atGate);
-  const carAndDoorChoice =
-    Boolean(nearCar && doorNearby && !driving && !inside && !failed && !dustfallTrip);
+  const carAndDoorChoice = Boolean(
+    nearCar && doorNearby && !driving && !inside && !failed && !dustfallTrip,
+  );
   const doorChoiceLabel = lodgingDoor
     ? lodgingDoor.name
     : subwayDoor
       ? subwayDoor.name
       : atGate
-        ? stadiumBuilding?.name ?? ballclub.parkName
+        ? (stadiumBuilding?.name ?? ballclub.parkName)
         : venueDoor
           ? venueDoor.name
           : "Building";
@@ -1512,20 +1797,24 @@ export function StreetView({
             })()
           : "Enter";
 
-  const placeName = interior?.kind === "stadium"
-    ? stadiumBuilding?.name ?? ballclub.parkName
-    : lodgingBuilding
-      ? interior?.kind === "lodging" && interior.zone === "pool"
-        ? `${lodgingBuilding.name} · Pool`
-        : currentRoom
-          ? `${lodgingBuilding.name} · ${hotelStay ? "Room" : "Apt"} ${currentRoom.label}`
-          : lodgingBuilding.name
-      : venueBuilding
-        ? venueBuilding.name
-        : subwayBuilding?.name
-          ?? (interior?.kind === "subway" ? stationDef(interior.stationId).name : "Street level");
+  const placeName =
+    interior?.kind === "stadium"
+      ? (stadiumBuilding?.name ?? ballclub.parkName)
+      : lodgingBuilding
+        ? interior?.kind === "lodging" && interior.zone === "pool"
+          ? `${lodgingBuilding.name} · Pool`
+          : currentRoom
+            ? `${lodgingBuilding.name} · ${hotelStay ? "Room" : "Apt"} ${currentRoom.label}`
+            : lodgingBuilding.name
+        : venueBuilding
+          ? venueBuilding.name
+          : (subwayBuilding?.name ??
+            (interior?.kind === "subway"
+              ? stationDef(interior.stationId).name
+              : "Street level"));
 
-  const lastFinal = interior?.kind === "stadium" || atGate ? stadiumFinal(state) : null;
+  const lastFinal =
+    interior?.kind === "stadium" || atGate ? stadiumFinal(state) : null;
   const lastWinner = lastFinal ? stadiumWinner(lastFinal, ballclub) : null;
 
   return (
@@ -1546,7 +1835,8 @@ export function StreetView({
         onClick={(event) => {
           const canvas = dustfallCanvasRef.current;
           if (!canvas) return;
-          if (document.pointerLockElement !== canvas) canvas.requestPointerLock();
+          if (document.pointerLockElement !== canvas)
+            canvas.requestPointerLock();
           event.preventDefault();
         }}
       />
@@ -1554,7 +1844,9 @@ export function StreetView({
       {failed ? (
         <div className="absolute inset-0 grid place-items-center bg-[#0b1420] p-6 text-center">
           <div className="max-w-sm">
-            <p className="text-lg font-semibold text-white">Street view unavailable</p>
+            <p className="text-lg font-semibold text-white">
+              Street view unavailable
+            </p>
             <p className="mt-2 text-sm text-slate-400">{failed}</p>
             <button
               onClick={onExit}
@@ -1568,21 +1860,24 @@ export function StreetView({
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4 p-4">
         <div className="flex flex-col gap-2">
-        <div className="pointer-events-auto rounded-xl border border-white/10 bg-black/45 px-3.5 py-2 backdrop-blur">
-          <p className="text-[0.6rem] uppercase tracking-[0.2em] text-amber-300/80">
-            {inside ? placeName : inDustfall ? "Dustfall" : "Street level"}
-          </p>
-          <p className="text-sm font-medium text-white">
-            {clock.day} · {clock.date} · {clock.time}
-          </p>
-          <p className="text-[0.7rem] text-sky-100/80">
-            {weatherEmoji(playState.weather.kind)} {playState.weather.tempF}° {playState.weather.label}
-            {playState.events[0] ? ` · ${playState.events[0].icon} ${playState.events[0].headline}` : ""}
-          </p>
-        </div>
-        <div className="pointer-events-auto">
-          <PlayerStatus player={player} />
-        </div>
+          <div className="pointer-events-auto rounded-xl border border-white/10 bg-black/45 px-3.5 py-2 backdrop-blur">
+            <p className="text-[0.6rem] uppercase tracking-[0.2em] text-amber-300/80">
+              {inside ? placeName : inDustfall ? "Dustfall" : "Street level"}
+            </p>
+            <p className="text-sm font-medium text-white">
+              {clock.day} · {clock.date} · {clock.time}
+            </p>
+            <p className="text-[0.7rem] text-sky-100/80">
+              {weatherEmoji(playState.weather.kind)} {playState.weather.tempF}°{" "}
+              {playState.weather.label}
+              {playState.events[0]
+                ? ` · ${playState.events[0].icon} ${playState.events[0].headline}`
+                : ""}
+            </p>
+          </div>
+          <div className="pointer-events-auto">
+            <PlayerStatus player={player} />
+          </div>
         </div>
 
         <div className="pointer-events-auto flex items-center gap-2">
@@ -1607,58 +1902,65 @@ export function StreetView({
             </div>
           ) : (
             <>
-            <button
-              onClick={() => {
-                if (interior?.kind === "stadium") {
-                  const stadium = findStadium(state);
-                  if (stadium) setSpawn(stadiumGateTile(stadium));
-                } else if (lodgingBuilding) {
-                  setSpawn(lodgingGateTile(lodgingBuilding));
-                } else if (venueBuilding) {
-                  setSpawn(venueGateTile(venueBuilding));
-                } else if (interior?.kind === "subway") {
-                  const dest = subwayRef.current?.rideDestination() ?? interior.stationId;
-                  setSpawn(subwayGateFromId(state, dest));
-                }
-                setRiding(false);
-                setPickingStop(false);
-                setPickingRoom(false);
-                setAtOfficeComputer(false);
-                atOfficeComputerRef.current = false;
-                setAtDesk(false);
-                setInterior(null);
-              }}
-              className="rounded-xl bg-amber-400 px-3.5 py-2 text-xs font-semibold text-[#1a1206] backdrop-blur"
-            >
-              {interior?.kind === "stadium" ? "Leave stadium" : "Leave building"}
-            </button>
-            {interior?.kind === "lodging" && interior.zone === "room" ? (
-              <>
-                <button
-                  onClick={() => goLodgingZone("pool")}
-                  className="rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20"
-                >
-                  Roof deck pool
-                </button>
-                <button
-                  onClick={() => {
-                    setPickingRoom(true);
-                    if (document.pointerLockElement) document.exitPointerLock();
-                  }}
-                  className="rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20"
-                >
-                  Switch rooms
-                </button>
-              </>
-            ) : null}
-            {interior?.kind === "lodging" && interior.zone === "pool" && stayRoom ? (
               <button
-                onClick={() => goLodgingZone("room", stayRoom.id)}
+                onClick={() => {
+                  if (interior?.kind === "stadium") {
+                    const stadium = findStadium(state);
+                    if (stadium) setSpawn(stadiumGateTile(stadium));
+                  } else if (lodgingBuilding) {
+                    setSpawn(lodgingGateTile(lodgingBuilding));
+                  } else if (venueBuilding) {
+                    setSpawn(venueGateTile(venueBuilding));
+                  } else if (interior?.kind === "subway") {
+                    const dest =
+                      subwayRef.current?.rideDestination() ??
+                      interior.stationId;
+                    setSpawn(subwayGateFromId(state, dest));
+                  }
+                  setRiding(false);
+                  setPickingStop(false);
+                  setPickingRoom(false);
+                  setAtOfficeComputer(false);
+                  atOfficeComputerRef.current = false;
+                  setAtDesk(false);
+                  setInterior(null);
+                }}
                 className="rounded-xl bg-amber-400 px-3.5 py-2 text-xs font-semibold text-[#1a1206] backdrop-blur"
               >
-                Back to {stayLabel}
+                {interior?.kind === "stadium"
+                  ? "Leave stadium"
+                  : "Leave building"}
               </button>
-            ) : null}
+              {interior?.kind === "lodging" && interior.zone === "room" ? (
+                <>
+                  <button
+                    onClick={() => goLodgingZone("pool")}
+                    className="rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                  >
+                    Roof deck pool
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPickingRoom(true);
+                      if (document.pointerLockElement)
+                        document.exitPointerLock();
+                    }}
+                    className="rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                  >
+                    Switch rooms
+                  </button>
+                </>
+              ) : null}
+              {interior?.kind === "lodging" &&
+              interior.zone === "pool" &&
+              stayRoom ? (
+                <button
+                  onClick={() => goLodgingZone("room", stayRoom.id)}
+                  className="rounded-xl bg-amber-400 px-3.5 py-2 text-xs font-semibold text-[#1a1206] backdrop-blur"
+                >
+                  Back to {stayLabel}
+                </button>
+              ) : null}
             </>
           )}
 
@@ -1680,25 +1982,44 @@ export function StreetView({
         </div>
       ) : null}
 
-      {!locked && !failed && !atDesk && !atComputer && !pickingStop && !riding && !pickingRoom && !sleeping && !atOfficeComputer && !characterMenu && !mallShop && !mallFurnish && !mallSnack && !phoneOpen && !motorsOpen ? (
+      {!locked &&
+      !failed &&
+      !atDesk &&
+      !atComputer &&
+      !pickingStop &&
+      !riding &&
+      !pickingRoom &&
+      !sleeping &&
+      !atOfficeComputer &&
+      !characterMenu &&
+      !mallShop &&
+      !mallFurnish &&
+      !mallSnack &&
+      !phoneOpen &&
+      !motorsOpen ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
           <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
             {driving || dustfallTrip ? (
               <>
-                <p className="text-xs font-semibold text-white">Click the view, then drive</p>
+                <p className="text-xs font-semibold text-white">
+                  Click the view, then drive
+                </p>
                 <p className="mt-0.5 text-[0.65rem] leading-snug text-slate-300">
                   <span className="font-medium text-white">W</span> gas ·{" "}
-                  <span className="font-medium text-white">S</span> brake / reverse ·{" "}
-                  <span className="font-medium text-white">A</span>/
+                  <span className="font-medium text-white">S</span> brake /
+                  reverse · <span className="font-medium text-white">A</span>/
                   <span className="font-medium text-white">D</span> steer ·{" "}
-                  <span className="font-medium text-white">Space</span> handbrake ·{" "}
+                  <span className="font-medium text-white">Space</span>{" "}
+                  handbrake ·{" "}
                   <span className="font-medium text-white">Mouse</span> look ·{" "}
                   <span className="font-medium text-white">E</span> exit
                 </p>
               </>
             ) : (
               <>
-                <p className="text-xs font-semibold text-white">Click to look around</p>
+                <p className="text-xs font-semibold text-white">
+                  Click to look around
+                </p>
                 {mode === "hop" && !inside ? (
                   <p className="mt-0.5 text-[0.65rem] leading-snug text-slate-300">
                     <span className="font-medium text-white">W</span>/
@@ -1717,7 +2038,9 @@ export function StreetView({
                     <span className="font-medium text-white">Mouse</span> look
                   </p>
                 )}
-                <p className="mt-0.5 text-[0.6rem] text-slate-400">Esc releases the cursor · I inventory · M phone</p>
+                <p className="mt-0.5 text-[0.6rem] text-slate-400">
+                  Esc releases the cursor · I inventory · M phone
+                </p>
               </>
             )}
           </div>
@@ -1729,16 +2052,17 @@ export function StreetView({
           {driving || dustfallTrip ? (
             <>
               <span className="font-semibold text-white">W</span> gas ·{" "}
-              <span className="font-semibold text-white">S</span> brake/reverse ·{" "}
-              <span className="font-semibold text-white">A</span>/
+              <span className="font-semibold text-white">S</span> brake/reverse
+              · <span className="font-semibold text-white">A</span>/
               <span className="font-semibold text-white">D</span> steer ·{" "}
-              <span className="font-semibold text-white">Space</span> handbrake ·{" "}
-              <span className="font-semibold text-white">E</span> exit
+              <span className="font-semibold text-white">Space</span> handbrake
+              · <span className="font-semibold text-white">E</span> exit
             </>
           ) : mode === "hop" && !inside ? (
             <>
               <span className="font-semibold text-white">W</span>/
-              <span className="font-semibold text-white">S</span> next intersection ·{" "}
+              <span className="font-semibold text-white">S</span> next
+              intersection ·{" "}
               <span className="font-semibold text-white">Shift</span> run ·{" "}
               <span className="font-semibold text-white">A</span>/
               <span className="font-semibold text-white">D</span> turn ·{" "}
@@ -1751,7 +2075,8 @@ export function StreetView({
               <span className="font-semibold text-white">Space</span> jump ·{" "}
               <span className="font-semibold text-white">E</span>/
               <span className="font-semibold text-white">Click</span>{" "}
-              {inside ? "leave" : "enter"} · <span className="font-semibold text-white">I</span> inventory ·{" "}
+              {inside ? "leave" : "enter"} ·{" "}
+              <span className="font-semibold text-white">I</span> inventory ·{" "}
               <span className="font-semibold text-white">M</span> phone
             </>
           )}
@@ -1769,12 +2094,15 @@ export function StreetView({
               <span className="text-sm font-medium text-white/50">MPH</span>
             </p>
             <p className="mt-1 text-xs text-slate-300">
-              Condition {Math.round(activeOwnedVehicle(player)?.condition ?? 0)}%
+              Condition {Math.round(activeOwnedVehicle(player)?.condition ?? 0)}
+              %
             </p>
             <p className="mt-1 text-[0.65rem] text-slate-400">
               W gas · S brake · A/D steer · Space handbrake · Shift boost
             </p>
-            <p className="mt-0.5 text-[0.65rem] text-slate-500">E exit vehicle · Mouse look</p>
+            <p className="mt-0.5 text-[0.65rem] text-slate-500">
+              E exit vehicle · Mouse look
+            </p>
           </div>
         </div>
       ) : null}
@@ -1782,11 +2110,17 @@ export function StreetView({
       {dustfallTrip && !failed ? (
         <div className="pointer-events-none absolute left-4 top-24 z-10">
           <div className="min-w-[12rem] rounded-xl border border-amber-300/30 bg-black/55 px-3 py-2 backdrop-blur">
-            <p className="text-[0.65rem] uppercase tracking-[0.18em] text-amber-200">Highway 93</p>
-            <p className="mt-1 text-sm font-semibold text-white">
-              {highwayToward === "riverside" ? "Toward Riverside" : "Toward Dustfall"}
+            <p className="text-[0.65rem] uppercase tracking-[0.18em] text-amber-200">
+              Highway 93
             </p>
-            <p className="mt-1 text-xs text-slate-300">{Math.round(dustfallProgress * 100)}% of the drive</p>
+            <p className="mt-1 text-sm font-semibold text-white">
+              {highwayToward === "riverside"
+                ? "Toward Riverside"
+                : "Toward Dustfall"}
+            </p>
+            <p className="mt-1 text-xs text-slate-300">
+              {Math.round(dustfallProgress * 100)}% of the drive
+            </p>
             <p className="mt-1 text-[0.65rem] text-slate-400">
               {highwayToward === "riverside"
                 ? dustfallProgress >= 0.88
@@ -1812,7 +2146,9 @@ export function StreetView({
                   <p className="text-[0.6rem] uppercase tracking-[0.2em] text-amber-300">
                     {doorChoiceKind}
                   </p>
-                  <p className="truncate text-sm font-semibold text-white">{doorChoiceLabel}</p>
+                  <p className="truncate text-sm font-semibold text-white">
+                    {doorChoiceLabel}
+                  </p>
                 </div>
                 <p className="shrink-0 text-sm text-slate-300">
                   <span className="font-semibold text-white">Click</span>/
@@ -1821,8 +2157,12 @@ export function StreetView({
               </div>
               <div className="flex items-center justify-between gap-4 rounded-xl border border-sky-300/35 bg-sky-400/10 px-3 py-2">
                 <div className="min-w-0 text-left">
-                  <p className="text-[0.6rem] uppercase tracking-[0.2em] text-sky-300">Your vehicle</p>
-                  <p className="truncate text-sm font-semibold text-white">{nearCar.model}</p>
+                  <p className="text-[0.6rem] uppercase tracking-[0.2em] text-sky-300">
+                    Your vehicle
+                  </p>
+                  <p className="truncate text-sm font-semibold text-white">
+                    {nearCar.model}
+                  </p>
                 </div>
                 <p className="shrink-0 text-sm text-slate-300">
                   <span className="font-semibold text-white">F</span> drive
@@ -1833,11 +2173,20 @@ export function StreetView({
         </div>
       ) : null}
 
-      {nearCar && !carAndDoorChoice && !driving && !inside && !failed && !dustfallTrip ? (
+      {nearCar &&
+      !carAndDoorChoice &&
+      !driving &&
+      !inside &&
+      !failed &&
+      !dustfallTrip ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-sky-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
-            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-sky-300">Your vehicle</p>
-            <p className="mt-1 text-xl font-semibold text-white">{nearCar.model}</p>
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-sky-300">
+              Your vehicle
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">
+              {nearCar.model}
+            </p>
             <p className="mt-1 text-sm text-slate-300">
               Press <span className="font-semibold text-white">E</span> or{" "}
               <span className="font-semibold text-white">F</span> to drive
@@ -1854,7 +2203,9 @@ export function StreetView({
       {highwayHint && !inside && !failed && !dustfallTrip ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="max-w-sm rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
-            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Highway 93</p>
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
+              Highway 93
+            </p>
             <p className="mt-1 text-sm text-slate-200">{highwayHint}</p>
           </div>
         </div>
@@ -1866,7 +2217,9 @@ export function StreetView({
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
               {stadiumBuilding?.name ?? ballclub.parkName}
             </p>
-            <p className="mt-1 text-xl font-semibold text-white">Enter stadium</p>
+            <p className="mt-1 text-xl font-semibold text-white">
+              Enter stadium
+            </p>
             <p className="mt-1 text-sm text-slate-300">
               <span className="font-semibold text-white">Click</span> or{" "}
               <span className="font-semibold text-white">E</span>
@@ -1881,10 +2234,13 @@ export function StreetView({
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
               {lodgingUse(lodgingDoor) === "hotel" ? "Hotel" : "Residences"}
             </p>
-            <p className="mt-1 text-xl font-semibold text-white">{lodgingDoor.name}</p>
+            <p className="mt-1 text-xl font-semibold text-white">
+              {lodgingDoor.name}
+            </p>
             <p className="mt-1 text-sm text-slate-300">
               <span className="font-semibold text-white">Click</span> or press{" "}
-              <span className="font-semibold text-white">E</span> to enter the lobby
+              <span className="font-semibold text-white">E</span> to enter the
+              lobby
             </p>
           </div>
         </div>
@@ -1905,7 +2261,9 @@ export function StreetView({
                 return role ? venueLabel(role) : "Building";
               })()}
             </p>
-            <p className="mt-1 text-xl font-semibold text-white">{venueDoor.name}</p>
+            <p className="mt-1 text-xl font-semibold text-white">
+              {venueDoor.name}
+            </p>
             <p className="mt-1 text-sm text-slate-300">
               <span className="font-semibold text-white">Click</span> or press{" "}
               <span className="font-semibold text-white">E</span> to enter
@@ -1919,14 +2277,24 @@ export function StreetView({
         </div>
       ) : null}
 
-      {subwayDoor && !carAndDoorChoice && !lodgingDoor && !atGate && !inside && !failed ? (
+      {subwayDoor &&
+      !carAndDoorChoice &&
+      !lodgingDoor &&
+      !atGate &&
+      !inside &&
+      !failed ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
-            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Subway</p>
-            <p className="mt-1 text-xl font-semibold text-white">{subwayDoor.name}</p>
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
+              Subway
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">
+              {subwayDoor.name}
+            </p>
             <p className="mt-1 text-sm text-slate-300">
               <span className="font-semibold text-white">Click</span> or press{" "}
-              <span className="font-semibold text-white">E</span> to go underground
+              <span className="font-semibold text-white">E</span> to go
+              underground
             </p>
           </div>
         </div>
@@ -1935,15 +2303,21 @@ export function StreetView({
       {interior?.kind === "stadium" || atGate ? (
         <div className="pointer-events-none absolute left-1/2 top-20 z-10 -translate-x-1/2">
           <div className="overflow-hidden rounded-xl border border-[#16325c] shadow-xl">
-            <div className="bg-[#1f4d8c] px-5 py-2.5 text-center" style={{ backgroundColor: ballclub.accent }}>
+            <div
+              className="bg-[#1f4d8c] px-5 py-2.5 text-center"
+              style={{ backgroundColor: ballclub.accent }}
+            >
               <p className="text-sm font-bold tracking-wide text-white">
                 ⚾ {ballclub.fullName.toUpperCase()}
               </p>
               {lastFinal ? (
                 <div className="mt-1.5 rounded-md bg-[#10233f] px-4 py-1.5">
-                  <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-amber-300">Final</p>
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-amber-300">
+                    Final
+                  </p>
                   <p className="text-sm font-bold text-white">
-                    {ballclub.shortName} {lastFinal.ravens} – {lastFinal.visitors} {ballclub.visitorShort}
+                    {ballclub.shortName} {lastFinal.ravens} –{" "}
+                    {lastFinal.visitors} {ballclub.visitorShort}
                   </p>
                   <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-amber-200">
                     {lastWinner ? `${lastWinner} win` : "Game tied"}
@@ -1951,7 +2325,9 @@ export function StreetView({
                 </div>
               ) : (
                 <p className="text-[0.7rem] uppercase tracking-[0.18em] text-amber-200">
-                  {isGameNight(state) ? `Live game · ${GAME_HOURS_LABEL}` : `Open for tours · first pitch 6:00 PM`}
+                  {isGameNight(state)
+                    ? `Live game · ${GAME_HOURS_LABEL}`
+                    : `Open for tours · first pitch 6:00 PM`}
                 </p>
               )}
             </div>
@@ -1963,23 +2339,33 @@ export function StreetView({
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-amber-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
-              Doors open · press <span className="font-semibold text-white">E</span> to board
+              Doors open · press{" "}
+              <span className="font-semibold text-white">E</span> to board
             </p>
           </div>
         </div>
       ) : null}
 
-      {atSubwayExit && !atTrain && !pickingStop && !riding && interior?.kind === "subway" ? (
+      {atSubwayExit &&
+      !atTrain &&
+      !pickingStop &&
+      !riding &&
+      interior?.kind === "subway" ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
-              Press <span className="font-semibold text-white">E</span> to leave the station
+              Press <span className="font-semibold text-white">E</span> to leave
+              the station
             </p>
           </div>
         </div>
       ) : null}
 
-      {interior?.kind === "subway" && !atTrain && !atSubwayExit && !pickingStop && !riding ? (
+      {interior?.kind === "subway" &&
+      !atTrain &&
+      !atSubwayExit &&
+      !pickingStop &&
+      !riding ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
@@ -1992,7 +2378,9 @@ export function StreetView({
       {riding ? (
         <div className="pointer-events-none absolute bottom-16 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/10 bg-black/55 px-4 py-2 text-center backdrop-blur">
-            <p className="text-[0.65rem] uppercase tracking-[0.22em] text-amber-300">Riverside Line</p>
+            <p className="text-[0.65rem] uppercase tracking-[0.22em] text-amber-300">
+              Riverside Line
+            </p>
             <p className="text-sm text-white">Through the tunnel</p>
           </div>
         </div>
@@ -2010,7 +2398,10 @@ export function StreetView({
         />
       ) : null}
 
-      {atDesk && venueBuilding && interior?.kind === "venue" && !atOfficeComputer ? (
+      {atDesk &&
+      venueBuilding &&
+      interior?.kind === "venue" &&
+      !atOfficeComputer ? (
         <VenueDesk
           building={venueBuilding}
           state={state}
@@ -2058,7 +2449,10 @@ export function StreetView({
         />
       ) : null}
 
-      {(atDesk || pickingRoom) && lodgingBuilding && interior?.kind === "lodging" && (interior.zone === "lobby" || pickingRoom) ? (
+      {(atDesk || pickingRoom) &&
+      lodgingBuilding &&
+      interior?.kind === "lodging" &&
+      (interior.zone === "lobby" || pickingRoom) ? (
         <LodgingDesk
           building={lodgingBuilding}
           hasKey={hasKey}
@@ -2073,7 +2467,10 @@ export function StreetView({
         />
       ) : null}
 
-      {atDesk && lodgingBuilding && interior?.kind === "lodging" && interior.zone === "pool" ? (
+      {atDesk &&
+      lodgingBuilding &&
+      interior?.kind === "lodging" &&
+      interior.zone === "pool" ? (
         <PoolBar
           clock={state.clock}
           player={player}
@@ -2095,7 +2492,9 @@ export function StreetView({
         />
       ) : null}
 
-      {atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
+      {atComputer &&
+      interior?.kind === "lodging" &&
+      interior.zone === "room" ? (
         <RoomComputer
           minuteOfDay={state.clock.minuteOfDay}
           onClose={() => {
@@ -2105,17 +2504,25 @@ export function StreetView({
         />
       ) : null}
 
-      {aimComputer && !atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
+      {aimComputer &&
+      !atComputer &&
+      interior?.kind === "lodging" &&
+      interior.zone === "room" ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-sky-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
-              Press <span className="font-semibold text-white">E</span> to use the computer
+              Press <span className="font-semibold text-white">E</span> to use
+              the computer
             </p>
           </div>
         </div>
       ) : null}
 
-      {atConsole && !sleeping && !atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
+      {atConsole &&
+      !sleeping &&
+      !atComputer &&
+      interior?.kind === "lodging" &&
+      interior.zone === "room" ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-sky-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
@@ -2126,7 +2533,13 @@ export function StreetView({
         </div>
       ) : null}
 
-      {atSlider && !atBed && !atConsole && !sleeping && !atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
+      {atSlider &&
+      !atBed &&
+      !atConsole &&
+      !sleeping &&
+      !atComputer &&
+      interior?.kind === "lodging" &&
+      interior.zone === "room" ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-sky-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
@@ -2137,31 +2550,49 @@ export function StreetView({
         </div>
       ) : null}
 
-      {atBed && !sleeping && !atComputer && interior?.kind === "lodging" && interior.zone === "room" ? (
+      {atBed &&
+      !sleeping &&
+      !atComputer &&
+      interior?.kind === "lodging" &&
+      interior.zone === "room" ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-amber-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
             {canSleepNow(state) ? (
               <p className="text-xs text-slate-200">
-                Press <span className="font-semibold text-white">E</span> to sleep until 8:00 AM
+                Press <span className="font-semibold text-white">E</span> to
+                sleep until 8:00 AM
               </p>
             ) : (
-              <p className="text-xs text-slate-200">You can turn in after 10:00 PM</p>
+              <p className="text-xs text-slate-200">
+                You can turn in after 10:00 PM
+              </p>
             )}
           </div>
         </div>
       ) : null}
 
-      {interior?.kind === "venue" && !atDesk && !atOfficeComputer && !mallShop && !mallFurnish && !mallSnack && !characterMenu ? (
+      {interior?.kind === "venue" &&
+      !atDesk &&
+      !atOfficeComputer &&
+      !mallShop &&
+      !mallFurnish &&
+      !mallSnack &&
+      !characterMenu ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
             {mallHut ? (
               <p className="text-xs text-slate-200">
-                {mallHut} · press <span className="font-semibold text-white">E</span> to order
+                {mallHut} · press{" "}
+                <span className="font-semibold text-white">E</span> to order
               </p>
             ) : mallFurnishNear ? (
               <p className="text-xs text-slate-200">
-                {FURNISH_STORES.find((item) => item.id === mallFurnishNear)?.name} · press{" "}
-                <span className="font-semibold text-white">E</span> to browse
+                {
+                  FURNISH_STORES.find((item) => item.id === mallFurnishNear)
+                    ?.name
+                }{" "}
+                · press <span className="font-semibold text-white">E</span> to
+                browse
               </p>
             ) : mallStore ? (
               <p className="text-xs text-slate-200">
@@ -2171,18 +2602,30 @@ export function StreetView({
             ) : venueBuilding && venueRole(venueBuilding) === "mall" ? (
               <p className="text-xs text-slate-200">
                 Walk the concourse into a store · ride the escalators · press{" "}
-                <span className="font-semibold text-white">E</span> at the doors to leave
+                <span className="font-semibold text-white">E</span> at the doors
+                to leave
               </p>
             ) : (
               <p className="text-xs text-slate-200">
-                Walk to the desk · press <span className="font-semibold text-white">E</span> at the doors to leave
+                Walk to the desk · press{" "}
+                <span className="font-semibold text-white">E</span> at the doors
+                to leave
               </p>
             )}
           </div>
         </div>
       ) : null}
 
-      {interior?.kind === "lodging" && interior.zone !== "lobby" && !atComputer && !aimComputer && !pickingRoom && !sleeping && !atBed && !atSlider && !atConsole && !atDesk ? (
+      {interior?.kind === "lodging" &&
+      interior.zone !== "lobby" &&
+      !atComputer &&
+      !aimComputer &&
+      !pickingRoom &&
+      !sleeping &&
+      !atBed &&
+      !atSlider &&
+      !atConsole &&
+      !atDesk ? (
         <div className="pointer-events-auto absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="flex flex-col items-center gap-2">
             {interior.zone === "room" ? (
@@ -2213,12 +2656,15 @@ export function StreetView({
                             : " · click to eat"
                         } · `
                       : null}
-                    press <span className="font-semibold text-white">P</span> for the cabana ·{" "}
-                    <span className="font-semibold text-white">E</span> for the lobby
+                    press <span className="font-semibold text-white">P</span>{" "}
+                    for the cabana ·{" "}
+                    <span className="font-semibold text-white">E</span> for the
+                    lobby
                   </>
                 ) : (
                   <>
-                    Press <span className="font-semibold text-white">E</span> to return to the lobby
+                    Press <span className="font-semibold text-white">E</span> to
+                    return to the lobby
                   </>
                 )}
               </p>
@@ -2335,9 +2781,15 @@ export function StreetView({
           }}
           className="pointer-events-auto absolute left-1/2 top-16 z-40 w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-white/15 bg-[#101826]/95 px-4 py-3 text-left shadow-2xl backdrop-blur"
         >
-          <p className="text-[0.65rem] uppercase tracking-[0.2em] text-sky-300">Messages · now</p>
-          <p className="mt-1 text-sm font-semibold text-white">{phoneToast.sender}</p>
-          <p className="truncate text-xs text-slate-300">{phoneToast.body[0]}</p>
+          <p className="text-[0.65rem] uppercase tracking-[0.2em] text-sky-300">
+            Messages · now
+          </p>
+          <p className="mt-1 text-sm font-semibold text-white">
+            {phoneToast.sender}
+          </p>
+          <p className="truncate text-xs text-slate-300">
+            {phoneToast.body[0]}
+          </p>
         </button>
       ) : null}
 
@@ -2377,7 +2829,9 @@ export function StreetView({
                 ) : null}
               </>
             ) : (
-              <p className="mt-2 text-sm text-slate-400">Sleeping until 8:00 AM</p>
+              <p className="mt-2 text-sm text-slate-400">
+                Sleeping until 8:00 AM
+              </p>
             )}
           </div>
         </div>
@@ -2412,7 +2866,9 @@ function ModeButton({
       onClick={onClick}
       title={title}
       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-        active ? "bg-amber-400 text-[#1a1206]" : "text-slate-300 hover:bg-white/10"
+        active
+          ? "bg-amber-400 text-[#1a1206]"
+          : "text-slate-300 hover:bg-white/10"
       }`}
     >
       {label}

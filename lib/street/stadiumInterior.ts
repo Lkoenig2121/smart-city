@@ -1,7 +1,16 @@
 import * as THREE from "three";
 import type { Blocker } from "./buildCity";
 import { MeshBuilder } from "./meshBuilder";
-import { addGreenMonsterInterior, addMonsterSeating, monsterGroundAt } from "./scorpionMonster";
+import {
+  addGreenMonsterInterior,
+  addMonsterSeating,
+  monsterGroundAt,
+  monsterSeatWalkY,
+  MONSTER_DECK_Y,
+  MONSTER_ROW_RISE,
+  MONSTER_ROW_RUN,
+  MONSTER_ROWS,
+} from "./scorpionMonster";
 
 export interface StadiumInterior {
   group: THREE.Group;
@@ -12,6 +21,8 @@ export interface StadiumInterior {
   fans: THREE.InstancedMesh;
   seatedCount: number;
   walkingCount: number;
+  /** Seated fan indices on the Green Monster — only shown during gametime. */
+  monsterFanStart: number;
   rest: Float32Array;
   groundAt: (x: number, z: number) => number;
   dispose: () => void;
@@ -354,7 +365,7 @@ export function buildStadiumInterior(opts: { greenMonster?: boolean } = {}): Sta
     }),
   );
 
-  const { mesh: fans, rest } = buildFans();
+  const { mesh: fans, rest, monsterFanStart } = buildFans(Boolean(opts.greenMonster));
   group.add(fans);
   disposables.push(fans.geometry);
   disposables.push(fans.material as THREE.Material);
@@ -368,6 +379,7 @@ export function buildStadiumInterior(opts: { greenMonster?: boolean } = {}): Sta
     fans,
     seatedCount: SEATED_FANS,
     walkingCount: WALKING_FANS,
+    monsterFanStart,
     rest,
     groundAt: (x, z) => stadiumGroundAt(x, z, Boolean(opts.greenMonster)),
     dispose: () => {
@@ -675,7 +687,7 @@ function addFloodTowers(walls: MeshBuilder, trim: MeshBuilder, blockers: Blocker
   }
 }
 
-function seatLayout() {
+function seatLayout(greenMonster = false) {
   const seats: { x: number; y: number; z: number }[] = [];
   for (let row = 0; row < SEAT_ROWS; row++) {
     const pad = row * ROW_RUN;
@@ -689,16 +701,70 @@ function seatLayout() {
     }
     for (let z = -15.2; z <= 13.8; z += 1.05) {
       seats.push({ x: xInner, y, z });
-      seats.push({ x: -xInner, y, z });
+      // Left foul is Monster seating at Scorpion Field.
+      if (!greenMonster) seats.push({ x: -xInner, y, z });
     }
-    for (let x = -17.2; x <= -CF_GAP - 1.15; x += 1.05) seats.push({ x, y, z: zFar });
+    if (!greenMonster) {
+      for (let x = -17.2; x <= -CF_GAP - 1.15; x += 1.05) seats.push({ x, y, z: zFar });
+    }
     for (let x = CF_GAP + 1.15; x <= 17.2; x += 1.05) seats.push({ x, y, z: zFar });
   }
   return seats;
 }
 
-function buildFans() {
-  const seats = seatLayout();
+/** Guests on the Green Monster ledge, bleachers, and left-foul stands. */
+function monsterFanSeats() {
+  const seats: { x: number; y: number; z: number }[] = [];
+  const wallX0 = -FIELD_HALF - 0.55;
+  const wallX1 = -CF_GAP + 0.35;
+  const wallZ = FIELD_Z_FAR;
+  const aisleX0 = (wallX0 + wallX1) / 2 - 0.55;
+  const aisleX1 = aisleX0 + 1.1;
+
+  // Standing row along the viewing ledge (top of the wall).
+  const standY = MONSTER_DECK_Y + 0.95;
+  const standZ = wallZ + 0.2;
+  for (let x = wallX0 + 0.7; x <= wallX1 - 0.7; x += 0.72) {
+    if (x >= aisleX0 - 0.15 && x <= aisleX1 + 0.15) continue;
+    seats.push({ x, y: standY, z: standZ });
+  }
+
+  // Raised bleachers behind the Monster.
+  for (let row = 0; row < MONSTER_ROWS; row++) {
+    const z1 = wallZ - 0.5 - row * MONSTER_ROW_RUN;
+    const z0 = z1 - (MONSTER_ROW_RUN - 0.14);
+    const z = z0 + 0.34;
+    const y = monsterSeatWalkY(row) + 0.48;
+    for (let x = wallX0 + 0.7; x <= wallX1 - 0.35; x += 0.68) {
+      if (x >= aisleX0 - 0.1 && x <= aisleX1 + 0.1) continue;
+      seats.push({ x, y, z });
+    }
+  }
+
+  // Left-foul Monster bleachers.
+  const foulX1 = -FIELD_HALF + 0.1;
+  const foulZ0 = FIELD_Z_FAR + 1.4;
+  const foulZ1 = SEAT_Z0 - 1.8;
+  for (let row = 0; row < MONSTER_ROWS; row++) {
+    const x1 = foulX1 - row * MONSTER_ROW_RUN;
+    const x0 = x1 - (MONSTER_ROW_RUN - 0.1);
+    const x = x0 + 0.31;
+    const y = 3.55 + row * MONSTER_ROW_RISE + 0.48;
+    for (let z = foulZ0 + 0.55; z <= foulZ1 - 0.55; z += 0.7) {
+      seats.push({ x, y, z });
+    }
+  }
+
+  return seats;
+}
+
+function buildFans(greenMonster = false) {
+  const bowlSeats = seatLayout(greenMonster);
+  const monsterSeats = greenMonster ? monsterFanSeats() : [];
+  // Trailing block of seated fans live on the Monster — fillCrowd only shows
+  // them during gametime, same capsules as the rest of the bowl.
+  const monsterSlots = Math.min(monsterSeats.length, Math.floor(SEATED_FANS * 0.35));
+  const monsterFanStart = SEATED_FANS - monsterSlots;
   const geo = new THREE.CapsuleGeometry(0.22, 0.72, 3, 6);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78 });
   const count = SEATED_FANS + WALKING_FANS + PLAYER_FANS;
@@ -707,14 +773,20 @@ function buildFans() {
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const matrix = new THREE.Matrix4();
   const color = new THREE.Color();
-  const palettes = ["#1f4d8c", "#c0392b", "#f4f1ea", "#2c3e6b", "#7a2e2e", "#e8c36a", "#3d5a80", "#d4a017", "#4aa3c4", "#8a4b2f"];
+  const palettes = greenMonster
+    ? ["#2a6b5a", "#c9a44c", "#1a4d3a", "#f4f1ea", "#9b2e24", "#e8c36a", "#3d5a80", "#d4a017", "#4aa3c4", "#8a4b2f"]
+    : ["#1f4d8c", "#c0392b", "#f4f1ea", "#2c3e6b", "#7a2e2e", "#e8c36a", "#3d5a80", "#d4a017", "#4aa3c4", "#8a4b2f"];
+  const homeAccent = greenMonster ? "#2a6b5a" : "#1f4d8c";
   const rest = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
     let x: number;
     let z: number;
     let y: number;
     if (i < SEATED_FANS) {
-      const seat = seats[i % seats.length];
+      const seat =
+        i >= monsterFanStart && monsterSeats.length > 0
+          ? monsterSeats[(i - monsterFanStart) % monsterSeats.length]
+          : bowlSeats[i % bowlSeats.length];
       x = seat.x;
       y = seat.y;
       z = seat.z;
@@ -734,9 +806,9 @@ function buildFans() {
     rest[i * 3 + 2] = z;
     matrix.makeTranslation(x, y, z);
     mesh.setMatrixAt(i, matrix);
-    mesh.setColorAt(i, color.set(i >= SEATED_FANS + WALKING_FANS ? "#1f4d8c" : palettes[i % palettes.length]));
+    mesh.setColorAt(i, color.set(i >= SEATED_FANS + WALKING_FANS ? homeAccent : palettes[i % palettes.length]));
   }
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  return { mesh, rest };
+  return { mesh, rest, monsterFanStart };
 }

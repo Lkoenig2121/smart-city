@@ -363,11 +363,16 @@ export class StadiumWorld {
     const dummy = this.playerDummy;
     const seated = this.interior.seatedCount;
     const walking = this.interior.walkingCount;
+    const monsterStart = this.interior.monsterFanStart;
+    const game = isGameNight(this.state);
     const seatedShown = Math.round(seated * crowd.seated);
     const walkingShown = Math.round(walking * crowd.walking);
     dummy.rotation.set(0, 0, 0);
     for (let i = 0; i < seated; i++) {
-      if (i < seatedShown) {
+      // Monster deck guests use the same capsules, but only during the game.
+      const onMonster = i >= monsterStart;
+      const show = i < seatedShown && (!onMonster || game);
+      if (show) {
         dummy.position.set(rest[i * 3], rest[i * 3 + 1], rest[i * 3 + 2]);
         dummy.scale.set(1, 1, 1);
       } else {
