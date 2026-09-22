@@ -1,12 +1,13 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
-import { isGameNight, stadiumAttendance, stadiumFinal, stadiumGame } from "@/lib/city/stadium";
+import { isGameNight, ballclubFor, stadiumAttendance, stadiumFinal, stadiumGame } from "@/lib/city/stadium";
 import { createFireworkSparks, FIREWORK_PALETTE, sparkFade, stepFireworks, type FireworkSpark } from "@/lib/city/fireworks";
 import { paintRavensScoreboard } from "./ravensScoreboard";
 import { InteriorControls } from "./interiorControls";
 import { buildStadiumInterior, type StadiumInterior } from "./stadiumInterior";
 import { HeldItemView } from "./heldItem";
+import { hasGreenMonster } from "./scorpionMonster";
 
 const DEFENSE: { x: number; z: number }[] = [
   { x: 0, z: 8.7 },
@@ -64,10 +65,13 @@ const AT_BATS: AtBatPlay[] = [
   { kind: "homer", landX: 1.4, landZ: -24.5, peak: 14.2, fielder: 7 },
   { kind: "homer", landX: -8.6, landZ: -22.8, peak: 13.4, fielder: 6 },
   { kind: "homer", landX: 10.2, landZ: -22.2, peak: 13.8, fielder: 8 },
+  // Green Monster shots — left-field wall at Scorpion Field.
+  { kind: "homer", landX: -14.2, landZ: -18.6, peak: 12.6, fielder: 6 },
+  { kind: "liner", landX: -16.4, landZ: -10.2, peak: 9.8, fielder: 6 },
 ];
 
 /**
- * First-person walk through Ravens Ballpark. Lighting and the scoreboard
+ * First-person walk through the city's ballpark. Lighting and the scoreboard
  * follow the live city clock so a 6 PM start actually looks like a night game.
  */
 export class StadiumWorld {
@@ -112,7 +116,9 @@ export class StadiumWorld {
     this.camera = new THREE.PerspectiveCamera(78, 1, 0.1, 400);
     this.scene.add(this.camera);
     this.heldView.attach(this.camera);
-    this.interior = buildStadiumInterior();
+    this.interior = buildStadiumInterior({
+      greenMonster: [...this.state.buildings.values()].some(hasGreenMonster),
+    });
     this.scene.add(this.interior.group);
 
     this.controls = new InteriorControls(
@@ -257,6 +263,7 @@ export class StadiumWorld {
       stadiumGame(this.state) ?? stadiumFinal(this.state),
       clock,
       this.time,
+      ballclubFor(this.state),
     );
     this.scoreTexture.needsUpdate = true;
   }

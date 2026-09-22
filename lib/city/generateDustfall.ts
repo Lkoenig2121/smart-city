@@ -270,6 +270,38 @@ export function generateDustfall(seed = 934201): CityState {
   place("skyscraper", 30, 20);
   place("tower", 31, 10);
 
+  // Scorpion Field — southeast bowl with parking off the arterial.
+  const stadiumX = 26;
+  const stadiumY = 27;
+  for (let x = stadiumX; x < stadiumX + 5; x++) {
+    for (const y of [stadiumY - 1, stadiumY + 4]) {
+      const tile = tiles[y]?.[x];
+      if (tile && !tile.road && tile.terrain !== "water") tile.terrain = "lot";
+    }
+  }
+  for (let y = stadiumY; y < stadiumY + 4; y++) {
+    for (const x of [stadiumX - 1, stadiumX + 5]) {
+      const tile = tiles[y]?.[x];
+      if (tile && !tile.road && tile.terrain !== "water") tile.terrain = "lot";
+    }
+  }
+  const ballpark = place("baseball_stadium", stadiumX, stadiumY);
+  if (ballpark) {
+    ballpark.name = "Scorpion Field";
+    ballpark.wallColor = "#c4a574";
+    ballpark.roofColor = "#2a6b5a";
+    ballpark.accentColor = "#c9a44c";
+    ballpark.stats.extra = {
+      ...ballpark.stats.extra,
+      team: "Dustfall Scorpions",
+      seats: "12,000",
+      tourism: "Desert draw",
+      traffic: "Game-day surge",
+      "daily gate": "$15,000",
+      "city happiness": "+1,000",
+    };
+  }
+
   // Every Dustfall building should be walk-in (civic by kind, rest tagged here).
   markAllEnterableVenues(buildings);
 

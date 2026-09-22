@@ -23,6 +23,11 @@ export function paintRavensScoreboard(
   game: StadiumGame | null,
   clock: ScoreboardClock,
   time: number,
+  club: { shortName: string; visitorShort: string; fullName: string } = {
+    shortName: "Ravens",
+    visitorShort: "Bears",
+    fullName: "Ravens Baseball",
+  },
 ) {
   ctx.clearRect(0, 0, w, h);
 
@@ -58,7 +63,7 @@ export function paintRavensScoreboard(
   ctx.lineWidth = 8;
   ctx.stroke();
 
-  paintTitleBanner(ctx, w / 2, 214);
+  paintTitleBanner(ctx, w / 2, 214, club.fullName.includes("Baseball") ? club.fullName : `${club.shortName} Baseball`);
 
   const boardX = 64;
   const boardY = 278;
@@ -93,7 +98,7 @@ export function paintRavensScoreboard(
   }
 
   const visitors = {
-    name: "Bears",
+    name: club.visitorShort,
     script: true,
     line: game?.visitorsLine ?? emptyLine(),
     runs: game?.visitors ?? 0,
@@ -102,7 +107,7 @@ export function paintRavensScoreboard(
     accent: "#c0392b",
   };
   const ravens = {
-    name: "Ravens",
+    name: club.shortName,
     script: true,
     line: game?.ravensLine ?? emptyLine(),
     runs: game?.ravens ?? 0,
@@ -151,7 +156,7 @@ function emptyLine() {
   return Array.from({ length: 9 }, () => null as number | null);
 }
 
-function paintTitleBanner(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
+function paintTitleBanner(ctx: CanvasRenderingContext2D, cx: number, cy: number, title = "Ravens Baseball") {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.beginPath();
@@ -171,8 +176,8 @@ function paintTitleBanner(ctx: CanvasRenderingContext2D, cx: number, cy: number)
   ctx.textBaseline = "middle";
   ctx.strokeStyle = WHITE;
   ctx.lineWidth = 8;
-  ctx.strokeText("Ravens Baseball", 0, -4);
-  ctx.fillText("Ravens Baseball", 0, -4);
+  ctx.strokeText(title, 0, -4);
+  ctx.fillText(title, 0, -4);
   ctx.restore();
 }
 

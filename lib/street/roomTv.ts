@@ -3,7 +3,7 @@ import { advanceDay, weekdayOf } from "@/lib/city/calendar";
 import { DAYS, type CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
 import { forecastFor, weatherEmoji } from "@/lib/simulation/weather/weather";
-import { isBroadcastWindow, stadiumBigPlay, stadiumOnTv, stadiumWinner } from "@/lib/city/stadium";
+import { isBroadcastWindow, ballclubFor, stadiumBigPlay, stadiumOnTv, stadiumWinner } from "@/lib/city/stadium";
 
 export interface RoomTv {
   update: (dt: number, state: CityState) => void;
@@ -210,8 +210,9 @@ function drawBaseball(
   state: CityState,
 ) {
   const game = stadiumOnTv(state);
-  const play = game ? stadiumBigPlay(game) : null;
-  const winner = game ? stadiumWinner(game) : null;
+  const club = ballclubFor(state);
+  const play = game ? stadiumBigPlay(game, club) : null;
+  const winner = game ? stadiumWinner(game, club) : null;
   const live = Boolean(game?.playing);
   const loop = 6.4;
   const u = (t % loop) / loop;
@@ -412,9 +413,9 @@ function drawBaseball(
   ctx.fillText(live ? "LIVE  ·  RNV SPORT" : "FINAL  ·  RNV SPORT", 26, 30);
   ctx.fillStyle = "#f4f1ea";
   ctx.font = "800 22px system-ui, sans-serif";
-  ctx.fillText(`RAV  ${game?.ravens ?? 0}`, 26, 56);
+  ctx.fillText(`${club.abbrev}  ${game?.ravens ?? 0}`, 26, 56);
   ctx.fillStyle = "#ffb4a8";
-  ctx.fillText(`BEA  ${game?.visitors ?? 0}`, 132, 56);
+  ctx.fillText(`${club.visitorAbbrev}  ${game?.visitors ?? 0}`, 132, 56);
   ctx.fillStyle = "#e8c36a";
   ctx.font = "700 12px system-ui, sans-serif";
   ctx.fillText(live ? `${game?.inning ?? 1}` : winner ? `${winner} win` : "TIE", 230, 54);
@@ -438,7 +439,11 @@ function drawBaseball(
   ctx.fillStyle = "#f4e6c0";
   ctx.font = "700 15px system-ui, sans-serif";
   ctx.textAlign = "left";
-  ctx.fillText(play?.label ?? "Ravens vs Harbor Bears  ·  first pitch 6:00 PM", 122, H - 16);
+  ctx.fillText(
+    play?.label ?? `${club.shortName} vs ${club.visitorShort}  ·  first pitch 6:00 PM`,
+    122,
+    H - 16,
+  );
 }
 
 function drawCrowdBowl(ctx: CanvasRenderingContext2D, t: number, night: boolean) {
@@ -576,16 +581,17 @@ function drawNews(
   ctx.fillText("Downtown waterfront draws record visitors", 18, 300);
 
   const game = stadiumOnTv(state);
-  const winner = game ? stadiumWinner(game) : null;
+  const club = ballclubFor(state);
+  const winner = game ? stadiumWinner(game, club) : null;
   const headlines = [
     ...state.events.map((event) => event.headline),
     `Population ${state.population.toLocaleString()} and still climbing`,
     "Harborview books out the club floor  ·  Room 1110 still open",
     game
       ? game.playing
-        ? `Ravens ${game.ravens}–${game.visitors} Bears  ·  inning ${game.inning} at the Ballpark`
-        : `FINAL  Ravens ${game.ravens}–${game.visitors} Bears  ·  ${winner ? `${winner} win` : "tied"}`
-      : "Ravens host the Bears tonight  ·  first pitch 6:00 PM",
+        ? `${club.shortName} ${game.ravens}–${game.visitors} ${club.visitorShort}  ·  inning ${game.inning} at the Ballpark`
+        : `FINAL  ${club.shortName} ${game.ravens}–${game.visitors} ${club.visitorShort}  ·  ${winner ? `${winner} win` : "tied"}`
+      : `${club.shortName} host the ${club.visitorShort} tonight  ·  first pitch 6:00 PM`,
     "City Hall: promenade lights stay on past midnight",
   ];
   const ticker = headlines.join("     ◆     ");

@@ -12,6 +12,59 @@ export const GAME_START_MINUTE = 18 * 60;
 /** Final out, about 9:00 PM. */
 export const GAME_END_MINUTE = 21 * 60;
 export const GAME_HOURS_LABEL = "6:00–9:00 PM";
+/** Home club win rate for a finished nine-inning game. */
+export const HOME_WIN_RATE = 0.75;
+
+export interface Ballclub {
+  shortName: string;
+  fullName: string;
+  parkName: string;
+  abbrev: string;
+  lineup: string[];
+  visitorShort: string;
+  visitorAbbrev: string;
+  visitorLineup: string[];
+  accent: string;
+}
+
+const RAVENS_ROSTER = ["Rivera", "Chen", "Brooks", "Patel", "Nguyen", "Walsh", "Ortiz", "Kim", "Hale"];
+const BEARS_ROSTER = ["Vargas", "Cole", "Dunn", "Rossi", "Blake", "Frost", "Dean", "Pike", "Moss"];
+const SCORPIONS_ROSTER = ["Hassan", "Reed", "Okoro", "Sato", "Vega", "Quinn", "Nassar", "Lane", "Cruz"];
+const COYOTES_ROSTER = ["Marsh", "Boone", "Silva", "York", "Perez", "Clay", "Nguyen", "West", "Hahn"];
+
+export const BALLCLUBS: Record<string, Ballclub> = {
+  riverside: {
+    shortName: "Ravens",
+    fullName: "Riverside Ravens",
+    parkName: "Ravens Ballpark",
+    abbrev: "RAV",
+    lineup: RAVENS_ROSTER,
+    visitorShort: "Bears",
+    visitorAbbrev: "BEA",
+    visitorLineup: BEARS_ROSTER,
+    accent: "#1f4d8c",
+  },
+  dustfall: {
+    shortName: "Scorpions",
+    fullName: "Dustfall Scorpions",
+    parkName: "Scorpion Field",
+    abbrev: "SCR",
+    lineup: SCORPIONS_ROSTER,
+    visitorShort: "Coyotes",
+    visitorAbbrev: "COY",
+    visitorLineup: COYOTES_ROSTER,
+    accent: "#2a6b5a",
+  },
+};
+
+/** Home club lineup for Riverside (legacy alias). */
+export const RAVENS_LINEUP = RAVENS_ROSTER;
+/** Visiting club lineup for Riverside (legacy alias). */
+export const BEARS_LINEUP = BEARS_ROSTER;
+
+export function ballclubFor(state: Pick<CityState, "id">): Ballclub {
+  return BALLCLUBS[state.id] ?? BALLCLUBS.riverside;
+}
 
 export function findStadium(state: CityState) {
   for (const building of state.buildings.values()) {
@@ -83,12 +136,10 @@ export function stadiumAttendance(state: CityState): StadiumAttendance {
   return { seated: 0.04, walking: 0.08, lights: 0, fireworks: false };
 }
 
-export const RAVENS_LINEUP = ["Rivera", "Chen", "Brooks", "Patel", "Nguyen", "Walsh", "Ortiz", "Kim", "Hale"];
-export const BEARS_LINEUP = ["Vargas", "Cole", "Dunn", "Rossi", "Blake", "Frost", "Dean", "Pike", "Moss"];
-
 export interface StadiumGame {
   inning: number;
   top: boolean;
+  /** Home club runs (field name kept for callers). */
   ravens: number;
   visitors: number;
   outs: number;
@@ -112,7 +163,7 @@ export interface StadiumGame {
 /** Live nine-inning game from 6:00 PM to about 9:00 PM, deterministic per city day. */
 export function stadiumGame(state: CityState): StadiumGame | null {
   if (!isGameNight(state)) return null;
-  return simulateGame(state.clock, state.clock.minuteOfDay);
+  return simulateGame(state.clock, state.clock.minuteOfDay, ballclubFor(state));
 }
 
 /**
@@ -125,28 +176,29 @@ export function stadiumFinal(state: CityState): StadiumGame | null {
   return broadcastFinal(state);
 }
 
-/** Box score / live game for hotel TVs — works in any city (RNV Sport is a network feed). */
+/** Box score / live game for hotel TVs — local club when the city has a park. */
 export function stadiumOnTv(state: CityState) {
-  if (isBroadcastWindow(state)) return simulateGame(state.clock, state.clock.minuteOfDay);
+  if (isBroadcastWindow(state)) return simulateGame(state.clock, state.clock.minuteOfDay, ballclubFor(state));
   return broadcastFinal(state);
 }
 
 function broadcastFinal(state: CityState): StadiumGame | null {
+  const club = ballclubFor(state);
   const minute = state.clock.minuteOfDay;
   if (minute >= GAME_START_MINUTE && minute < GAME_END_MINUTE) return null;
-  if (minute >= GAME_END_MINUTE) return simulateGame(state.clock, GAME_END_MINUTE);
+  if (minute >= GAME_END_MINUTE) return simulateGame(state.clock, GAME_END_MINUTE, club);
   const previous: CityClock = {
     dayIndex: state.clock.dayIndex - 1,
     minuteOfDay: GAME_END_MINUTE,
     dayOfYear: state.clock.dayOfYear <= 1 ? 365 : state.clock.dayOfYear - 1,
     year: state.clock.dayOfYear <= 1 ? state.clock.year - 1 : state.clock.year,
   };
-  return simulateGame(previous, GAME_END_MINUTE);
+  return simulateGame(previous, GAME_END_MINUTE, club);
 }
 
-export function stadiumWinner(game: StadiumGame) {
-  if (game.ravens > game.visitors) return "Ravens";
-  if (game.visitors > game.ravens) return "Bears";
+export function stadiumWinner(game: StadiumGame, club: Ballclub = BALLCLUBS.riverside) {
+  if (game.ravens > game.visitors) return club.shortName;
+  if (game.visitors > game.ravens) return club.visitorShort;
   return null;
 }
 
@@ -158,8 +210,8 @@ export interface StadiumBigPlay {
   label: string;
 }
 
-/** Best scoring frame to replay on TV — hometown inning if the Ravens crossed. */
-export function stadiumBigPlay(game: StadiumGame): StadiumBigPlay {
+/** Best scoring frame to replay on TV — hometown inning if the home club crossed. */
+export function stadiumBigPlay(game: StadiumGame, club: Ballclub = BALLCLUBS.riverside): StadiumBigPlay {
   let inning = 1;
   let runs = 0;
   let home = true;
@@ -181,7 +233,7 @@ export function stadiumBigPlay(game: StadiumGame): StadiumBigPlay {
       }
     }
   }
-  const lineup = home ? RAVENS_LINEUP : BEARS_LINEUP;
+  const lineup = home ? club.lineup : club.visitorLineup;
   const batter = lineup[(inning * 3 + (home ? 1 : 2)) % 9];
   const frame = inningOrdinal(inning);
   let label = `${batter} in the ${frame}`;
@@ -198,7 +250,11 @@ function inningOrdinal(n: number) {
   return `${n}th`;
 }
 
-function simulateGame(clock: CityClock, minuteOfDay: number): StadiumGame {
+function homeFavoredToday(clock: CityClock) {
+  return hash2(clock.year, clock.dayOfYear, 501) < HOME_WIN_RATE;
+}
+
+function simulateGame(clock: CityClock, minuteOfDay: number, club: Ballclub): StadiumGame {
   const elapsed = Math.max(0, minuteOfDay - GAME_START_MINUTE);
   const playMinutes = GAME_END_MINUTE - GAME_START_MINUTE - 8;
   const playing = elapsed < playMinutes;
@@ -213,9 +269,10 @@ function simulateGame(clock: CityClock, minuteOfDay: number): StadiumGame {
   let ravens = 0;
   let visitors = 0;
   let justScored = false;
+  const favorHome = homeFavoredToday(clock);
   const lastHalf = playing ? halfIndex : halves - 1;
   for (let half = 0; half <= lastHalf; half++) {
-    const events = scoringTimes(clock, half);
+    const events = scoringTimes(clock, half, favorHome);
     const progress = half < halfIndex ? 1 : playing ? halfProgress : 1;
     const runs = events.filter((at) => at <= progress).length;
     if (half === halfIndex && playing) {
@@ -230,6 +287,14 @@ function simulateGame(clock: CityClock, minuteOfDay: number): StadiumGame {
       ravensLine[slot] = runs;
     }
   }
+
+  // Lock the day's winner once the game is final (exact HOME_WIN_RATE).
+  if (!playing) {
+    const fixed = enforceFinalScore(clock, favorHome, ravens, visitors, ravensLine, visitorsLine);
+    ravens = fixed.home;
+    visitors = fixed.away;
+  }
+
   const outs = playing ? Math.min(2, Math.floor(hash2(clock.dayOfYear, elapsed, 19) * 3)) : 0;
   const balls = playing ? Math.min(3, Math.floor(hash2(clock.dayOfYear, Math.floor(elapsed), 21) * 4)) : 0;
   const strikes = playing ? Math.min(2, Math.floor(hash2(clock.dayOfYear, Math.floor(elapsed), 22) * 3)) : 0;
@@ -237,7 +302,7 @@ function simulateGame(clock: CityClock, minuteOfDay: number): StadiumGame {
   const ravensHits = hitsFor(clock, 7, ravens, halfIndex);
   const visitorsErrors = errorsFor(clock, 11);
   const ravensErrors = errorsFor(clock, 13);
-  const lineup = top ? BEARS_LINEUP : RAVENS_LINEUP;
+  const lineup = top ? club.visitorLineup : club.lineup;
   const batter = Math.floor(elapsed / 3.4) % 9;
   return {
     inning,
@@ -263,6 +328,29 @@ function simulateGame(clock: CityClock, minuteOfDay: number): StadiumGame {
   };
 }
 
+function enforceFinalScore(
+  clock: CityClock,
+  favorHome: boolean,
+  home: number,
+  away: number,
+  homeLine: Array<number | null>,
+  awayLine: Array<number | null>,
+) {
+  const margin = 1 + Math.floor(hash2(clock.year, clock.dayOfYear, 512) * 3);
+  if (favorHome) {
+    if (home > away) return { home, away };
+    const need = away - home + margin;
+    home += need;
+    homeLine[8] = (homeLine[8] ?? 0) + need;
+  } else {
+    if (away > home) return { home, away };
+    const need = home - away + margin;
+    away += need;
+    awayLine[8] = (awayLine[8] ?? 0) + need;
+  }
+  return { home, away };
+}
+
 function hitsFor(clock: CityClock, salt: number, runs: number, halfIndex: number) {
   return runs + Math.floor(hash2(clock.year, clock.dayOfYear, 200 + salt) * 2) + Math.floor(halfIndex * 0.35);
 }
@@ -275,12 +363,13 @@ function errorsFor(clock: CityClock, salt: number) {
 }
 
 /**
- * Moments (0–1 through a half-inning) when a run crosses. Ravens still
- * outscore the Bears overall, but a 4-run frame is rare.
+ * Moments (0–1 through a half-inning) when a run crosses. Favored side
+ * scores a little more often; finals still snap to HOME_WIN_RATE.
  */
-function scoringTimes(clock: CityClock, half: number) {
-  const ravensHalf = half % 2 === 1;
-  const chance = ravensHalf ? 0.2 : 0.14;
+function scoringTimes(clock: CityClock, half: number, favorHome: boolean) {
+  const homeHalf = half % 2 === 1;
+  const favored = homeHalf === favorHome;
+  const chance = favored ? 0.17 : 0.14;
   const times: number[] = [];
   for (let i = 0; i < 4; i++) {
     const roll = hash2(clock.year, clock.dayOfYear, 80 + half * 19 + i * 7);
@@ -288,8 +377,8 @@ function scoringTimes(clock: CityClock, half: number) {
     times.push(0.1 + hash2(clock.year, clock.dayOfYear, 180 + half * 13 + i * 11) * 0.8);
   }
   times.sort((a, b) => a - b);
-  const rareFour = ravensHalf && hash2(clock.year, clock.dayOfYear, 410 + half * 23) > 0.94;
-  return times.slice(0, rareFour ? 4 : ravensHalf ? 3 : 2);
+  const rareFour = favored && hash2(clock.year, clock.dayOfYear, 410 + half * 23) > 0.94;
+  return times.slice(0, rareFour ? 4 : favored ? 3 : 2);
 }
 
 function ringHasRoad(state: CityState, x: number, y: number, w: number, d: number) {

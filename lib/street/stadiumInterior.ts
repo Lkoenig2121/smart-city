@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Blocker } from "./buildCity";
 import { MeshBuilder } from "./meshBuilder";
+import { addGreenMonsterInterior, addMonsterSeating, monsterGroundAt } from "./scorpionMonster";
 
 export interface StadiumInterior {
   group: THREE.Group;
@@ -51,7 +52,7 @@ function inAisle(x: number) {
 }
 
 /** Which seating plank contains this point, wrapping the whole bowl. */
-function bowlSeatRow(x: number, z: number) {
+function bowlSeatRow(x: number, z: number, greenMonster = false) {
   const slack = 0.4;
   for (let row = 0; row < SEAT_ROWS; row++) {
     const pad = row * ROW_RUN;
@@ -66,11 +67,14 @@ function bowlSeatRow(x: number, z: number) {
     if (x >= xInner - slack && x <= xOuter + slack && z >= zFar - slack && z <= zNear + slack) {
       return row;
     }
-    if (x <= -xInner + slack && x >= -xOuter - slack && z >= zFar - slack && z <= zNear + slack) {
-      return row;
-    }
-    if (z <= zFar + slack && z >= zFar - run - slack && x >= -xOuter - slack && x <= -CF_GAP + 0.35) {
-      return row;
+    // Skip continuous left-foul / left-CF slabs when Monster seating owns that space.
+    if (!greenMonster) {
+      if (x <= -xInner + slack && x >= -xOuter - slack && z >= zFar - slack && z <= zNear + slack) {
+        return row;
+      }
+      if (z <= zFar + slack && z >= zFar - run - slack && x >= -xOuter - slack && x <= -CF_GAP + 0.35) {
+        return row;
+      }
     }
     if (z <= zFar + slack && z >= zFar - run - slack && x >= CF_GAP - 0.35 && x <= xOuter + slack) {
       return row;
@@ -80,14 +84,23 @@ function bowlSeatRow(x: number, z: number) {
 }
 
 /** Walkable height: concourse, stairs onto the deck, then the rake around the bowl. */
-export function stadiumGroundAt(x: number, z: number) {
+export function stadiumGroundAt(x: number, z: number, greenMonster = false) {
+  if (greenMonster) {
+    const monsterY = monsterGroundAt(x, z, {
+      fieldHalf: FIELD_HALF,
+      fieldZFar: FIELD_Z_FAR,
+      cfGap: CF_GAP,
+      seatZ0: SEAT_Z0,
+    });
+    if (monsterY != null) return monsterY;
+  }
   const top = topSeatY();
   if (inAisle(x) && z >= STAIR_Z0 && z <= STAIR_Z1) {
     const t = (STAIR_Z1 - z) / (STAIR_Z1 - STAIR_Z0);
     const step = Math.min(STAIR_STEPS, Math.max(1, Math.ceil(t * STAIR_STEPS)));
     return (top * step) / STAIR_STEPS;
   }
-  const row = bowlSeatRow(x, z);
+  const row = bowlSeatRow(x, z, greenMonster);
   if (row != null) return rowWalkY(row);
   return 0;
 }
@@ -104,7 +117,7 @@ const IVY = "#1f4a28";
  * A walkable ballpark: concourse behind home plate, seating bowl, field,
  * dugouts, scoreboard, and concession stands around the bowl.
  */
-export function buildStadiumInterior(): StadiumInterior {
+export function buildStadiumInterior(opts: { greenMonster?: boolean } = {}): StadiumInterior {
   const group = new THREE.Group();
   const blockers: Blocker[] = [];
   const disposables: Array<{ dispose: () => void }> = [];
@@ -191,12 +204,14 @@ export function buildStadiumInterior(): StadiumInterior {
     seatB.box(xInner, zFar, xInner + run, zNear, y0, y1, scratch);
     seatB.box(xInner, zFar, xInner + 0.14, zNear, prevY, y1, scratch);
 
-    seatB.box(-xInner - run, zFar, -xInner, zNear, y0, y1, scratch);
-    seatB.box(-xInner - 0.14, zFar, -xInner, zNear, prevY, y1, scratch);
+    if (!opts.greenMonster) {
+      seatB.box(-xInner - run, zFar, -xInner, zNear, y0, y1, scratch);
+      seatB.box(-xInner - 0.14, zFar, -xInner, zNear, prevY, y1, scratch);
+      seatB.box(-xInner, zFar - run, -CF_GAP, zFar, y0, y1, scratch);
+      seatB.box(-xInner, zFar - 0.14, -CF_GAP, zFar, prevY, y1, scratch);
+    }
 
-    seatB.box(-xInner, zFar - run, -CF_GAP, zFar, y0, y1, scratch);
     seatB.box(CF_GAP, zFar - run, xInner, zFar, y0, y1, scratch);
-    seatB.box(-xInner, zFar - 0.14, -CF_GAP, zFar, prevY, y1, scratch);
     seatB.box(CF_GAP, zFar - 0.14, xInner, zFar, prevY, y1, scratch);
   }
 
@@ -212,14 +227,38 @@ export function buildStadiumInterior(): StadiumInterior {
   const rail = new THREE.Color("#e8eef4");
   wallB.box(-FIELD_HALF, SEAT_Z0 - 0.5, FIELD_HALF, SEAT_Z0 + 0.22, 0, lip, fieldWall);
   wallB.box(FIELD_HALF - 0.22, FIELD_Z_FAR, FIELD_HALF + 0.42, SEAT_Z0, 0, lip, ivy);
-  wallB.box(-FIELD_HALF - 0.42, FIELD_Z_FAR, -FIELD_HALF + 0.22, SEAT_Z0, 0, lip, ivy);
-  wallB.box(-FIELD_HALF, FIELD_Z_FAR - 0.42, -CF_GAP, FIELD_Z_FAR + 0.22, 0, lip, ivy);
-  wallB.box(CF_GAP, FIELD_Z_FAR - 0.42, FIELD_HALF, FIELD_Z_FAR + 0.22, 0, lip, ivy);
-  wallB.box(-CF_GAP, FIELD_Z_FAR - 0.42, CF_GAP, FIELD_Z_FAR + 0.22, 0, 1.45, ivy);
+  if (opts.greenMonster) {
+    // Right-field ivy stays short; left field is the Monster.
+    wallB.box(CF_GAP, FIELD_Z_FAR - 0.42, FIELD_HALF, FIELD_Z_FAR + 0.22, 0, lip, ivy);
+    wallB.box(-CF_GAP, FIELD_Z_FAR - 0.42, CF_GAP, FIELD_Z_FAR + 0.22, 0, 1.45, ivy);
+    addGreenMonsterInterior(wallB, trimB, blockers, {
+      fieldHalf: FIELD_HALF,
+      fieldZFar: FIELD_Z_FAR,
+      seatZ0: SEAT_Z0,
+      cfGap: CF_GAP,
+    });
+    addMonsterSeating(seatB, floorB, trimB, blockers, {
+      fieldHalf: FIELD_HALF,
+      fieldZFar: FIELD_Z_FAR,
+      seatZ0: SEAT_Z0,
+      cfGap: CF_GAP,
+    });
+    // Short left-field foul lip from the Monster return up to the dugout.
+    const foulJoin = FIELD_Z_FAR + (SEAT_Z0 - FIELD_Z_FAR) * 0.42;
+    wallB.box(-FIELD_HALF - 0.42, foulJoin, -FIELD_HALF + 0.22, SEAT_Z0, 0, lip, ivy);
+    trimB.box(-FIELD_HALF + 0.12, foulJoin, -FIELD_HALF + 0.48, SEAT_Z0, lip, railTop, rail);
+  } else {
+    wallB.box(-FIELD_HALF - 0.42, FIELD_Z_FAR, -FIELD_HALF + 0.22, SEAT_Z0, 0, lip, ivy);
+    wallB.box(-FIELD_HALF, FIELD_Z_FAR - 0.42, -CF_GAP, FIELD_Z_FAR + 0.22, 0, lip, ivy);
+    wallB.box(CF_GAP, FIELD_Z_FAR - 0.42, FIELD_HALF, FIELD_Z_FAR + 0.22, 0, lip, ivy);
+    wallB.box(-CF_GAP, FIELD_Z_FAR - 0.42, CF_GAP, FIELD_Z_FAR + 0.22, 0, 1.45, ivy);
+  }
   trimB.box(-FIELD_HALF, SEAT_Z0 - 0.58, FIELD_HALF, SEAT_Z0 - 0.16, lip, railTop, rail);
   trimB.box(FIELD_HALF - 0.48, FIELD_Z_FAR, FIELD_HALF - 0.12, SEAT_Z0, lip, railTop, rail);
-  trimB.box(-FIELD_HALF + 0.12, FIELD_Z_FAR, -FIELD_HALF + 0.48, SEAT_Z0, lip, railTop, rail);
-  trimB.box(-FIELD_HALF, FIELD_Z_FAR + 0.12, -CF_GAP, FIELD_Z_FAR + 0.48, lip, railTop, rail);
+  if (!opts.greenMonster) {
+    trimB.box(-FIELD_HALF + 0.12, FIELD_Z_FAR, -FIELD_HALF + 0.48, SEAT_Z0, lip, railTop, rail);
+    trimB.box(-FIELD_HALF, FIELD_Z_FAR + 0.12, -CF_GAP, FIELD_Z_FAR + 0.48, lip, railTop, rail);
+  }
   trimB.box(CF_GAP, FIELD_Z_FAR + 0.12, FIELD_HALF, FIELD_Z_FAR + 0.48, lip, railTop, rail);
   trimB.box(-CF_GAP, FIELD_Z_FAR + 0.12, CF_GAP, FIELD_Z_FAR + 0.48, 1.45, 2.55, rail);
 
@@ -330,7 +369,7 @@ export function buildStadiumInterior(): StadiumInterior {
     seatedCount: SEATED_FANS,
     walkingCount: WALKING_FANS,
     rest,
-    groundAt: stadiumGroundAt,
+    groundAt: (x, z) => stadiumGroundAt(x, z, Boolean(opts.greenMonster)),
     dispose: () => {
       for (const item of disposables) item.dispose();
       boardMat.dispose();

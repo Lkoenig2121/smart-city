@@ -14,7 +14,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: "mall", label: "Mall", hint: "Harbor Mall · $480K · 8×8 · only one in the city" },
   { id: "bank", label: "Bank", hint: "Place a bank, or click a shop to convert it · savings earn 3% a day" },
   { id: "office", label: "Offices", hint: "Place an office" },
-  { id: "stadium", label: "Stadium", hint: "Ravens Ballpark · $750K · 5,000 people, road, parking" },
+  { id: "stadium", label: "Stadium", hint: "Ballpark · $750K · 5,000 people, road, parking" },
   { id: "park", label: "Parks", hint: "Grow a park tile" },
   { id: "sand", label: "Sand", hint: "Paint a beach" },
   { id: "parking", label: "Parking", hint: "Paint a parking lot · stalls fill with cars" },

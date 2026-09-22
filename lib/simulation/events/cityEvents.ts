@@ -1,5 +1,5 @@
 import { hash2, pick } from "@/lib/city/rng";
-import { findStadium, stadiumIsOpen } from "@/lib/city/stadium";
+import { ballclubFor, findStadium, stadiumIsOpen } from "@/lib/city/stadium";
 import type { Building, CityEvent, CityEventKind, CityState } from "@/lib/city/types";
 import { findPath, nearestRoad } from "../traffic/pathfinding";
 import {
@@ -120,13 +120,14 @@ function seedDailyEvents(state: CityState, rand: () => number) {
   seedStorm(state);
 
   const stadium = findStadium(state);
+  const club = ballclubFor(state);
   const hash = hash2(state.clock.year, state.clock.dayOfYear, 441);
   if (stadium && stadiumIsOpen(stadium)) {
     const weekend = state.clock.dayIndex >= 4;
     if (weekend || hash < 0.18) {
       pushEvent(state, {
         kind: "baseball",
-        headline: "Riverside Ravens vs. Bayville Bears — 6:00 PM.",
+        headline: `${club.fullName} vs. ${club.visitorShort} — 6:00 PM.`,
         detail: `${stadium.name} first pitch at six, last out around nine.`,
         x: stadium.origin.x,
         y: stadium.origin.y,
@@ -136,8 +137,11 @@ function seedDailyEvents(state: CityState, rand: () => number) {
     } else if (hash > 0.88) {
       pushEvent(state, {
         kind: "concert",
-        headline: "Riverside Stadium is hosting a concert tonight.",
-        detail: "Harbor lights and a full house after dusk.",
+        headline: `${stadium.name} is hosting a concert tonight.`,
+        detail:
+          state.id === "dustfall"
+            ? "Sandstone lights and a full house after dusk."
+            : "Harbor lights and a full house after dusk.",
         x: stadium.origin.x,
         y: stadium.origin.y,
         buildingId: stadium.id,

@@ -8,7 +8,7 @@ import {
   dayKey,
   type PlayerState,
 } from "./player";
-import { GAME_END_MINUTE, GAME_START_MINUTE, findStadium, stadiumGateTile } from "./stadium";
+import { GAME_END_MINUTE, GAME_START_MINUTE, ballclubFor, findStadium, stadiumGateTile } from "./stadium";
 import { lodgingGateTile, lodgingUse } from "./lodging";
 import { isSubwayStation, subwayGateTile } from "./subway";
 import { findMall, findVenue, venueGateTile, venueRole } from "./venues";
@@ -149,6 +149,7 @@ export function phoneInbox(state: CityState, player: PlayerState): PhoneMessage[
 
   const baseball = state.events.find((event) => event.kind === "baseball");
   if (baseball) {
+    const club = ballclubFor(state);
     const stadium = baseball.buildingId ? state.buildings.get(baseball.buildingId) : findStadium(state);
     messages.push(
       makeMessage(save, {
@@ -157,7 +158,7 @@ export function phoneInbox(state: CityState, player: PlayerState): PhoneMessage[
         handle: "maya",
         timeMin: 11 * 60 + 40,
         body: [
-          "Ravens vs Bears tonight. First pitch at 6.",
+          `${club.shortName} vs ${club.visitorShort} tonight. First pitch at 6.`,
           "I've got an extra seat on the first-base side if you want it.",
         ],
         choices: [
@@ -168,7 +169,7 @@ export function phoneInbox(state: CityState, player: PlayerState): PhoneMessage[
         location: {
           x: baseball.x,
           y: baseball.y,
-          label: stadium?.name ?? "Ravens Ballpark",
+          label: stadium?.name ?? club.parkName,
         },
       }),
     );
@@ -398,10 +399,11 @@ export function phoneCalendar(state: CityState, player: PlayerState): PhoneCalen
 
   for (const event of state.events) {
     if (event.kind === "baseball") {
+      const club = ballclubFor(state);
       items.push({
         id: `city-${event.id}`,
-        title: "Ravens vs Bears",
-        place: "Ravens Ballpark",
+        title: `${club.shortName} vs ${club.visitorShort}`,
+        place: findStadium(state)?.name ?? club.parkName,
         startMin: GAME_START_MINUTE,
         endMin: GAME_END_MINUTE,
         year: clock.year,

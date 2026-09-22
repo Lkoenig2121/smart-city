@@ -8,6 +8,12 @@ import { paintGraffiti } from "./drawBridges";
 import { drawGroundShadow, drawIsoBox, drawSlopedRoof, drawWindowGrid, isoBoxCorners } from "./drawIso";
 import { alpha, lit, mix, shade, type Lighting } from "./palette";
 
+function stadiumHasMonster(b: Building) {
+  if (b.name === "Scorpion Field") return true;
+  const team = b.stats.extra?.team;
+  return typeof team === "string" && team.toLowerCase().includes("scorpion");
+}
+
 export function drawBuilding(
   ctx: CanvasRenderingContext2D,
   building: Building,
@@ -723,6 +729,37 @@ function drawStadium(ctx: CanvasRenderingContext2D, b: Building, light: Lighting
   ctx.lineWidth = 3.6;
   ctx.stroke();
 
+  if (stadiumHasMonster(b)) {
+    // Left-field Green Monster — tall wall facing the diamond.
+    const m0 = p(0.08, 0.22);
+    const m1 = p(0.34, 0.1);
+    const topLift = 22;
+    fillPoly(
+      ctx,
+      [
+        { x: m0.x, y: m0.y },
+        { x: m1.x, y: m1.y },
+        { x: m1.x - 2, y: m1.y - topLift },
+        { x: m0.x - 2, y: m0.y - topLift },
+      ],
+      lit("#1f6b2e", light, "right"),
+    );
+    fillPoly(
+      ctx,
+      [
+        { x: m0.x - 2, y: m0.y - topLift },
+        { x: m1.x - 2, y: m1.y - topLift },
+        { x: m1.x + 3, y: m1.y - topLift - 3 },
+        { x: m0.x + 3, y: m0.y - topLift - 3 },
+      ],
+      lit("#145022", light, "top"),
+    );
+    ctx.fillStyle = lit("#f4f1ea", light, "top");
+    ctx.font = "bold 7px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("310", (m0.x + m1.x) / 2 - 1, (m0.y + m1.y) / 2 - topLift * 0.45);
+  }
+
   const roofBand = [
     [p(0.04, 0.88), p(0.96, 0.88), p(0.92, 0.99), p(0.08, 0.99)],
     [p(0.02, 0.32), p(0.12, 0.36), p(0.12, 0.88), p(0.02, 0.92)],
@@ -735,7 +772,7 @@ function drawStadium(ctx: CanvasRenderingContext2D, b: Building, light: Lighting
   const cf = p(0.5, 0.07);
   ctx.fillStyle = lit("#14301c", light, "right");
   ctx.fillRect(cf.x - 12, cf.y - 24, 24, 18);
-  ctx.fillStyle = lit("#c0392b", light, "top");
+  ctx.fillStyle = lit(stadiumHasMonster(b) ? "#2a6b5a" : "#c0392b", light, "top");
   ctx.fillRect(cf.x - 12, cf.y - 24, 24, 3);
   ctx.fillStyle = lit("#1a1a1a", light, "top");
   ctx.beginPath();
@@ -744,7 +781,7 @@ function drawStadium(ctx: CanvasRenderingContext2D, b: Building, light: Lighting
   ctx.fillStyle = "#e8c36a";
   ctx.font = "bold 6px sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("RAVENS", cf.x, cf.y - 13);
+  ctx.fillText(stadiumHasMonster(b) ? "SCORP" : "RAVENS", cf.x, cf.y - 13);
 
   const towers: IsoPt[] = [p(0.1, 0.9), p(0.9, 0.9), p(0.06, 0.52), p(0.94, 0.52)];
   for (const tower of towers) {

@@ -8,6 +8,7 @@ import { MeshBuilder } from "./meshBuilder";
 import { BAY_W, FLOOR_H, asphaltTexture, facade, rippleNormal, type FacadeStyle } from "./textures";
 import { addWaterfrontDecor } from "./waterfrontProps";
 import { isPromenadeTile } from "@/lib/city/waterfront";
+import { addGreenMonsterExterior, hasGreenMonster } from "./scorpionMonster";
 
 /** World units per city tile. One tile is roughly a ten metre plot. */
 export const TILE = 10;
@@ -994,7 +995,7 @@ function addStadiumMesh(
   const h = 13;
   const mx = (x0 + x1) / 2;
   const mz = (z0 + z1) / 2;
-  const navy = new THREE.Color("#1f4d8c");
+  const navy = new THREE.Color(hasGreenMonster(building) ? "#2a6b5a" : "#1f4d8c");
   const dirt = new THREE.Color("#c4a56a");
   const steel = new THREE.Color("#d5dde4");
   const lamp = new THREE.Color("#fff3c4");
@@ -1006,7 +1007,7 @@ function addStadiumMesh(
   // Recessed north gate so the entrance reads from the arterial.
   trimB.box(mx - 5.2, z0 - 0.35, mx + 5.2, z0 + 1.1, 0, 5.4, accent);
   trimB.box(mx - 5.4, z0 - 0.2, mx + 5.4, z0 + 1.2, 5.2, 7.1, navy);
-  // Ravens fascia.
+  // Team fascia above the gate.
   trimB.box(mx - 6.5, z0 - 0.45, mx + 6.5, z0 + 0.15, 7.2, 9.4, navy);
 
   // Seating terraces stepping down to the field.
@@ -1021,6 +1022,10 @@ function addStadiumMesh(
 
   roofB.ground(x0 + 10, z0 + 9, x1 - 10, z1 - 9, 0.05, grass);
   roofB.ground(mx - 6, mz - 2, mx + 6, mz + 8, 0.07, dirt);
+
+  if (hasGreenMonster(building)) {
+    addGreenMonsterExterior(building, walls, trimB, TILE);
+  }
 
   // Light towers at the four corners.
   for (const [lx, lz] of [

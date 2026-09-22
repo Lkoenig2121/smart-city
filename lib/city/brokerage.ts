@@ -33,6 +33,7 @@ export const LISTED_STOCKS: ListedStock[] = [
   { symbol: "JPM", name: "JPMorgan", city: false, base: 212 },
   { symbol: "XOM", name: "Exxon Mobil", city: false, base: 118 },
   { symbol: "RVNS", name: "Riverside Ravens", city: true, base: 41 },
+  { symbol: "SCRP", name: "Dustfall Scorpions", city: true, base: 28 },
   { symbol: "HELI", name: "Helio Hospitality", city: true, base: 67 },
   { symbol: "RIVR", name: "Riverside Holdings", city: true, base: 54 },
   { symbol: "HARB", name: "Harbor House REIT", city: true, base: 33 },

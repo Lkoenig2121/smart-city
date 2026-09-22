@@ -4,6 +4,7 @@ import type { Building, CityState } from "@/lib/city/types";
 import {
   findStadium,
   GAME_HOURS_LABEL,
+  ballclubFor,
   isGameNight,
   stadiumFinal,
   stadiumGateTile,
@@ -1482,6 +1483,8 @@ export function StreetView({
       ? findLodgingRoom(lodgingBuilding, interior.roomId)
       : null;
 
+  const ballclub = ballclubFor(state);
+  const stadiumBuilding = findStadium(state);
   const doorNearby = Boolean(venueDoor || lodgingDoor || subwayDoor || atGate);
   const carAndDoorChoice =
     Boolean(nearCar && doorNearby && !driving && !inside && !failed && !dustfallTrip);
@@ -1490,7 +1493,7 @@ export function StreetView({
     : subwayDoor
       ? subwayDoor.name
       : atGate
-        ? "Ravens Ballpark"
+        ? stadiumBuilding?.name ?? ballclub.parkName
         : venueDoor
           ? venueDoor.name
           : "Building";
@@ -1510,7 +1513,7 @@ export function StreetView({
           : "Enter";
 
   const placeName = interior?.kind === "stadium"
-    ? "Ravens Ballpark"
+    ? stadiumBuilding?.name ?? ballclub.parkName
     : lodgingBuilding
       ? interior?.kind === "lodging" && interior.zone === "pool"
         ? `${lodgingBuilding.name} · Pool`
@@ -1523,7 +1526,7 @@ export function StreetView({
           ?? (interior?.kind === "subway" ? stationDef(interior.stationId).name : "Street level");
 
   const lastFinal = interior?.kind === "stadium" || atGate ? stadiumFinal(state) : null;
-  const lastWinner = lastFinal ? stadiumWinner(lastFinal) : null;
+  const lastWinner = lastFinal ? stadiumWinner(lastFinal, ballclub) : null;
 
   return (
     <div ref={wrapRef} className="absolute inset-0 z-30 bg-[#0b1420]">
@@ -1861,7 +1864,7 @@ export function StreetView({
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
-              Ravens Ballpark
+              {stadiumBuilding?.name ?? ballclub.parkName}
             </p>
             <p className="mt-1 text-xl font-semibold text-white">Enter stadium</p>
             <p className="mt-1 text-sm text-slate-300">
@@ -1932,13 +1935,15 @@ export function StreetView({
       {interior?.kind === "stadium" || atGate ? (
         <div className="pointer-events-none absolute left-1/2 top-20 z-10 -translate-x-1/2">
           <div className="overflow-hidden rounded-xl border border-[#16325c] shadow-xl">
-            <div className="bg-[#1f4d8c] px-5 py-2.5 text-center">
-              <p className="text-sm font-bold tracking-wide text-white">⚾ RIVERSIDE RAVENS</p>
+            <div className="bg-[#1f4d8c] px-5 py-2.5 text-center" style={{ backgroundColor: ballclub.accent }}>
+              <p className="text-sm font-bold tracking-wide text-white">
+                ⚾ {ballclub.fullName.toUpperCase()}
+              </p>
               {lastFinal ? (
                 <div className="mt-1.5 rounded-md bg-[#10233f] px-4 py-1.5">
                   <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-amber-300">Final</p>
                   <p className="text-sm font-bold text-white">
-                    Ravens {lastFinal.ravens} – {lastFinal.visitors} Bears
+                    {ballclub.shortName} {lastFinal.ravens} – {lastFinal.visitors} {ballclub.visitorShort}
                   </p>
                   <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-amber-200">
                     {lastWinner ? `${lastWinner} win` : "Game tied"}
