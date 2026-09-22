@@ -239,6 +239,7 @@ export function StreetView({
   } | null>(null);
   const [motorsOpen, setMotorsOpen] = useState(false);
   const [driving, setDriving] = useState(false);
+  const [policeLights, setPoliceLights] = useState(false);
   const [nearCar, setNearCar] = useState<OwnedVehicle | null>(null);
   const [highwayHint, setHighwayHint] = useState<string | null>(null);
   const [dustfallTrip, setDustfallTrip] = useState(false);
@@ -797,8 +798,18 @@ export function StreetView({
       setLocked,
       consumeKey: (event) => {
         if (dustfallTripRef.current) return true;
-        if (event.code !== "KeyE" && event.code !== "KeyF") return false;
+        if (event.code !== "KeyE" && event.code !== "KeyF" && event.code !== "KeyL") return false;
         event.preventDefault();
+        if (event.code === "KeyL") {
+          if (!onPoliceDuty(readPlayer())) return false;
+          const on = world.togglePoliceLights();
+          if (!on && !world.policeLightsEnabled) {
+            setPoliceLights(false);
+            return true;
+          }
+          setPoliceLights(world.policeLightsEnabled);
+          return true;
+        }
         if (drivingRef.current) {
           if (event.code !== "KeyE") return false;
           const parked = world.stopDriving();
@@ -917,6 +928,11 @@ export function StreetView({
       }
       if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
       world.setPoliceDuty(Boolean(live.policeShift));
+      if (!live.policeShift && policeLights) {
+        setPoliceLights(false);
+      } else if (live.policeShift) {
+        setPoliceLights(world.policeLightsEnabled);
+      }
       if (live.policeCall && live.policeCall.kind === "traffic_incident") {
         world.setPoliceIncident(live.policeCall.phase);
       } else {

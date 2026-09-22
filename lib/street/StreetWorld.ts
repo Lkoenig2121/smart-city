@@ -23,7 +23,7 @@ import { buildStreetPerson, disposeObject3D } from "./streetPerson";
 import { DUSTFALL_RETURN_BRIDGE, DUSTFALL_RETURN_PORTAL_Y, HIGHWAY_PORTAL_Y, HIGHWAY_RAMP, driveStats } from "@/lib/city/vehicles";
 import { findPath, nearestRoad } from "@/lib/simulation/traffic/pathfinding";
 import { DriveControls } from "./driveControls";
-import { makePlayerCarMesh, placeCarMesh } from "./playerCar";
+import { makePlayerCarMesh, placeCarMesh, updateDutySiren } from "./playerCar";
 
 /** Field of view at rest, and how far it narrows mid-hop. */
 const BASE_FOV = 72;
@@ -89,6 +89,8 @@ export class StreetWorld {
   private drivingId: string | null = null;
   private ownedCarMeshes = new Map<string, THREE.Group>();
   private ownedCarRoot = new THREE.Group();
+  private policeOnDuty = false;
+  private policeLightsOn = false;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -357,6 +359,7 @@ export class StreetWorld {
     this.controls.clearKeys();
     const mesh = this.ownedCarMeshes.get(car.id);
     if (mesh) mesh.visible = false;
+    this.refreshDutyPresentation();
   }
 
   private driveFuelEmpty = false;
@@ -382,6 +385,7 @@ export class StreetWorld {
     this.drivingId = null;
     const mesh = this.ownedCarMeshes.get(id);
     if (mesh) mesh.visible = true;
+    this.refreshDutyPresentation();
     return { x, y, yaw };
   }
 
@@ -634,7 +638,34 @@ export class StreetWorld {
   }
 
   setPoliceDuty(on: boolean) {
-    this.dutyView.setOnDuty(on);
+    this.policeOnDuty = on;
+    if (!on) this.policeLightsOn = false;
+    this.refreshDutyPresentation();
+  }
+
+  /** Roof light bar toggle — only while on a police shift. */
+  setPoliceLights(on: boolean) {
+    this.policeLightsOn = on && this.policeOnDuty;
+    this.refreshDutyPresentation();
+  }
+
+  togglePoliceLights() {
+    if (!this.policeOnDuty) return false;
+    this.policeLightsOn = !this.policeLightsOn;
+    this.refreshDutyPresentation();
+    return true;
+  }
+
+  get policeLightsEnabled() {
+    return this.policeLightsOn;
+  }
+
+  /** Suit on foot; roof siren only when lights are switched on. */
+  private refreshDutyPresentation() {
+    this.dutyView.setOnDuty(this.policeOnDuty && !this.isDriving);
+    for (const mesh of this.ownedCarMeshes.values()) {
+      updateDutySiren(mesh, this.time, this.policeOnDuty && this.policeLightsOn);
+    }
   }
 
   /**
@@ -859,6 +890,11 @@ export class StreetWorld {
     }
     this.heldView.update(dt);
     this.dutyView.update(dt);
+    if (this.policeOnDuty && this.policeLightsOn) {
+      for (const mesh of this.ownedCarMeshes.values()) {
+        updateDutySiren(mesh, this.time, true);
+      }
+    }
     this.updateEscortNpc(dt);
 
     // Narrow the lens slightly as a hop travels, the way Street View pushes in

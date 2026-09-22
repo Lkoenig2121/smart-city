@@ -63,6 +63,11 @@ export class StreetControls {
    * gets you closer — so you can land inside a plaza / park block.
    */
   hopFocus: { x: number; z: number } | null = null;
+  /**
+   * After Walk mode, the next hops rejoin the street network (nearest junction)
+   * instead of continuing through block interiors / grass lots.
+   */
+  private rejoinStreet = false;
 
   private velocity = new THREE.Vector3();
   private keys = new InputKeys();
@@ -120,6 +125,11 @@ export class StreetControls {
   }
 
   setMode(mode: MoveMode) {
+    // Walk → Hop: snap back onto the junction network on the next hop.
+    if (this.mode === "free" && mode === "hop") {
+      this.rejoinStreet = true;
+    }
+    if (mode === "free") this.rejoinStreet = false;
     this.mode = mode;
     this.hop = null;
     this.rest = 0;
@@ -214,15 +224,32 @@ export class StreetControls {
 
   /**
    * Travels along the street and lands on the next intersection, so a hop never
-   * overshoots a turning point. Hopping off a street into an open plaza / park
-   * square lands on the first square tile. If the road ends first, it stops at
-   * the last tile you can stand on.
+   * overshoots a turning point. After Walk mode (or while stranded in a block
+   * interior), the first hop rejoins the nearest street junction instead of
+   * wandering deeper into plaza / park / grass lots. With a waypoint focus,
+   * street → open square still lands on the first square tile.
    */
   private beginHop(sign: 1 | -1) {
-    const cardinal = this.hopCardinal(sign);
     const fromTileX = Math.floor(this.position.x / TILE);
     const fromTileZ = Math.floor(this.position.z / TILE);
     const fromStreet = this.isStreet(fromTileX, fromTileZ);
+    const inFocusSquare = this.inHopFocusSquare(fromTileX, fromTileZ);
+
+    // After walking off-network (or hopping around inside a block), snap back
+    // to the closest street square hop would normally use — a junction when
+    // possible — rather than exploring new tiles inside the open square.
+    if ((!fromStreet && this.rejoinStreet) || (!fromStreet && !inFocusSquare)) {
+      const join = this.nearestHopStreet(fromTileX, fromTileZ);
+      if (join && (join.x !== fromTileX || join.z !== fromTileZ)) {
+        this.startHopTo(join.x, join.z);
+        if (this.isStreet(join.x, join.z)) this.rejoinStreet = false;
+        return;
+      }
+    }
+
+    if (fromStreet) this.rejoinStreet = false;
+
+    const cardinal = this.hopCardinal(sign);
     const maxSteps = this.state.size;
 
     let reachedX = fromTileX;
@@ -248,10 +275,16 @@ export class StreetControls {
     const destX = junctionX ?? reachedX;
     const destZ = junctionZ ?? reachedZ;
     if (destX === fromTileX && destZ === fromTileZ) return;
+    this.startHopTo(destX, destZ);
+  }
 
+  private startHopTo(destX: number, destZ: number) {
+    const fromTileX = Math.floor(this.position.x / TILE);
+    const fromTileZ = Math.floor(this.position.z / TILE);
     const destWorldX = destX * TILE + TILE / 2;
     const destWorldZ = destZ * TILE + TILE / 2;
     const distance = Math.abs(destX - fromTileX) + Math.abs(destZ - fromTileZ);
+    if (distance === 0) return;
     const to = new THREE.Vector3(
       destWorldX,
       this.groundAt(destWorldX, destWorldZ) + EYE_HEIGHT,
@@ -269,7 +302,7 @@ export class StreetControls {
   /**
    * Picks a compass heading for the hop. Street View always steps onto the
    * road closest to the look direction, even if you are glancing at a facade.
-   * From a street you can also hop into an open plaza / park square.
+   * Open squares are only entered when a waypoint focus is pulling you in.
    */
   private hopCardinal(sign: 1 | -1) {
     const fx = -Math.sin(this.yaw) * sign;
@@ -282,10 +315,11 @@ export class StreetControls {
     const fromZ = Math.floor(this.position.z / TILE);
     const onRoad = this.isStreet(fromX, fromZ);
     const inSquare = this.isOpenSquare(fromX, fromZ);
+    const allowEnterSquare = Boolean(this.hopFocus) && !this.rejoinStreet;
 
     // Near a waypoint: prefer hopping into the open square toward the pin
     // instead of skating past on the ring road.
-    if (onRoad && this.hopFocus) {
+    if (onRoad && allowEnterSquare && this.hopFocus) {
       const focus = this.hopFocus;
       const before = Math.hypot(focus.x + 0.5 - (fromX + 0.5), focus.z + 0.5 - (fromZ + 0.5));
       for (const candidate of ranked) {
@@ -303,14 +337,82 @@ export class StreetControls {
       const nx = fromX + candidate.x;
       const nz = fromZ + candidate.z;
       if (onRoad) {
-        if (this.isStreet(nx, nz) || this.isOpenSquare(nx, nz)) return candidate;
+        if (this.isStreet(nx, nz)) return candidate;
+        if (allowEnterSquare && this.isOpenSquare(nx, nz)) return candidate;
       } else if (inSquare) {
-        if (this.isOpenSquare(nx, nz) || this.isStreet(nx, nz)) return candidate;
+        // Inside a focus square, keep hopping toward the pin or back to street.
+        if (allowEnterSquare && this.inHopFocusSquare(fromX, fromZ)) {
+          if (this.isOpenSquare(nx, nz) || this.isStreet(nx, nz)) return candidate;
+        } else if (this.isStreet(nx, nz)) {
+          return candidate;
+        }
       } else if (this.tileHoppable(nx, nz)) {
         return candidate;
       }
     }
+    // Fall back: any street neighbour, then any hoppable neighbour.
+    for (const candidate of ranked) {
+      const nx = fromX + candidate.x;
+      const nz = fromZ + candidate.z;
+      if (this.isStreet(nx, nz)) return candidate;
+    }
+    for (const candidate of ranked) {
+      const nx = fromX + candidate.x;
+      const nz = fromZ + candidate.z;
+      if (this.tileHoppable(nx, nz)) return candidate;
+    }
     return ranked[0];
+  }
+
+  /** True when standing in the open square that owns the current hop focus. */
+  private inHopFocusSquare(tx: number, tz: number) {
+    if (!this.hopFocus || !this.isOpenSquare(tx, tz)) return false;
+    if (!this.isOpenSquare(this.hopFocus.x, this.hopFocus.z)) return false;
+    // Same road-bounded pocket: stay within a short manhattan radius of the pin.
+    const dist = Math.abs(tx - this.hopFocus.x) + Math.abs(tz - this.hopFocus.z);
+    return dist <= 4;
+  }
+
+  /**
+   * Closest street tile for rejoining hop mode after walking — prefers a
+   * junction so the landing matches a normal Street View hop stop.
+   */
+  private nearestHopStreet(fromX: number, fromZ: number) {
+    const size = this.state.size;
+    let bestStreet: { x: number; z: number } | null = null;
+    let bestStreetDist = Infinity;
+    let bestJunction: { x: number; z: number } | null = null;
+    let bestJunctionDist = Infinity;
+
+    const maxR = Math.min(14, size);
+    for (let r = 0; r <= maxR; r++) {
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const x = fromX + dx;
+          const z = fromZ + dz;
+          if (x < 0 || z < 0 || x >= size || z >= size) continue;
+          if (!this.isStreet(x, z)) continue;
+          const dist = Math.abs(dx) + Math.abs(dz);
+          if (dist < bestStreetDist) {
+            bestStreetDist = dist;
+            bestStreet = { x, z };
+          }
+          if (this.isJunction(x, z) && dist < bestJunctionDist) {
+            bestJunctionDist = dist;
+            bestJunction = { x, z };
+          }
+        }
+      }
+      // Early out once we have a nearby junction.
+      if (bestJunction && bestJunctionDist <= r + 1) break;
+    }
+
+    // Prefer a junction when it isn't much farther than the nearest street tile.
+    if (bestJunction && bestStreet && bestJunctionDist <= bestStreetDist + 3) {
+      return bestJunction;
+    }
+    return bestJunction ?? bestStreet;
   }
 
   /** Roads and bridge decks — the network Street View actually travels. */
@@ -321,7 +423,8 @@ export class StreetControls {
 
   /**
    * Open block interiors ringed by streets — plazas, parks, lots, playgrounds,
-   * and clear grass lots. These are the squares you can hop into from the road.
+   * and clear grass lots. These are the squares you can hop into from the road
+   * when a waypoint is pulling you in.
    */
   private isOpenSquare(tx: number, tz: number) {
     const tile = this.state.tiles[tz]?.[tx];
@@ -369,9 +472,17 @@ export class StreetControls {
     const fromZ = Math.floor(this.position.z / TILE);
     const fromStreet = this.isStreet(fromX, fromZ);
     const fromSquare = this.isOpenSquare(fromX, fromZ);
-    // Streets link to open squares so you can hop into a plaza / park block.
-    if (fromStreet) return this.isStreet(tx, tz) || this.isOpenSquare(tx, tz);
-    if (fromSquare) return this.isOpenSquare(tx, tz) || this.isStreet(tx, tz);
+    const allowEnterSquare = Boolean(this.hopFocus) && !this.rejoinStreet;
+    // Streets stay on streets unless a waypoint invites you into a square.
+    if (fromStreet) {
+      if (this.isStreet(tx, tz)) return true;
+      return allowEnterSquare && this.isOpenSquare(tx, tz);
+    }
+    if (fromSquare) {
+      if (this.isStreet(tx, tz)) return true;
+      // Only roam the open square when it holds the active waypoint.
+      return allowEnterSquare && this.inHopFocusSquare(fromX, fromZ) && this.isOpenSquare(tx, tz);
+    }
     return true;
   }
 
