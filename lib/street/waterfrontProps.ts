@@ -1,3 +1,4 @@
+import { cityThemeFor } from "@/lib/city/world/cities";
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
 import { hash2 } from "@/lib/city/rng";
@@ -43,7 +44,7 @@ export function addWaterfrontDecor(
 ): WaterfrontDecor {
   const disposables: Array<{ dispose: () => void }> = [];
 
-  if (state.id === "dustfall") {
+  if (cityThemeFor(state.id).waterfront === "nile") {
     const wood = new THREE.Color("#8a6a4a");
     const woodDark = new THREE.Color("#5c4030");
     addDustfallFerrisPad(trimB, wood, woodDark, blockers);

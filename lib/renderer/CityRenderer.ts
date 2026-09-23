@@ -1,4 +1,4 @@
-import { TILE_H, TILE_W, worldBounds } from "@/lib/city/iso";
+import { TILE_H, TILE_W, worldBounds, diamondPoints } from "@/lib/city/iso";
 import type { Building, CityState } from "@/lib/city/types";
 import type { CityEngine } from "@/lib/simulation/city/cityEngine";
 import { citizenIsOutdoors } from "@/lib/simulation/citizens/citizenBehavior";
@@ -7,7 +7,7 @@ import { drawBuilding } from "./drawBuildings";
 import { drawCitizen } from "./drawCitizens";
 import { drawFountain, drawTree } from "./drawVegetation";
 import { drawRoadTile } from "./drawRoads";
-import { drawTerrainTile } from "./drawTerrain";
+import { drawTerrainTile, drawMountainColumn } from "./drawTerrain";
 import { drawWaterfrontDecor } from "./drawWaterfront";
 import { drawVehicle } from "./drawVehicles";
 import { drawEventMarkers, drawJobMarkers } from "./drawEvents";
@@ -17,6 +17,7 @@ import { CityCamera, tileVisible, visibleTileRange } from "./camera";
 import { alpha, lightingFor, lit, mix, type Lighting } from "./palette";
 import { drawDiamond, isoBoxCorners } from "./drawIso";
 import { buildingDrawHeight, isHiddenBehindBuilding, mastHeight } from "./pickBuilding";
+import { cityThemeFor } from "@/lib/city/world/cities";
 import {
   createFireworkSparks,
   drawStadiumFireworks,
@@ -80,15 +81,17 @@ export class CityRenderer {
     this.camera.update(dt);
     const state = engine.state;
     let light = lightingFor(state);
-    if (state.id === "dustfall") {
+    const theme = cityThemeFor(state.id);
+    if (theme.isoWarmth > 0) {
+      const w = theme.isoWarmth;
       light = {
         ...light,
-        skyTop: mix(light.skyTop, "#e8a858", 0.42),
-        skyBottom: mix(light.skyBottom, "#f5d6a0", 0.48),
-        tint: mix(light.tint ?? "#ffffff", "#f0d9a8", 0.25),
-        tintAmount: Math.max(light.tintAmount, 0.1),
-        ambient: light.ambient * 1.05,
-        sun: light.sun * 1.08,
+        skyTop: mix(light.skyTop, "#e8a858", 0.42 * w),
+        skyBottom: mix(light.skyBottom, "#f5d6a0", 0.48 * w),
+        tint: mix(light.tint ?? "#ffffff", "#f0d9a8", 0.25 * w),
+        tintAmount: Math.max(light.tintAmount, 0.1 * w),
+        ambient: light.ambient * (1 + 0.05 * w),
+        sun: light.sun * (1 + 0.08 * w),
       };
     }
     const ctx = this.ctx;
@@ -100,7 +103,7 @@ export class CityRenderer {
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.fillSky(ctx, light);
-    this.drawDistantHills(ctx, light.skyBottom);
+    this.drawDistantHills(ctx, light, state.id);
 
     this.camera.apply(ctx, this.dpr);
     if (this.ground) {
@@ -136,6 +139,13 @@ export class CityRenderer {
         const tile = state.tiles[y][x];
         if (tile.bridge) {
           drawBridge(ctx, x, y, tile.bridge, light, this.time);
+        }
+        if (
+          (tile.terrain === "rock" || tile.terrain === "snow") &&
+          !tile.buildingId &&
+          !tile.road
+        ) {
+          drawMountainColumn(ctx, x, y, tile.terrain, light, state.tiles);
         }
         if (tile.buildingId && !drawn.has(tile.buildingId)) {
           const building = state.buildings.get(tile.buildingId);
@@ -313,6 +323,9 @@ export class CityRenderer {
         if (tile.road && !tile.bridge) drawRoadTile(gctx, x, y, tile.road, light);
       }
     }
+    if (state.id === "future") {
+      drawFutureScramble(gctx, light);
+    }
 
     this.ground = {
       canvas,
@@ -361,8 +374,97 @@ export class CityRenderer {
     ctx.fillRect(0, 0, this.width, this.height);
   }
 
-  private drawDistantHills(ctx: CanvasRenderingContext2D, color: string) {
-    ctx.fillStyle = lit(color, lightingForDummy(), "ground");
+  private drawDistantHills(ctx: CanvasRenderingContext2D, light: Lighting, cityId: string) {
+    const env = cityThemeFor(cityId).climateLabel;
+    const isMountain = cityId === "mountain" || env === "Alpine";
+    const isFuture = cityId === "future";
+
+    if (isMountain) {
+      // Jagged alpine silhouette with snow caps.
+      const base = mix(light.skyBottom, "#5a6a58", 0.55);
+      const rock = mix(light.skyBottom, "#6a6358", 0.7);
+      const snow = mix(light.skyBottom, "#eef3f8", 0.45);
+      const peaks = [
+        [0, 0.72],
+        [0.08, 0.48],
+        [0.14, 0.58],
+        [0.22, 0.36],
+        [0.3, 0.52],
+        [0.38, 0.28],
+        [0.46, 0.46],
+        [0.55, 0.32],
+        [0.64, 0.5],
+        [0.72, 0.24],
+        [0.8, 0.44],
+        [0.88, 0.38],
+        [1, 0.62],
+      ] as const;
+      ctx.fillStyle = base;
+      ctx.beginPath();
+      ctx.moveTo(0, this.height);
+      for (const [px, py] of peaks) {
+        ctx.lineTo(this.width * px, this.height * py);
+      }
+      ctx.lineTo(this.width, this.height);
+      ctx.fill();
+      // Snow-capped tips on the tallest ridges.
+      ctx.fillStyle = snow;
+      ctx.beginPath();
+      ctx.moveTo(this.width * 0.18, this.height * 0.42);
+      ctx.lineTo(this.width * 0.22, this.height * 0.36);
+      ctx.lineTo(this.width * 0.26, this.height * 0.44);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(this.width * 0.34, this.height * 0.34);
+      ctx.lineTo(this.width * 0.38, this.height * 0.28);
+      ctx.lineTo(this.width * 0.42, this.height * 0.38);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(this.width * 0.68, this.height * 0.3);
+      ctx.lineTo(this.width * 0.72, this.height * 0.24);
+      ctx.lineTo(this.width * 0.76, this.height * 0.34);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = rock;
+      ctx.beginPath();
+      ctx.moveTo(0, this.height * 0.78);
+      ctx.quadraticCurveTo(this.width * 0.3, this.height * 0.7, this.width * 0.55, this.height * 0.76);
+      ctx.quadraticCurveTo(this.width * 0.8, this.height * 0.82, this.width, this.height * 0.74);
+      ctx.lineTo(this.width, this.height);
+      ctx.lineTo(0, this.height);
+      ctx.fill();
+      return;
+    }
+
+    if (isFuture) {
+      // Soft neon skyline underglow — brighter cyan wash.
+      const glow = mix(light.skyBottom, "#88c8ff", 0.55);
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.moveTo(0, this.height * 0.72);
+      const bars = [0.05, 0.12, 0.18, 0.28, 0.35, 0.42, 0.52, 0.6, 0.68, 0.78, 0.88, 0.95];
+      const heights = [0.55, 0.38, 0.48, 0.26, 0.44, 0.32, 0.24, 0.4, 0.3, 0.36, 0.28, 0.52];
+      for (let i = 0; i < bars.length; i++) {
+        const x = this.width * bars[i];
+        const y = this.height * heights[i];
+        const w = this.width * 0.045;
+        ctx.lineTo(x, this.height * 0.72);
+        ctx.lineTo(x, y);
+        ctx.lineTo(x + w, y);
+        ctx.lineTo(x + w, this.height * 0.72);
+      }
+      ctx.lineTo(this.width, this.height * 0.72);
+      ctx.lineTo(this.width, this.height);
+      ctx.lineTo(0, this.height);
+      ctx.fill();
+      ctx.fillStyle = alpha("#00e8ff", 0.12);
+      ctx.fillRect(0, this.height * 0.55, this.width, this.height * 0.45);
+      return;
+    }
+
+    ctx.fillStyle = lit(light.skyBottom, lightingForDummy(), "ground");
     ctx.beginPath();
     ctx.moveTo(0, this.height * 0.62);
     ctx.quadraticCurveTo(this.width * 0.25, this.height * 0.52, this.width * 0.5, this.height * 0.6);
@@ -435,6 +537,35 @@ function lightingForDummy() {
 
 function inCity(state: CityState, x: number, y: number) {
   return x >= 0 && y >= 0 && x < state.size && y < state.size;
+}
+
+/** Scramble-crossing zebra stripes on Future City's central plaza. */
+function drawFutureScramble(ctx: CanvasRenderingContext2D, light: Lighting) {
+  const stripe = alpha(lit("#f4f1ea", light, "top"), 0.55);
+  for (let y = 14; y <= 17; y++) {
+    for (let x = 14; x <= 17; x++) {
+      const d = diamondPoints(x, y);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(d.top.x, d.top.y);
+      ctx.lineTo(d.right.x, d.right.y);
+      ctx.lineTo(d.bottom.x, d.bottom.y);
+      ctx.lineTo(d.left.x, d.left.y);
+      ctx.closePath();
+      ctx.clip();
+      ctx.strokeStyle = stripe;
+      ctx.lineWidth = 2.4;
+      // Diagonal zebra bands across the scramble pad.
+      for (let i = -3; i <= 5; i++) {
+        const o = i * 7;
+        ctx.beginPath();
+        ctx.moveTo(d.left.x - 20 + o, d.left.y + 30);
+        ctx.lineTo(d.right.x - 20 + o, d.right.y - 30);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
 }
 
 /**

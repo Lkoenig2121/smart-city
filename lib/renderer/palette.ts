@@ -104,6 +104,44 @@ export function lightingFor(state: CityState): Lighting {
     };
   }
 
+  // Future City: bright neon twilight — readable LEDs without crushing blacks.
+  if (state.id === "future") {
+    if (phase === "day") {
+      light = {
+        ...light,
+        ambient: 1.05,
+        sun: 0.95,
+        skyTop: "#6a9ad8",
+        skyBottom: "#f0c8a8",
+        tint: "#88c8ff",
+        tintAmount: 0.1,
+        windowLit: 0.85,
+        waterSparkle: 0.55,
+      };
+    } else if (phase === "dusk" || phase === "dawn") {
+      light = {
+        ...light,
+        ambient: Math.max(light.ambient, 0.88),
+        skyTop: mix(light.skyTop, "#4a68b8", 0.35),
+        skyBottom: mix(light.skyBottom, "#f0a070", 0.3),
+        windowLit: Math.min(1, light.windowLit + 0.35),
+        tint: "#ff8ad0",
+        tintAmount: Math.max(light.tintAmount, 0.18),
+      };
+    } else {
+      light = {
+        ...light,
+        ambient: 0.72,
+        sun: 0.65,
+        skyTop: "#1a2858",
+        skyBottom: "#3a2868",
+        windowLit: 1,
+        tint: "#6a8cff",
+        tintAmount: 0.2,
+      };
+    }
+  }
+
   if (weather === "rain") {
     return {
       ...light,
@@ -135,6 +173,7 @@ export function lightingFor(state: CityState): Lighting {
       skyBottom: mix(light.skyBottom, "#c5d0da", 0.22),
     };
   }
+
   return light;
 }
 

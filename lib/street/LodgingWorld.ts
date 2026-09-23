@@ -3,6 +3,7 @@ import type { Building, CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
 import { findLodgingRoom, lodgingUse, type LodgingZone } from "@/lib/city/lodging";
 import { stadiumFireworksOn } from "@/lib/city/fireworks";
+import { cityThemeFor } from "@/lib/city/world/cities";
 import { TILE } from "./buildCity";
 import { InteriorControls } from "./interiorControls";
 import { buildLodgingInterior, type LodgingInterior } from "./lodgingInterior";
@@ -95,19 +96,21 @@ export class LodgingWorld {
     }
 
     if (zone === "pool") {
-      const daySky = state.id === "dustfall" ? "#e8b86a" : "#7eb3e0";
-      const nightSky = "#10182c";
+      const theme = cityThemeFor(state.id);
+      const daySky = theme.daySky;
+      const nightSky = theme.nightSky;
       this.scene.background = new THREE.Color(night ? nightSky : daySky);
-      this.scene.fog = new THREE.Fog(night ? 0x10182c : state.id === "dustfall" ? 0xe8b86a : 0x7eb3e0, 48, 210);
-      if (state.id === "dustfall") {
+      this.scene.fog = new THREE.Fog(night ? theme.fogNight : theme.fogDay, 48, 210);
+      if (theme.desertAccent) {
         this.hemi.color.set(0xffe6c2);
         this.hemi.groundColor.set(0xc4a574);
         this.sun.color.set(0xffd090);
       }
     } else if (zone === "room") {
-      const daySky = state.id === "dustfall" ? "#e8b86a" : "#7eb3e0";
-      this.scene.background = new THREE.Color(night ? "#10182c" : daySky);
-      this.scene.fog = new THREE.Fog(night ? 0x10182c : state.id === "dustfall" ? 0xe8b86a : 0x7eb3e0, 90, 640);
+      const theme = cityThemeFor(state.id);
+      const daySky = theme.daySky;
+      this.scene.background = new THREE.Color(night ? theme.nightSky : daySky);
+      this.scene.fog = new THREE.Fog(night ? theme.fogNight : theme.fogDay, 90, 640);
     } else {
       this.scene.background = new THREE.Color("#1c1814");
       this.scene.fog = new THREE.Fog(0x1c1814, 18, 48);
@@ -249,8 +252,8 @@ export class LodgingWorld {
     this.sun.intensity = this.zone === "pool" ? (night ? 0.35 : 2.0) : night ? 0.55 : 1.35;
     this.hemi.intensity = night ? 0.7 : 1.15;
     if (this.zone === "room" || this.zone === "pool") {
-      const desert = this.state.id === "dustfall";
-      const sky = night ? "#10182c" : desert ? "#e8b86a" : "#7eb3e0";
+      const theme = cityThemeFor(this.state.id);
+      const sky = night ? theme.nightSky : theme.daySky;
       this.scene.background = new THREE.Color(sky);
       if (this.scene.fog instanceof THREE.Fog) this.scene.fog.color.set(sky);
     }

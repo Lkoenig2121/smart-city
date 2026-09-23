@@ -164,34 +164,6 @@ function buildBridge(tiles: Tile[][], y: number, rand: () => number, signature: 
   }
 }
 
-/**
- * Northbound Hwy 93 ramp at arterial x=20 (minimap 12 o'clock).
- * Rising NS deck from street level toward the map edge portal.
- */
-function buildHighway93Ramp(tiles: Tile[][]) {
-  const x = 20;
-  for (let y = 0; y <= 4; y++) {
-    const tile = tiles[y]?.[x];
-    if (!tile) continue;
-    tile.buildingId = null;
-    tile.tree = null;
-    tile.terrain = tile.terrain === "water" ? "grass" : tile.terrain;
-    tile.road = { north: false, east: false, south: false, west: false };
-    const t = 1 - y / 4;
-    tile.bridge = {
-      axis: "ns",
-      deck: Math.round(2 + t * 16),
-      pier: y === 1 || y === 3,
-      pylon: y === 0,
-      abutment: y === 4 ? "end" : y === 0 ? "start" : null,
-      graffiti: null,
-    };
-  }
-  // Keep the approach lane connected from downtown.
-  addRoad(tiles, 20, 5);
-  addRoad(tiles, 20, 6);
-}
-
 export function generateCity(seed = 20260903): CityState {
   const rand = mulberry32(seed);
   const tiles: Tile[][] = Array.from({ length: SIZE }, (_, y) =>
@@ -329,9 +301,6 @@ export function generateCity(seed = 20260903): CityState {
   for (const y of [12, 20, 27]) {
     buildBridge(tiles, y, rand, y === 20);
   }
-
-  // Highway 93 northbound on-ramp at map 12 o'clock (arterial x=20).
-  buildHighway93Ramp(tiles);
 
   connectRoads(tiles);
 

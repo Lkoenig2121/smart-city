@@ -4,12 +4,13 @@ import { findStadium, stadiumIsOpen } from "@/lib/city/stadium";
 import { stadiumFireworksOn } from "@/lib/city/fireworks";
 import { lodgingUse } from "@/lib/city/lodging";
 import { isEnterableVenue } from "@/lib/city/venues";
+import { isMountainTerrain } from "@/lib/city/terrainElevation";
 import { lightingFor, type Lighting } from "@/lib/renderer/palette";
 import { AgentLayer } from "./agents";
 import { buildCity, TILE, updateTrafficSignals, type CityMeshes } from "./buildCity";
 import { BuildingGlow } from "./buildingGlow";
 import { FLOOR_H } from "./textures";
-import { StreetControls, type MoveMode } from "./controls";
+import { StreetControls, EYE_HEIGHT, type MoveMode } from "./controls";
 import { skyTexture } from "./textures";
 import { StreetWeatherFx } from "./weatherFx";
 import { StreetFireworks } from "./streetFireworks";
@@ -20,7 +21,7 @@ import type { OwnedVehicle } from "@/lib/city/vehicles";
 import { TRAFFIC_INCIDENT_SITE, LOST_RESIDENT_MEETUP, SUSPICIOUS_ACTIVITY_SITE } from "@/lib/city/police";
 import type { PoliceCallPhase } from "@/lib/city/player";
 import { buildStreetPerson, disposeObject3D } from "./streetPerson";
-import { DUSTFALL_RETURN_BRIDGE, DUSTFALL_RETURN_PORTAL_Y, HIGHWAY_PORTAL_Y, HIGHWAY_RAMP, driveStats } from "@/lib/city/vehicles";
+import { driveStats } from "@/lib/city/vehicles";
 import { findPath, nearestRoad } from "@/lib/simulation/traffic/pathfinding";
 import { DriveControls } from "./driveControls";
 import { makePlayerCarMesh, placeCarMesh, updateDutySiren } from "./playerCar";
@@ -167,93 +168,6 @@ export class StreetWorld {
     this.scene.add(this.navArrows);
     this.ownedCarRoot.name = "owned-cars";
     this.scene.add(this.ownedCarRoot);
-    if (state.id === "dustfall") this.placeRiversideReturnBridge();
-    else this.placeHighway93Props();
-  }
-
-  private placeRiversideReturnBridge() {
-    const x = DUSTFALL_RETURN_BRIDGE.x * TILE + TILE / 2;
-    const z = 33.5 * TILE;
-    const sign = new THREE.Group();
-    const board = new THREE.Mesh(
-      new THREE.BoxGeometry(10.5, 3.2, 0.35),
-      new THREE.MeshStandardMaterial({ color: "#1f6b3a", roughness: 0.7 }),
-    );
-    board.position.y = 7.4;
-    sign.add(board);
-    const post = new THREE.Mesh(
-      new THREE.BoxGeometry(0.32, 7.6, 0.32),
-      new THREE.MeshStandardMaterial({ color: "#c5c9ce" }),
-    );
-    post.position.set(-4, 3.3, 0);
-    const post2 = post.clone();
-    post2.position.x = 4;
-    sign.add(post, post2);
-    sign.position.set(x - 8.5, 0, 31.2 * TILE);
-    this.scene.add(sign);
-
-    // Simple deck rails along the wash crossing.
-    for (const side of [-1, 1] as const) {
-      const rail = new THREE.Mesh(
-        new THREE.BoxGeometry(0.35, 1.1, TILE * 2.2),
-        new THREE.MeshStandardMaterial({ color: "#8a7a5c", roughness: 0.85 }),
-      );
-      rail.position.set(x + side * 4.2, 1.15, z);
-      this.scene.add(rail);
-    }
-
-    const warn = new THREE.Mesh(
-      new THREE.BoxGeometry(1.4, 1.4, 0.12),
-      new THREE.MeshStandardMaterial({ color: "#f4d03f" }),
-    );
-    warn.position.set(x + 5.2, 2.2, 32.2 * TILE);
-    warn.rotation.y = Math.PI / 4;
-    this.scene.add(warn);
-  }
-
-  private placeHighway93Props() {
-    const x = HIGHWAY_RAMP.x * TILE + TILE / 2;
-    const z = 2.5 * TILE;
-    const sign = new THREE.Group();
-    const board = new THREE.Mesh(
-      new THREE.BoxGeometry(9.5, 3.1, 0.35),
-      new THREE.MeshStandardMaterial({ color: "#1f6b3a", roughness: 0.7 }),
-    );
-    board.position.y = 7.2;
-    sign.add(board);
-    const post = new THREE.Mesh(
-      new THREE.BoxGeometry(0.32, 7.4, 0.32),
-      new THREE.MeshStandardMaterial({ color: "#c5c9ce" }),
-    );
-    post.position.set(-3.6, 3.2, 0);
-    const post2 = post.clone();
-    post2.position.x = 3.6;
-    sign.add(post, post2);
-    sign.position.set(x - 7.5, 0, z);
-    this.scene.add(sign);
-
-    const warn = new THREE.Mesh(
-      new THREE.BoxGeometry(1.4, 1.4, 0.12),
-      new THREE.MeshStandardMaterial({ color: "#f4d03f" }),
-    );
-    warn.position.set(x + 5.5, 2.2, 4.2 * TILE);
-    warn.rotation.y = Math.PI / 4;
-    this.scene.add(warn);
-
-    for (const zz of [1.2, 2.8, 4.0]) {
-      const pole = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.12, 0.16, 11, 6),
-        new THREE.MeshStandardMaterial({ color: "#1a1c20" }),
-      );
-      pole.position.set(x + 6.2, 5.5, zz * TILE);
-      this.scene.add(pole);
-      const head = new THREE.Mesh(
-        new THREE.SphereGeometry(0.55, 8, 8),
-        new THREE.MeshStandardMaterial({ color: "#d8dde2", emissive: "#f0f4f8", emissiveIntensity: 0.35 }),
-      );
-      head.position.set(x + 6.2, 11.1, zz * TILE);
-      this.scene.add(head);
-    }
   }
 
   get isDriving() {
@@ -312,40 +226,6 @@ export class StreetWorld {
       }
     }
     return best;
-  }
-
-  nearHighwayRamp() {
-    if (this.state.id === "dustfall") return this.nearReturnBridge();
-    const pos = this.drive?.position ?? this.controls.position;
-    const tx = pos.x / TILE;
-    const ty = pos.z / TILE;
-    return Math.abs(tx - HIGHWAY_RAMP.x) < 1.6 && ty <= HIGHWAY_RAMP.yMax + 0.8 && ty >= -0.2;
-  }
-
-  atHighwayPortal() {
-    if (this.state.id === "dustfall") return this.atReturnPortal();
-    if (!this.isDriving || !this.drive) return false;
-    const tx = this.drive.position.x / TILE;
-    const ty = this.drive.position.z / TILE;
-    return Math.abs(tx - HIGHWAY_RAMP.x) < 2.2 && ty <= HIGHWAY_PORTAL_Y;
-  }
-
-  nearReturnBridge() {
-    const pos = this.drive?.position ?? this.controls.position;
-    const tx = pos.x / TILE;
-    const ty = pos.z / TILE;
-    return (
-      Math.abs(tx - DUSTFALL_RETURN_BRIDGE.x) < 1.8 &&
-      ty >= DUSTFALL_RETURN_BRIDGE.yMin - 0.4 &&
-      ty <= DUSTFALL_RETURN_BRIDGE.yMax + 0.6
-    );
-  }
-
-  atReturnPortal() {
-    if (!this.isDriving || !this.drive) return false;
-    const tx = this.drive.position.x / TILE;
-    const ty = this.drive.position.z / TILE;
-    return Math.abs(tx - DUSTFALL_RETURN_BRIDGE.x) < 2.2 && ty >= DUSTFALL_RETURN_PORTAL_Y;
   }
 
   startDriving(car: OwnedVehicle) {
@@ -448,6 +328,130 @@ export class StreetWorld {
     const building = this.aimedBuilding();
     if (!building || lodgingUse(building) || !isEnterableVenue(building)) return null;
     return this.aimedWithin(building, ENTER_AIM_RANGE) ? building : null;
+  }
+
+  get hiking() {
+    return this.controls.hiking;
+  }
+
+  /** Standing next to rock/snow — Space starts a trail hike. */
+  nearMountainTrailhead() {
+    if (this.isDriving || this.controls.hiking) return false;
+    const tx = Math.floor(this.controls.position.x / TILE);
+    const tz = Math.floor(this.controls.position.z / TILE);
+    const here = this.state.tiles[tz]?.[tx];
+    if (!here || isMountainTerrain(here.terrain)) return false;
+    return this.adjacentMountain(tx, tz) !== null;
+  }
+
+  /** On a trail and next to foothills — Space leaves the mountains. */
+  nearMountainTrailExit() {
+    if (!this.controls.hiking) return false;
+    const tx = Math.floor(this.controls.position.x / TILE);
+    const tz = Math.floor(this.controls.position.z / TILE);
+    const here = this.state.tiles[tz]?.[tx];
+    if (!here || !isMountainTerrain(here.terrain)) return false;
+    return this.adjacentFoothill(tx, tz) !== null;
+  }
+
+  /** Enter or leave the mountain trail when Space is available. */
+  tryToggleHiking() {
+    if (this.isDriving) return false;
+    if (this.controls.hiking) {
+      if (!this.nearMountainTrailExit()) return false;
+      this.exitHiking();
+      return true;
+    }
+    if (!this.nearMountainTrailhead()) return false;
+    this.enterHiking();
+    return true;
+  }
+
+  private enterHiking() {
+    const tx = Math.floor(this.controls.position.x / TILE);
+    const tz = Math.floor(this.controls.position.z / TILE);
+    const target = this.adjacentMountain(tx, tz);
+    if (!target) return;
+    this.controls.hiking = true;
+    this.controls.setMode("free");
+    this.controls.spawnAt(target.x, target.y, this.controls.yaw);
+  }
+
+  private exitHiking() {
+    const tx = Math.floor(this.controls.position.x / TILE);
+    const tz = Math.floor(this.controls.position.z / TILE);
+    const target = this.adjacentFoothill(tx, tz) ?? this.nearestRoadTile(tx, tz);
+    this.controls.hiking = false;
+    if (target) this.controls.spawnAt(target.x, target.y, this.controls.yaw);
+    else {
+      this.controls.position.y =
+        this.controls.groundAt(this.controls.position.x, this.controls.position.z) + EYE_HEIGHT;
+    }
+  }
+
+  private adjacentMountain(tx: number, tz: number) {
+    let best: { x: number; y: number } | null = null;
+    let bestD = Infinity;
+    for (const [ox, oy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+      [1, 1],
+      [1, -1],
+      [-1, 1],
+      [-1, -1],
+    ] as const) {
+      const x = tx + ox;
+      const y = tz + oy;
+      const tile = this.state.tiles[y]?.[x];
+      if (!tile || tile.buildingId || !isMountainTerrain(tile.terrain)) continue;
+      const d = Math.abs(ox) + Math.abs(oy);
+      if (d < bestD) {
+        bestD = d;
+        best = { x, y };
+      }
+    }
+    return best;
+  }
+
+  private adjacentFoothill(tx: number, tz: number) {
+    let best: { x: number; y: number } | null = null;
+    let bestD = Infinity;
+    for (const [ox, oy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const x = tx + ox;
+      const y = tz + oy;
+      const tile = this.state.tiles[y]?.[x];
+      if (!tile || tile.buildingId) continue;
+      if (isMountainTerrain(tile.terrain) || tile.terrain === "water") continue;
+      const d = Math.abs(ox) + Math.abs(oy);
+      if (d < bestD) {
+        bestD = d;
+        best = { x, y };
+      }
+    }
+    return best;
+  }
+
+  private nearestRoadTile(tx: number, tz: number) {
+    let best: { x: number; y: number } | null = null;
+    let bestD = Infinity;
+    for (let y = 0; y < this.state.size; y++) {
+      for (let x = 0; x < this.state.size; x++) {
+        if (!this.state.tiles[y][x].road) continue;
+        const d = (x - tx) ** 2 + (y - tz) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          best = { x, y };
+        }
+      }
+    }
+    return best;
   }
 
   /**
@@ -558,27 +562,55 @@ export class StreetWorld {
 
     const night = light.phase === "night";
     const lampsOn = night || light.phase === "dusk";
-    this.sun.intensity = night ? 0.55 : light.sun * 2.6;
+    const future = this.state.id === "future";
+    this.sun.intensity = night ? (future ? 0.85 : 0.55) : light.sun * (future ? 3.1 : 2.6);
     this.sun.color.set(
-      light.phase === "dawn" || light.phase === "dusk" ? "#ffb27a" : night ? "#b7cce8" : "#fff6e8",
+      light.phase === "dawn" || light.phase === "dusk"
+        ? "#ffb27a"
+        : night
+          ? future
+            ? "#a8b8ff"
+            : "#b7cce8"
+          : future
+            ? "#fff0e0"
+            : "#fff6e8",
     );
 
-    this.hemi.intensity = night ? 1.05 : light.ambient * 1.05;
-    this.hemi.color.set(night ? "#8aa4c8" : light.skyTop);
-    this.hemi.groundColor.set(night ? "#2c3a4c" : "#4a5340");
-    this.renderer.toneMappingExposure = night ? 1.32 : 1.05;
+    this.hemi.intensity = night ? (future ? 1.45 : 1.05) : light.ambient * (future ? 1.35 : 1.05);
+    this.hemi.color.set(
+      night ? (future ? "#8899e8" : "#8aa4c8") : future ? "#b8d4f8" : light.skyTop,
+    );
+    this.hemi.groundColor.set(
+      night ? (future ? "#2a2048" : "#2c3a4c") : future ? "#6a7888" : "#4a5340",
+    );
+    this.renderer.toneMappingExposure = future
+      ? night
+        ? 1.55
+        : 1.28
+      : night
+        ? 1.32
+        : 1.05;
 
     // Facade windows glow with the same curve the isometric view uses.
+    const glowBoost = future ? (night ? 3.4 : 2.6) : night ? 2.1 : 1.5;
     for (const material of this.city.emissiveMaterials) {
-      material.emissiveIntensity = light.windowLit * (night ? 2.1 : 1.5);
+      material.emissiveIntensity = light.windowLit * glowBoost;
     }
     if (this.city.lampGlow) {
-      this.city.lampGlow.emissiveIntensity = lampsOn ? 3.4 : 0.04;
+      this.city.lampGlow.emissiveIntensity = lampsOn || future ? (future ? 4.2 : 3.4) : 0.04;
     }
 
     const here = this.controls.position;
     this.streetFill.position.set(here.x, here.y + 2.2, here.z);
-    this.streetFill.intensity = night ? 14 : lampsOn ? 6 : 0;
+    if (future) {
+      this.streetFill.color.set(night ? "#88a0ff" : "#ffc8e0");
+      this.streetFill.intensity = night ? 22 : lampsOn ? 14 : 10;
+      this.streetFill.distance = 28;
+    } else {
+      this.streetFill.color.set(0xffd6a8);
+      this.streetFill.intensity = night ? 14 : lampsOn ? 6 : 0;
+      this.streetFill.distance = 16;
+    }
 
     // Sky and fog follow the horizon colour.
     const key = `${light.skyTop}|${light.skyBottom}`;
@@ -590,12 +622,14 @@ export class StreetWorld {
     }
     if (this.scene.fog instanceof THREE.Fog) {
       const wet = this.state.weather?.wet;
-      this.scene.fog.color.set(night ? "#243656" : light.skyBottom);
-      this.scene.fog.near = wet ? 28 : night ? 90 : 70;
-      this.scene.fog.far = wet ? 220 : night ? 520 : 640;
+      this.scene.fog.color.set(
+        night ? (future ? "#2a2858" : "#243656") : future ? light.skyBottom : light.skyBottom,
+      );
+      this.scene.fog.near = wet ? 28 : night ? 90 : future ? 90 : 70;
+      this.scene.fog.far = wet ? 220 : night ? 520 : future ? 720 : 640;
     }
 
-    this.updateLamps(lampsOn);
+    this.updateLamps(lampsOn || future);
   }
 
   /** Moves the small pool of point lights onto the closest lamp posts. */

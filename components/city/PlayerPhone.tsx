@@ -52,6 +52,7 @@ import {
 } from "@/lib/city/vehicles";
 import { beyondRiversideStatus } from "@/lib/city/missions";
 import { writePlayer } from "@/lib/city/player";
+import { CITIES, isCityId, type CityId } from "@/lib/city/world/cities";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 const APPS: { id: PhoneApp; name: string; icon: string; tint: string }[] = [
@@ -67,6 +68,7 @@ const APPS: { id: PhoneApp; name: string; icon: string; tint: string }[] = [
   { id: "city", name: "City 311", icon: "🏛️", tint: "from-teal-200 to-emerald-700" },
   { id: "vehicles", name: "Vehicles", icon: "🚗", tint: "from-sky-400 to-blue-700" },
   { id: "police", name: "Police", icon: "🚓", tint: "from-blue-400 to-indigo-800" },
+  { id: "world", name: "World", icon: "🌍", tint: "from-cyan-300 to-emerald-700" },
   { id: "settings", name: "Settings", icon: "⚙️", tint: "from-zinc-400 to-zinc-700" },
 ];
 
@@ -76,6 +78,7 @@ interface Props {
   onPlayer: (player: PlayerState) => void;
   onClose: () => void;
   onOpenCharacter?: () => void;
+  onOpenWorldMap?: () => void;
   onChanged?: () => void;
   startApp?: PhoneApp;
   startThreadId?: string | null;
@@ -87,6 +90,7 @@ export function PlayerPhone({
   onPlayer,
   onClose,
   onOpenCharacter,
+  onOpenWorldMap,
   onChanged,
   startApp = "home",
   startThreadId = null,
@@ -224,6 +228,13 @@ export function PlayerPhone({
                 <VehiclesView player={player} onPlayer={onPlayer} onWaypoint={waypoint} onNote={setNote} note={note} />
               ) : app === "police" ? (
                 <PoliceView player={player} onPlayer={onPlayer} onNote={setNote} note={note} onChanged={onChanged} />
+              ) : app === "world" ? (
+                <WorldView
+                  player={player}
+                  currentCityId={state.id}
+                  onOpenWorldMap={onOpenWorldMap}
+                  onClose={onClose}
+                />
               ) : (
                 <SettingsView muted={save.muted} waypoint={save.waypoint?.label ?? null} onMute={(muted) => { setPhoneMuted(muted); refresh(); }} onClear={() => { setPhoneWaypoint(null); refresh(); }} />
               )}
@@ -749,13 +760,9 @@ function ProfileView({ player, onCharacter }: { player: PlayerState; onCharacter
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
         <div className="h-full bg-amber-400" style={{ width: `${progress.pct}%` }} />
       </div>
-      {!player.dustfallUnlocked ? (
-        <p className="mt-2 rounded-xl bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
-          Dustfall unlocks at Level 10 — build Riverside, raise stats, and grow the population.
-        </p>
-      ) : (
-        <p className="mt-2 text-xs text-emerald-200/80">Dustfall is unlocked on the city map.</p>
-      )}
+      <p className="mt-2 text-xs text-emerald-200/80">
+        All regions are open on the World Map.
+      </p>
       <p className="mt-4 text-sm">
         {formatDollars(totalBalance(player))} · {player.career ? officeRank(player.career.xp).label : "Unemployed"}
         {player.policeCareer ? ` · Police ${policeRank(player.policeCareer.xp).label}` : ""}
@@ -990,7 +997,7 @@ function VehiclesView({
         </div>
       ) : null}
       <div className="mt-4 rounded-2xl bg-amber-400/10 p-3">
-        <p className="text-[0.65rem] uppercase tracking-[0.16em] text-amber-200">Beyond Riverside</p>
+        <p className="text-[0.65rem] uppercase tracking-[0.16em] text-amber-200">World Map</p>
         <ul className="mt-2 space-y-1">
           {mission.steps.map((step) => (
             <li key={step.id} className={`text-xs ${step.done ? "text-emerald-200" : "text-white/55"}`}>
@@ -1000,16 +1007,48 @@ function VehiclesView({
         </ul>
         <p className="mt-2 text-[0.65rem] text-white/40">Reward {mission.reward}</p>
       </div>
-      {player.dustfallUnlocked ? (
+      {note ? <p className="mt-2 text-xs text-amber-200">{note}</p> : null}
+    </div>
+  );
+}
+
+function WorldView({
+  player,
+  currentCityId,
+  onOpenWorldMap,
+  onClose,
+}: {
+  player: PlayerState;
+  currentCityId: string;
+  onOpenWorldMap?: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="pt-2">
+      <AppTitle>World</AppTitle>
+      <p className="mt-2 text-sm text-white/70">
+        Current city · {isCityId(currentCityId) ? CITIES[currentCityId].name : currentCityId}
+      </p>
+      <p className="mt-1 text-xs text-white/45">
+        Discovered {player.discoveredCities.length} region
+        {player.discoveredCities.length === 1 ? "" : "s"}
+      </p>
+      {onOpenWorldMap ? (
         <button
           type="button"
-          onClick={() => onWaypoint(20, 2, "Highway 93 · Dustfall")}
-          className="mt-2 w-full rounded-xl bg-amber-400/20 px-3 py-2 text-sm text-amber-100"
+          onClick={() => {
+            onClose();
+            onOpenWorldMap();
+          }}
+          className="mt-4 w-full rounded-xl bg-cyan-400 py-2.5 text-sm font-semibold text-[#061018]"
         >
-          Waypoint · Dustfall highway
+          Open World Map
         </button>
-      ) : null}
-      {note ? <p className="mt-2 text-xs text-amber-200">{note}</p> : null}
+      ) : (
+        <p className="mt-4 rounded-xl bg-white/5 px-3 py-3 text-xs text-white/55">
+          Exit to the city overview, then tap World Map.
+        </p>
+      )}
     </div>
   );
 }

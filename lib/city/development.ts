@@ -1,6 +1,5 @@
 import {
   awardXp,
-  formatDollars,
   readPlayer,
   writePlayer,
   type PlayerState,
@@ -112,37 +111,7 @@ const BASELINES: Record<
   },
 };
 
-export const HIGHWAY_REPAIR_ID = "dustfall-highway-repair";
-
-/** Mid-corridor construction site (tile space on Highway 93 map). */
-export const HIGHWAY_REPAIR_SITE = {
-  /** Progress along corridor 0→1 (Dustfall-bound). */
-  progress: 0.48,
-  collectRadius: 0.06,
-};
-
-export const PROJECT_CATALOG: ProjectDef[] = [
-  {
-    id: HIGHWAY_REPAIR_ID,
-    cityId: "dustfall",
-    name: "Repair Dustfall Highway",
-    description:
-      "Restore Highway 93 between Riverside and Dustfall. Fix the mid-desert construction zone so traffic can flow again.",
-    category: "infrastructure",
-    impact: {
-      infrastructure: 4,
-      transportation: 6,
-    },
-    rewardCash: 900,
-    rewardXp: 120,
-    steps: [
-      { id: "visit", label: "Visit the highway construction site" },
-      { id: "materials", label: "Collect construction materials at the site" },
-      { id: "repair", label: "Complete the repair work" },
-      { id: "inspect", label: "Inspect the repaired roadway" },
-    ],
-  },
-];
+export const PROJECT_CATALOG: ProjectDef[] = [];
 
 function emptyCityProgress() {
   return { bonus: {} as Partial<CategoryScores>, projects: {} as Record<string, ProjectProgress> };
@@ -230,13 +199,10 @@ function ensureProject(save: DevelopmentSave, def: ProjectDef) {
 function resolveStatus(
   def: ProjectDef,
   progress: ProjectProgress,
-  player: PlayerState,
+  _player: PlayerState,
 ): ProjectStatus {
   if (progress.status === "completed") return "completed";
   if (progress.status === "active") return "active";
-  if (def.id === HIGHWAY_REPAIR_ID) {
-    return player.dustfallUnlocked ? "available" : "locked";
-  }
   return progress.status === "available" ? "available" : "locked";
 }
 
@@ -365,22 +331,4 @@ export function completeProject(projectId: string, player: PlayerState = readPla
 
   writeDevelopment(save);
   return progress;
-}
-
-export function isHighwayRepaired() {
-  const save = readDevelopment();
-  const progress = save.cities.dustfall?.projects?.[HIGHWAY_REPAIR_ID];
-  return progress?.status === "completed";
-}
-
-export function activeHighwayRepair(player: PlayerState = readPlayer()) {
-  syncDevelopment(player);
-  const list = projectsForCity("dustfall", player);
-  return list.find((p) => p.def.id === HIGHWAY_REPAIR_ID) ?? null;
-}
-
-export function highwayRepairRewardLabel() {
-  const def = findProject(HIGHWAY_REPAIR_ID);
-  if (!def) return "";
-  return `${formatDollars(def.rewardCash)} + XP`;
 }

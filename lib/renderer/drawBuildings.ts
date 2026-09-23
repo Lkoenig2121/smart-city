@@ -7,6 +7,7 @@ import { venueRole } from "@/lib/city/venues";
 import { paintGraffiti } from "./drawBridges";
 import { drawGroundShadow, drawIsoBox, drawSlopedRoof, drawWindowGrid, isoBoxCorners } from "./drawIso";
 import { alpha, lit, mix, shade, type Lighting } from "./palette";
+import { buildingDrawHeight } from "./pickBuilding";
 
 function stadiumHasMonster(b: Building) {
   if (b.name === "Scorpion Field") return true;
@@ -75,6 +76,7 @@ export function drawBuilding(
   }
 
   drawBuildingSign(ctx, building, light);
+  drawNeonBillboards(ctx, building, light);
 
   if (selected) {
     const box = isoBoxCorners(building.origin.x, building.origin.y, building.width, building.depth, 0, 4);
@@ -485,6 +487,70 @@ function drawBuildingSign(ctx: CanvasRenderingContext2D, b: Building, light: Lig
   ctx.textBaseline = "middle";
   ctx.fillText(spec.label, x, y - 5.5);
   ctx.restore();
+}
+
+/** Glowing LED screens on neon district facades (Future City). */
+function drawNeonBillboards(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {
+  const neon = b.stats.extra?.neon;
+  if (typeof neon !== "string") return;
+
+  const h = buildingDrawHeight(b);
+  if (h < 40) return;
+  const box = isoBoxCorners(b.origin.x, b.origin.y, b.width, b.depth, h, 4);
+  const glow = light.phase === "day" ? 0.92 : 1;
+  const screen = alpha(neon, glow);
+  const frame = alpha("#0a0e14", 0.55);
+  const alt = mix(neon, "#ffffff", 0.45);
+
+  // Right face — large vertical LED.
+  const rx0 = box.B.x * 0.35 + box.R.x * 0.65;
+  const ry0 = box.B.y * 0.35 + box.R.y * 0.65;
+  const rx1 = box.Be.x * 0.35 + box.Re.x * 0.65;
+  const ry1 = box.Be.y * 0.35 + box.Re.y * 0.65;
+  const rw = Math.max(10, Math.hypot(box.R.x - box.B.x, box.R.y - box.B.y) * 0.42);
+  const rh = Math.max(16, h * 0.38);
+  const midY = (ry0 + ry1) / 2;
+  ctx.save();
+  ctx.fillStyle = frame;
+  ctx.fillRect(rx0 - rw / 2 - 1.5, midY - rh / 2 - 1.5, rw + 3, rh + 3);
+  ctx.fillStyle = screen;
+  ctx.fillRect(rx0 - rw / 2, midY - rh / 2, rw, rh);
+  ctx.fillStyle = alpha(alt, 0.35);
+  ctx.fillRect(rx0 - rw / 2 + 2, midY - rh / 2 + 3, rw - 4, rh * 0.22);
+  // Soft bloom.
+  ctx.fillStyle = alpha(neon, light.phase === "day" ? 0.28 : 0.22);
+  ctx.fillRect(rx0 - rw / 2 - 6, midY - rh / 2 - 6, rw + 12, rh + 12);
+  ctx.restore();
+
+  // Left face — smaller secondary board (alternate hue via hash).
+  if (b.floors >= 6) {
+    const lx0 = box.L.x * 0.55 + box.B.x * 0.45;
+    const ly0 = box.L.y * 0.55 + box.B.y * 0.45;
+    const lw = Math.max(8, Math.hypot(box.B.x - box.L.x, box.B.y - box.L.y) * 0.36);
+    const lh = Math.max(12, h * 0.28);
+    const mid = ly0 - h * 0.28;
+    const neon2 = mix(neon, pickNeonNeighbor(neon), 0.45);
+    ctx.save();
+    ctx.fillStyle = frame;
+    ctx.fillRect(lx0 - lw / 2 - 1, mid - lh / 2 - 1, lw + 2, lh + 2);
+    ctx.fillStyle = alpha(neon2, glow);
+    ctx.fillRect(lx0 - lw / 2, mid - lh / 2, lw, lh);
+    ctx.restore();
+  }
+}
+
+function pickNeonNeighbor(hex: string) {
+  const table = ["#00e8ff", "#ff2d55", "#39ff14", "#ff8c00", "#c44dff"];
+  let best = table[0];
+  let bestD = 99;
+  for (const c of table) {
+    const d = Math.abs(c.charCodeAt(1) - hex.charCodeAt(1));
+    if (d > 0 && d < bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return best;
 }
 
 function drawHospital(ctx: CanvasRenderingContext2D, b: Building, light: Lighting) {

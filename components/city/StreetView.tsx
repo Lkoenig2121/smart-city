@@ -111,20 +111,9 @@ import {
   activeOwnedVehicle,
   applyDriveTick,
   applyParkVehicle,
-  hasOwnedVehicle,
   snapFleetToMotorsApproach,
   type OwnedVehicle,
 } from "@/lib/city/vehicles";
-import {
-  markMissionDustfall,
-  markMissionHighway,
-  markMissionRamp,
-} from "@/lib/city/missions";
-import { DustfallWorld } from "@/lib/street/DustfallWorld";
-import {
-  DUSTFALL_ARRIVAL,
-  generateDustfall,
-} from "@/lib/city/generateDustfall";
 type Interior =
   | { kind: "stadium" }
   | { kind: "lodging"; buildingId: string; zone: LodgingZone; roomId?: string }
@@ -140,10 +129,8 @@ interface Props {
   selectedBuildingId?: RefObject<string | null>;
   onTick: (dt: number) => void;
   onExit: () => void;
-  /** Opens the Dustfall isometric city overview (Egypt-styled desert). */
-  onEnterDesertCity?: () => void;
-  /** Kept so Highway 93 return can restore Riverside after visiting Dustfall. */
-  riversideState?: CityState | null;
+  /** Leave street and open the World Map (iso overview). */
+  onOpenWorldMap?: () => void;
 }
 
 export function StreetView({
@@ -154,8 +141,7 @@ export function StreetView({
   selectedBuildingId,
   onTick,
   onExit,
-  onEnterDesertCity,
-  riversideState = null,
+  onOpenWorldMap,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const outdoorCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -200,6 +186,10 @@ export function StreetView({
   interiorRef.current = interior;
   const [atGate, setAtGate] = useState(false);
   const [lodgingDoor, setLodgingDoor] = useState<Building | null>(null);
+  const [mountainTrail, setMountainTrail] = useState<"enter" | "exit" | null>(
+    null,
+  );
+  const [hiking, setHiking] = useState(false);
   const [subwayDoor, setSubwayDoor] = useState<Building | null>(null);
   const [atDesk, setAtDesk] = useState(false);
   const [atSubwayExit, setAtSubwayExit] = useState(false);
@@ -246,28 +236,8 @@ export function StreetView({
   const [driving, setDriving] = useState(false);
   const [policeLights, setPoliceLights] = useState(false);
   const [nearCar, setNearCar] = useState<OwnedVehicle | null>(null);
-  const [highwayHint, setHighwayHint] = useState<string | null>(null);
-  const [dustfallTrip, setDustfallTrip] = useState(false);
-  const [dustfallProgress, setDustfallProgress] = useState(0);
-  const [highwayToward, setHighwayToward] = useState<"dustfall" | "riverside">(
-    "dustfall",
-  );
-  const [inDustfall, setInDustfall] = useState(() => state.id === "dustfall");
-  const [playState, setPlayState] = useState(state);
-  const dustfallCityRef = useRef<CityState | null>(
-    state.id === "dustfall" ? state : null,
-  );
-  const riversideStateRef = useRef<CityState | null>(
-    state.id === "riverside" ? state : null,
-  );
   const motorsOpenRef = useRef(false);
   const drivingRef = useRef(false);
-  const dustfallRef = useRef<DustfallWorld | null>(null);
-  const dustfallCanvasRef = useRef<HTMLCanvasElement>(null);
-  const dustfallTripRef = useRef(false);
-  dustfallTripRef.current = dustfallTrip;
-  /** After Highway 93 remount may recreate StreetWorld — resume drive then. */
-  const resumeDriveAfterDustfallRef = useRef(false);
   const [barMenu, setBarMenu] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [phoneStartApp, setPhoneStartApp] = useState<PhoneApp>("home");
@@ -300,7 +270,7 @@ export function StreetView({
     const prompt = policeCallPrompt(call, { x: pos.x, y: pos.y });
     if (!prompt) return false;
     if (prompt.next === "completed") {
-      const next = reportPoliceCallDone(playState);
+      const next = reportPoliceCallDone(state);
       if (typeof next === "string") {
         setPoliceNote(next);
         return true;
@@ -370,7 +340,6 @@ export function StreetView({
     barMenu ||
     phoneOpen ||
     motorsOpen ||
-    dustfallTrip ||
     sleeping ||
     atComputer ||
     atOfficeComputer ||
@@ -378,22 +347,6 @@ export function StreetView({
     pickingRoom ||
     roomCustomize ||
     riding;
-  /** Highway almost finished toward Dustfall — unlock desert overview exit. */
-  const besideDesertCity =
-    inDustfall ||
-    (dustfallTrip && highwayToward === "dustfall" && dustfallProgress >= 0.88);
-
-  useEffect(() => {
-    if (riversideState?.id === "riverside")
-      riversideStateRef.current = riversideState;
-    if (state.id === "riverside") riversideStateRef.current = state;
-    if (state.id === "dustfall") {
-      dustfallCityRef.current = state;
-      setInDustfall(true);
-      setPlayState(state);
-    }
-  }, [state, riversideState]);
-
   useEffect(() => {
     if (!interior) return;
     // Hide street arrows indoors, but keep the phone / minimap pin so the
@@ -719,7 +672,7 @@ export function StreetView({
 
     let world: StreetWorld;
     try {
-      world = new StreetWorld(canvas, playState);
+      world = new StreetWorld(canvas, state);
     } catch (error) {
       setFailed(
         error instanceof Error
@@ -744,7 +697,7 @@ export function StreetView({
       world.dispose();
       worldRef.current = null;
     };
-  }, [playState]);
+  }, [state]);
 
   useEffect(() => {
     if (!active || interior) return;
@@ -755,7 +708,7 @@ export function StreetView({
 
     world.spawnNear(spawn.x, spawn.y);
     world.setMoveMode(mode);
-    if (!inDustfall) {
+    if (state.id === "riverside") {
       const snapped = snapFleetToMotorsApproach(readPlayer());
       writePlayer(snapped);
       setPlayer(snapped);
@@ -813,7 +766,22 @@ export function StreetView({
     const detachInput = attachPointerInput(canvas, inputProxy, {
       setLocked,
       consumeKey: (event) => {
-        if (dustfallTripRef.current) return true;
+        if (event.code === "Space" && !drivingRef.current) {
+          if (world.tryToggleHiking()) {
+            event.preventDefault();
+            setHiking(world.hiking);
+            setMountainTrail(
+              world.hiking
+                ? world.nearMountainTrailExit()
+                  ? "exit"
+                  : null
+                : world.nearMountainTrailhead()
+                  ? "enter"
+                  : null,
+            );
+            return true;
+          }
+        }
         if (event.code !== "KeyE" && event.code !== "KeyF" && event.code !== "KeyL") return false;
         event.preventDefault();
         if (event.code === "KeyL") {
@@ -866,17 +834,6 @@ export function StreetView({
           setNearCar(null);
           return true;
         }
-        if (
-          world.nearHighwayRamp() &&
-          !hasOwnedVehicle(readPlayer()) &&
-          !drivingRef.current
-        ) {
-          setHighwayHint(
-            "Too far to travel on foot. You'll need a car to continue.",
-          );
-          markMissionRamp();
-          return true;
-        }
         if (tryPoliceCallAction()) return true;
         return enterStreetDoor();
       },
@@ -886,10 +843,6 @@ export function StreetView({
     let last = performance.now();
     let clockAcc = 0;
     const loop = (now: number) => {
-      if (dustfallTripRef.current) {
-        frame = requestAnimationFrame(loop);
-        return;
-      }
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       tickRef.current(dt);
@@ -897,48 +850,9 @@ export function StreetView({
       world.setWaypoint(waypointRef.current);
       const live = readPlayer();
       const activeCar = activeOwnedVehicle(live);
-      if (
-        resumeDriveAfterDustfallRef.current &&
-        activeCar &&
-        !world.isDriving
-      ) {
-        resumeDriveAfterDustfallRef.current = false;
-        world.startDriving(activeCar);
-        drivingRef.current = true;
-        setDriving(true);
-      }
       world.syncOwnedCars(live.ownedVehicles, world.drivingVehicleId);
       if (world.isDriving && activeCar) {
         world.setDriveFuelEmpty(false);
-        if (world.nearHighwayRamp()) markMissionRamp();
-        if (
-          !inDustfall &&
-          world.atHighwayPortal() &&
-          !dustfallTripRef.current
-        ) {
-          markMissionHighway();
-          setHighwayToward("dustfall");
-          dustfallTripRef.current = true;
-          setDustfallTrip(true);
-        } else if (
-          inDustfall &&
-          world.atReturnPortal() &&
-          !dustfallTripRef.current
-        ) {
-          setHighwayToward("riverside");
-          dustfallTripRef.current = true;
-          setDustfallTrip(true);
-        } else if (!inDustfall && world.nearHighwayRamp()) {
-          setHighwayHint(
-            "Highway 93 · keep driving north onto the ramp for Dustfall",
-          );
-        } else if (inDustfall && world.nearReturnBridge()) {
-          setHighwayHint(
-            "Riverside Bridge · keep driving south for Highway 93 back to Riverside",
-          );
-        } else {
-          setHighwayHint(null);
-        }
       } else {
         world.setDriveFuelEmpty(false);
       }
@@ -1008,15 +922,6 @@ export function StreetView({
       if (!world.isDriving) {
         const car = world.nearOwnedCar(live.ownedVehicles);
         setNearCar((prev) => (prev?.id === car?.id ? prev : car));
-        if (world.nearHighwayRamp() && !hasOwnedVehicle(live)) {
-          setHighwayHint(
-            inDustfall
-              ? "Too far to travel on foot. You'll need a car for the Riverside Bridge."
-              : "Too far to travel on foot. You'll need a car to continue.",
-          );
-        } else if (!world.nearHighwayRamp()) {
-          setHighwayHint(null);
-        }
       }
       const pin = waypointRef.current;
       // Police dispatch pins stay on the minimap for the whole call; only
@@ -1036,10 +941,19 @@ export function StreetView({
       const venue = world.nearVenueEntrance();
       venueDoorRef.current = venue;
       setVenueDoor((prev) => (prev?.id === venue?.id ? prev : venue));
+      const trail = world.hiking
+        ? world.nearMountainTrailExit()
+          ? "exit"
+          : null
+        : world.nearMountainTrailhead()
+          ? "enter"
+          : null;
+      setMountainTrail((prev) => (prev === trail ? prev : trail));
+      setHiking((prev) => (prev === world.hiking ? prev : world.hiking));
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
-        setClock(formatClock(playState));
+        setClock(formatClock(state));
         setPlayer(readPlayer());
       }
       frame = requestAnimationFrame(loop);
@@ -1051,159 +965,7 @@ export function StreetView({
       detachInput();
       if (document.pointerLockElement === canvas) document.exitPointerLock();
     };
-  }, [active, interior, spawn.x, spawn.y, playState, inDustfall]);
-
-  useEffect(() => {
-    if (!active || !dustfallTrip) return;
-    const canvas = dustfallCanvasRef.current;
-    const wrap = wrapRef.current;
-    if (!canvas || !wrap) return;
-    const car = activeOwnedVehicle(readPlayer());
-    const toward = highwayToward;
-    let world: DustfallWorld;
-    try {
-      world = new DustfallWorld(canvas, car?.color ?? "#1f4d8c", toward);
-    } catch (error) {
-      setFailed(
-        error instanceof Error
-          ? error.message
-          : "WebGL is unavailable in this browser.",
-      );
-      setDustfallTrip(false);
-      return;
-    }
-    dustfallRef.current = world;
-    worldRef.current?.stopDriving();
-    setDriving(false);
-    drivingRef.current = false;
-    if (document.pointerLockElement) document.exitPointerLock();
-
-    const resize = () => {
-      const rect = wrap.getBoundingClientRect();
-      world.resize(rect.width, rect.height);
-    };
-    resize();
-
-    const detachInput = attachPointerInput(
-      canvas,
-      {
-        look: (dx, dy) => world.look(dx, dy),
-        keyDown: (event) => world.controls.keyDown(event),
-        keyUp: (event) => world.controls.keyUp(event),
-        clearKeys: () => world.controls.clearKeys(),
-      },
-      {
-        setLocked,
-        consumeKey: (event) => {
-          if (event.code !== "KeyE") return false;
-          event.preventDefault();
-          world.requestExitVehicle();
-          return true;
-        },
-      },
-    );
-
-    const landInRiverside = (opts: { keepDriving: boolean }) => {
-      const live = readPlayer();
-      const activeCar = activeOwnedVehicle(live);
-      const rampX = 20;
-      const rampY = 3.2;
-      if (activeCar) {
-        const parked = applyParkVehicle(live, activeCar.id, rampX, rampY, 0);
-        writePlayer(parked);
-        setPlayer(parked);
-      }
-      const riverside =
-        riversideStateRef.current ?? (state.id === "riverside" ? state : null);
-      resumeDriveAfterDustfallRef.current = opts.keepDriving;
-      drivingRef.current = false;
-      setDriving(false);
-      setInDustfall(false);
-      if (riverside) setPlayState(riverside);
-      setDustfallTrip(false);
-      dustfallTripRef.current = false;
-      setSpawn({ x: rampX, y: rampY + (opts.keepDriving ? 0 : 0.8) });
-      setHighwayHint(
-        "Back in Riverside — Highway 93 is north if you want Dustfall again.",
-      );
-    };
-
-    const landInDustfall = (opts: { keepDriving: boolean }) => {
-      markMissionDustfall();
-      if (!dustfallCityRef.current)
-        dustfallCityRef.current = generateDustfall();
-      const df = dustfallCityRef.current;
-      const live = readPlayer();
-      const activeCar = activeOwnedVehicle(live);
-      if (activeCar) {
-        const parked = applyParkVehicle(
-          live,
-          activeCar.id,
-          DUSTFALL_ARRIVAL.x,
-          DUSTFALL_ARRIVAL.y,
-          DUSTFALL_ARRIVAL.yaw,
-        );
-        writePlayer(parked);
-        setPlayer(parked);
-      } else {
-        setPlayer(readPlayer());
-      }
-      resumeDriveAfterDustfallRef.current = opts.keepDriving;
-      drivingRef.current = false;
-      setDriving(false);
-      setInDustfall(true);
-      setPlayState(df);
-      setDustfallTrip(false);
-      dustfallTripRef.current = false;
-      setSpawn({ x: DUSTFALL_ARRIVAL.x, y: DUSTFALL_ARRIVAL.y });
-      setHighwayHint(
-        opts.keepDriving
-          ? "Back in Dustfall — the Riverside Bridge is south."
-          : "Welcome to Dustfall — the Riverside Bridge is south if you want to drive home.",
-      );
-      setClock(formatClock(df));
-    };
-
-    let frame = 0;
-    let last = performance.now();
-    const loop = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      tickRef.current(dt * 0.35);
-      const live = readPlayer();
-      const activeCar = activeOwnedVehicle(live);
-      world.render(dt);
-      positionRef.current = world.tilePosition;
-      if (activeCar) {
-        writePlayer(applyDriveTick(live, activeCar.id, dt, world.mph() / 2.15));
-      }
-      setDustfallProgress(world.getProgress());
-
-      if (world.wantsExitVehicle()) {
-        if (toward === "riverside") landInDustfall({ keepDriving: false });
-        else landInRiverside({ keepDriving: false });
-        return;
-      }
-      if (world.wantsAbortTrip()) {
-        if (toward === "riverside") landInDustfall({ keepDriving: true });
-        else landInRiverside({ keepDriving: true });
-        return;
-      }
-      if (world.hasArrived()) {
-        if (toward === "riverside") landInRiverside({ keepDriving: true });
-        else landInDustfall({ keepDriving: true });
-        return;
-      }
-      frame = requestAnimationFrame(loop);
-    };
-    frame = requestAnimationFrame(loop);
-    return () => {
-      cancelAnimationFrame(frame);
-      detachInput();
-      dustfallRef.current = null;
-      world.dispose();
-    };
-  }, [active, dustfallTrip, highwayToward, state]);
+  }, [active, interior, spawn.x, spawn.y, state]);
 
   useEffect(() => {
     if (!active || interior?.kind !== "stadium") return;
@@ -1814,7 +1576,7 @@ export function StreetView({
       return;
 
     // Outdoor street: click the white-highlighted building to walk in.
-    if (!inside && !dustfallTrip && !driving) {
+    if (!inside && !driving) {
       const outdoor = outdoorCanvasRef.current;
       if (outdoor && document.pointerLockElement === outdoor) {
         if (tryEnterStreetDoorRef.current()) return;
@@ -1922,7 +1684,7 @@ export function StreetView({
   const stadiumBuilding = findStadium(state);
   const doorNearby = Boolean(venueDoor || lodgingDoor || subwayDoor || atGate);
   const carAndDoorChoice = Boolean(
-    nearCar && doorNearby && !driving && !inside && !failed && !dustfallTrip,
+    nearCar && doorNearby && !driving && !inside && !failed,
   );
   const doorChoiceLabel = lodgingDoor
     ? lodgingDoor.name
@@ -1972,26 +1734,14 @@ export function StreetView({
     <div ref={wrapRef} className="absolute inset-0 z-30 bg-[#0b1420]">
       <canvas
         ref={outdoorCanvasRef}
-        className={`absolute inset-0 h-full w-full ${inside || dustfallTrip ? "invisible pointer-events-none" : ""}`}
+        className={`absolute inset-0 h-full w-full ${inside ? "invisible pointer-events-none" : ""}`}
         onClick={onCanvasClick}
       />
       <canvas
         ref={canvasRef}
-        className={`absolute inset-0 h-full w-full ${inside && !dustfallTrip ? "" : "invisible pointer-events-none"}`}
+        className={`absolute inset-0 h-full w-full ${inside ? "" : "invisible pointer-events-none"}`}
         onClick={onCanvasClick}
       />
-      <canvas
-        ref={dustfallCanvasRef}
-        className={`absolute inset-0 h-full w-full ${dustfallTrip ? "" : "invisible pointer-events-none"}`}
-        onClick={(event) => {
-          const canvas = dustfallCanvasRef.current;
-          if (!canvas) return;
-          if (document.pointerLockElement !== canvas)
-            canvas.requestPointerLock();
-          event.preventDefault();
-        }}
-      />
-
       {failed ? (
         <div className="absolute inset-0 grid place-items-center bg-[#0b1420] p-6 text-center">
           <div className="max-w-sm">
@@ -2013,16 +1763,16 @@ export function StreetView({
         <div className="flex flex-col gap-2">
           <div className="pointer-events-auto rounded-xl border border-white/10 bg-black/45 px-3.5 py-2 backdrop-blur">
             <p className="text-[0.6rem] uppercase tracking-[0.2em] text-amber-300/80">
-              {inside ? placeName : inDustfall ? "Dustfall" : "Street level"}
+              {inside ? placeName : state.id === "dustfall" ? "Dustfall" : "Street level"}
             </p>
             <p className="text-sm font-medium text-white">
               {clock.day} · {clock.date} · {clock.time}
             </p>
             <p className="text-[0.7rem] text-sky-100/80">
-              {weatherEmoji(playState.weather.kind)} {playState.weather.tempF}°{" "}
-              {playState.weather.label}
-              {playState.events[0]
-                ? ` · ${playState.events[0].icon} ${playState.events[0].headline}`
+              {weatherEmoji(state.weather.kind)} {state.weather.tempF}°{" "}
+              {state.weather.label}
+              {state.events[0]
+                ? ` · ${state.events[0].icon} ${state.events[0].headline}`
                 : ""}
             </p>
           </div>
@@ -2032,7 +1782,7 @@ export function StreetView({
           {onPoliceDuty(player) ? (
             <div className="pointer-events-auto rounded-xl border border-sky-400/30 bg-[#0e1520]/9 px-3.5 py-2 text-sky-50 backdrop-blur">
               <p className="text-[0.6rem] uppercase tracking-[0.2em] text-sky-300">
-                {playState.id === "dustfall" ? "Dustfall Police" : "Riverside Police"}
+                {state.id === "dustfall" ? "Dustfall Police" : "Riverside Police"}
               </p>
               <p className="text-sm font-semibold">
                 {policeRank(player.policeCareer?.xp ?? 0).label}
@@ -2055,7 +1805,7 @@ export function StreetView({
         </div>
 
         <div className="pointer-events-auto flex items-center gap-2">
-          {!inside && !driving && !dustfallTrip ? (
+          {!inside && !driving ? (
             <div className="flex items-center gap-0.5 rounded-xl border border-white/10 bg-black/45 p-1 backdrop-blur">
               <ModeButton
                 active={mode === "hop"}
@@ -2070,7 +1820,7 @@ export function StreetView({
                 title="Walk continuously with WASD"
               />
             </div>
-          ) : driving || dustfallTrip ? (
+          ) : driving ? (
             <div className="rounded-xl border border-sky-300/30 bg-sky-500/15 px-3 py-1.5 text-xs font-semibold text-sky-100 backdrop-blur">
               Driving
             </div>
@@ -2149,13 +1899,10 @@ export function StreetView({
           )}
 
           <button
-            onClick={() => {
-              if (besideDesertCity && onEnterDesertCity) onEnterDesertCity();
-              else onExit();
-            }}
+            onClick={onExit}
             className="rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20"
           >
-            {besideDesertCity ? "✕ Exit to desert city" : "✕ Exit to city view"}
+            ✕ Exit to city view
           </button>
         </div>
       </div>
@@ -2184,7 +1931,7 @@ export function StreetView({
       !motorsOpen ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
           <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
-            {driving || dustfallTrip ? (
+            {driving ? (
               <>
                 <p className="text-xs font-semibold text-white">
                   Click the view, then drive
@@ -2234,7 +1981,7 @@ export function StreetView({
 
       {locked && !failed ? (
         <div className="pointer-events-none absolute bottom-4 left-4 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-[0.68rem] leading-relaxed text-slate-300 backdrop-blur">
-          {driving || dustfallTrip ? (
+          {driving ? (
             <>
               <span className="font-semibold text-white">W</span> gas ·{" "}
               <span className="font-semibold text-white">S</span> brake/reverse
@@ -2268,7 +2015,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {driving && !dustfallTrip && !failed ? (
+      {driving && !failed ? (
         <div className="pointer-events-none absolute left-4 top-24 z-10">
           <div className="min-w-[12rem] rounded-xl border border-white/15 bg-black/55 px-3 py-2 backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.18em] text-sky-200">
@@ -2287,33 +2034,6 @@ export function StreetView({
             </p>
             <p className="mt-0.5 text-[0.65rem] text-slate-500">
               E exit vehicle · Mouse look
-            </p>
-          </div>
-        </div>
-      ) : null}
-
-      {dustfallTrip && !failed ? (
-        <div className="pointer-events-none absolute left-4 top-24 z-10">
-          <div className="min-w-[12rem] rounded-xl border border-amber-300/30 bg-black/55 px-3 py-2 backdrop-blur">
-            <p className="text-[0.65rem] uppercase tracking-[0.18em] text-amber-200">
-              Highway 93
-            </p>
-            <p className="mt-1 text-sm font-semibold text-white">
-              {highwayToward === "riverside"
-                ? "Toward Riverside"
-                : "Toward Dustfall"}
-            </p>
-            <p className="mt-1 text-xs text-slate-300">
-              {Math.round(dustfallProgress * 100)}% of the drive
-            </p>
-            <p className="mt-1 text-[0.65rem] text-slate-400">
-              {highwayToward === "riverside"
-                ? dustfallProgress >= 0.88
-                  ? "Riverside ahead"
-                  : "S reverse → Dustfall · E exit"
-                : dustfallProgress >= 0.88
-                  ? "Dustfall ahead — Exit to desert city"
-                  : "S reverse past the sign → Riverside · E exit"}
             </p>
           </div>
         </div>
@@ -2362,8 +2082,7 @@ export function StreetView({
       !carAndDoorChoice &&
       !driving &&
       !inside &&
-      !failed &&
-      !dustfallTrip ? (
+      !failed ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-sky-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-sky-300">
@@ -2376,27 +2095,11 @@ export function StreetView({
               Press <span className="font-semibold text-white">E</span> or{" "}
               <span className="font-semibold text-white">F</span> to drive
             </p>
-            <p className="mt-1 text-xs text-amber-200/90">
-              {inDustfall
-                ? "Drive south → Riverside Bridge → Highway 93 → Riverside"
-                : "Drive north on this road → Highway 93 → Dustfall"}
-            </p>
           </div>
         </div>
       ) : null}
 
-      {highwayHint && !inside && !failed && !dustfallTrip ? (
-        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
-          <div className="max-w-sm rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
-            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
-              Highway 93
-            </p>
-            <p className="mt-1 text-sm text-slate-200">{highwayHint}</p>
-          </div>
-        </div>
-      ) : null}
-
-      {policePrompt && !inside && !failed && !phoneOpen && !highwayHint ? (
+      {policePrompt && !inside && !failed && !phoneOpen ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="max-w-sm rounded-2xl border border-sky-400/40 bg-[#0e1520]/9 px-6 py-4 text-center shadow-2xl backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-sky-300">
@@ -2425,6 +2128,31 @@ export function StreetView({
               <span className="font-semibold text-white">Click</span> or{" "}
               <span className="font-semibold text-white">E</span>
             </p>
+          </div>
+        </div>
+      ) : null}
+
+      {mountainTrail && !carAndDoorChoice && !inside && !failed && !driving ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-2xl border border-emerald-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-emerald-300">
+              {mountainTrail === "enter" ? "Trailhead" : "Foothills"}
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">
+              {mountainTrail === "enter" ? "Enter the mountains" : "Leave the trail"}
+            </p>
+            <p className="mt-1 text-sm text-slate-300">
+              Press <span className="font-semibold text-white">Space</span> to{" "}
+              {mountainTrail === "enter" ? "start hiking" : "return to town"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {hiking && !mountainTrail && !inside && !failed && !driving ? (
+        <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-xl border border-white/10 bg-black/50 px-3 py-1.5 text-center text-[0.68rem] text-slate-300 backdrop-blur">
+            Hiking · walk the ridges · return to the foothills to leave
           </div>
         </div>
       ) : null}
@@ -3032,6 +2760,14 @@ export function StreetView({
             characterMenuRef.current = "outfit";
             setCharacterMenu("outfit");
           }}
+          onOpenWorldMap={
+            onOpenWorldMap
+              ? () => {
+                  closePhone();
+                  onOpenWorldMap();
+                }
+              : undefined
+          }
           onChanged={() => refreshPhoneChrome()}
           startApp={phoneStartApp}
           startThreadId={phoneThread}
@@ -3105,11 +2841,10 @@ export function StreetView({
 
       {!failed && !inside ? (
         <StreetMinimap
-          state={playState}
+          state={state}
           positionRef={positionRef}
           waypoint={waypoint}
-          driving={driving || dustfallTrip}
-          highway={dustfallTrip}
+          driving={driving}
         />
       ) : null}
     </div>

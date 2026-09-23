@@ -19,6 +19,13 @@ import {
   type RoomLoadout,
 } from "./furnishings";
 
+import {
+  defaultDiscoveredCities,
+  parseCityId,
+  parseDiscoveredCities,
+  type CityId,
+} from "./world/cities";
+
 const STORAGE = "smartcity-player";
 const STARTING_WALLET = 500;
 const LEDGER_LIMIT = 40;
@@ -133,7 +140,10 @@ export interface PlayerState {
   life: LifeState;
   ownedVehicles: OwnedVehicle[];
   activeVehicleId: string | null;
-  dustfallUnlocked: boolean;
+  /** Cities the player has discovered on the World Map. */
+  discoveredCities: CityId[];
+  /** Which playable city is currently loaded. */
+  currentCityId: CityId;
   ownedFurnishings: string[];
   equippedFurnish: RoomLoadout;
   ownedHomes: OwnedHome[];
@@ -154,7 +164,8 @@ export function emptyPlayer(): PlayerState {
     life: emptyLife(),
     ownedVehicles: [],
     activeVehicleId: null,
-    dustfallUnlocked: false,
+    discoveredCities: defaultDiscoveredCities(),
+    currentCityId: "riverside",
     ownedFurnishings: [],
     equippedFurnish: emptyRoomLoadout(),
     ownedHomes: [],
@@ -532,7 +543,11 @@ function parsePlayer(value: unknown): PlayerState {
     life: parseLife(raw.life),
     ownedVehicles: parseOwnedVehicles(raw.ownedVehicles),
     activeVehicleId: typeof raw.activeVehicleId === "string" ? raw.activeVehicleId : null,
-    dustfallUnlocked: Boolean(raw.dustfallUnlocked),
+    discoveredCities: parseDiscoveredCities(
+      (raw as { discoveredCities?: unknown }).discoveredCities,
+      Boolean((raw as { dustfallUnlocked?: unknown }).dustfallUnlocked),
+    ),
+    currentCityId: parseCityId((raw as { currentCityId?: unknown }).currentCityId, "riverside"),
     ownedFurnishings: parseOwnedFurnishings(raw.ownedFurnishings),
     equippedFurnish: parseRoomLoadout(raw.equippedFurnish),
     ownedHomes: parseOwnedHomes(raw.ownedHomes),

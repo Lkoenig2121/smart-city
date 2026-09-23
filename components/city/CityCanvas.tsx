@@ -14,7 +14,7 @@ import type {
   CityWeather,
   Tool,
 } from "@/lib/city/types";
-import { officeRank, readPlayer, totalBalance } from "@/lib/city/player";
+import { officeRank, readPlayer, totalBalance, writePlayer } from "@/lib/city/player";
 import { findMall } from "@/lib/city/venues";
 import {
   parkingFill,
@@ -23,10 +23,12 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CityHud } from "./CityHud";
 import { StreetView } from "./StreetView";
-import { generateDustfall } from "@/lib/city/generateDustfall";
-import { markMissionDustfall } from "@/lib/city/missions";
-import { syncDustfallUnlock, takeLevelToast } from "@/lib/city/cityProgress";
+import { WorldMap } from "./WorldMap";
+import { syncBeyondRiverside } from "@/lib/city/missions";
+import { hasDiscoveredCity, syncDustfallUnlock, takeLevelToast } from "@/lib/city/cityProgress";
 import { characterProgress } from "@/lib/city/progression";
+import { CityManager } from "@/lib/city/world/cityManager";
+import { isPlayableCity, type CityId } from "@/lib/city/world/cities";
 
 const PAN_KEYS: Record<string, string> = {
   w: "up",
@@ -63,7 +65,6 @@ interface HudSnap {
   wallet: number;
   careerLabel: string;
   mallExists: boolean;
-  canSwitchCities: boolean;
   level: number;
   levelInto: number;
   levelNeed: number;
@@ -87,9 +88,8 @@ export function CityCanvas() {
   /** While the street overlay is visible it owns the simulation clock. */
   const streetActive = useRef(false);
   streetActive.current = streetOpen;
-  const dustfallStateRef = useRef<CityState | null>(null);
-  const riversideStateRef = useRef<CityState | null>(null);
-  const activeCityRef = useRef<"riverside" | "dustfall">("riverside");
+  const cityManagerRef = useRef(new CityManager());
+  const [worldMapOpen, setWorldMapOpen] = useState(false);
 
   const drag = useRef({
     active: false,
@@ -113,7 +113,17 @@ export function CityCanvas() {
 
     engineRef.current = engine;
     rendererRef.current = renderer;
-    riversideStateRef.current = engine.state;
+    cityManagerRef.current.invalidateStubs();
+    cityManagerRef.current.remember("riverside", engine.state);
+    const life0 = readPlayer();
+    if (life0.currentCityId !== "riverside" && isPlayableCity(life0.currentCityId) && hasDiscoveredCity(life0.currentCityId, life0)) {
+      try {
+        const next = cityManagerRef.current.travelTo(life0.currentCityId, engine.state);
+        engine.loadState(next);
+      } catch {
+        /* stay riverside */
+      }
+    }
     renderer.attach(ctx);
     let centered = false;
 
@@ -248,8 +258,7 @@ export function CityCanvas() {
           wallet: totalBalance(life),
           careerLabel: life.career ? officeRank(life.career.xp).label : "",
           mallExists: Boolean(findMall(engine.state)),
-          canSwitchCities: Boolean(life.dustfallUnlocked),
-          level: progress.level,
+                    level: progress.level,
           levelInto: progress.into,
           levelNeed: progress.need,
           levelPct: progress.pct,
@@ -342,8 +351,7 @@ export function CityCanvas() {
       wallet: totalBalance(life),
       careerLabel: life.career ? officeRank(life.career.xp).label : "",
       mallExists: Boolean(findMall(engine.state)),
-      canSwitchCities: Boolean(life.dustfallUnlocked),
-      level: progress.level,
+            level: progress.level,
       levelInto: progress.into,
       levelNeed: progress.need,
       levelPct: progress.pct,
@@ -351,78 +359,53 @@ export function CityCanvas() {
     });
   }, []);
 
-  /** Swap the isometric overview between Riverside and Dustfall. */
-  const switchCity = useCallback(
-    (target: "riverside" | "dustfall") => {
+  const travelToCity = useCallback(
+    (target: CityId) => {
       const engine = engineRef.current;
       const renderer = rendererRef.current;
       const wrap = wrapRef.current;
       if (!engine || !renderer || !wrap) return;
-      if (engine.state.id === target) return;
-      if (target === "dustfall" && !readPlayer().dustfallUnlocked) return;
+      if (!isPlayableCity(target)) return;
+      const player = syncDustfallUnlock(readPlayer());
+      if (!hasDiscoveredCity(target, player)) return;
 
-      const prev = engine.state;
-      if (prev.id === "riverside") riversideStateRef.current = prev;
-      if (prev.id === "dustfall") dustfallStateRef.current = prev;
-
-      let next: CityState;
-      if (target === "dustfall") {
-        markMissionDustfall();
-        if (!dustfallStateRef.current) dustfallStateRef.current = generateDustfall();
-        next = dustfallStateRef.current;
-      } else {
-        next = riversideStateRef.current ?? engine.state;
-        if (next.id !== "riverside") return;
+      try {
+        const next = cityManagerRef.current.travelTo(target, engine.state, {
+          requireDiscovered: (id) => hasDiscoveredCity(id, player),
+        });
+        engine.loadState(next);
+      } catch {
+        return;
       }
 
-      // Keep clock / weather continuous across the jump.
-      next.clock = { ...prev.clock };
-      next.weather = prev.weather;
+      player.currentCityId = target;
+      writePlayer(player);
+      if (target === "dustfall") syncBeyondRiverside(player);
 
-      engine.loadState(next);
-      activeCityRef.current = target;
       setStreetOpen(false);
       setStreet(null);
+      setWorldMapOpen(false);
 
       const rect = wrap.getBoundingClientRect();
-      if (target === "dustfall") renderer.camera.centerOn(18, 16, rect.width, rect.height);
-      else renderer.camera.centerOn(19, 18, rect.width, rect.height);
+      const mid = Math.floor(engine.state.size / 2);
+      renderer.camera.centerOn(mid, mid, rect.width, rect.height);
 
       pushHud(engine);
     },
     [pushHud],
   );
 
-  /** Leave street / highway and open the Egypt-styled Dustfall isometric city. */
-  const enterDesertCity = useCallback(() => {
-    const engine = engineRef.current;
-    const renderer = rendererRef.current;
-    const wrap = wrapRef.current;
-    if (!engine || !renderer || !wrap) return;
-
-    // Arriving via Highway 93 unlocks Dustfall even if the HUD switcher was locked.
-    markMissionDustfall();
-
-    const prev = engine.state;
-    if (prev.id === "riverside") riversideStateRef.current = prev;
-    if (prev.id === "dustfall") dustfallStateRef.current = prev;
-
-    if (prev.id !== "dustfall") {
-      if (!dustfallStateRef.current) dustfallStateRef.current = generateDustfall();
-      const dustfall = dustfallStateRef.current;
-      dustfall.clock = { ...prev.clock };
-      dustfall.weather = prev.weather;
-      engine.loadState(dustfall);
-    }
-
-    activeCityRef.current = "dustfall";
-    setStreetOpen(false);
-    setStreet(null);
-
-    const rect = wrap.getBoundingClientRect();
-    renderer.camera.centerOn(18, 16, rect.width, rect.height);
-    pushHud(engine);
-  }, [pushHud]);
+  useEffect(() => {
+    if (!worldMapOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code === "Escape") {
+        event.preventDefault();
+        setWorldMapOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [worldMapOpen]);
 
   useEffect(() => {
     if (streetOpen || !street) return;
@@ -544,9 +527,18 @@ export function CityCanvas() {
             }}
             onEnterStreet={enterStreet}
             onEnterStation={enterSelectedStation}
-            onSwitchCity={switchCity}
+            onOpenWorldMap={() => setWorldMapOpen(true)}
           />
         </div>
+      ) : null}
+
+      {worldMapOpen ? (
+        <WorldMap
+          player={syncDustfallUnlock(readPlayer())}
+          currentCityId={engineRef.current?.state.id ?? "riverside"}
+          onTravel={travelToCity}
+          onClose={() => setWorldMapOpen(false)}
+        />
       ) : null}
 
       {street ? (
@@ -559,8 +551,10 @@ export function CityCanvas() {
             selectedBuildingId={selectedIdRef}
             onTick={tickFromStreet}
             onExit={leaveStreet}
-            onEnterDesertCity={enterDesertCity}
-            riversideState={riversideStateRef.current}
+            onOpenWorldMap={() => {
+              setStreetOpen(false);
+              setWorldMapOpen(true);
+            }}
           />
         </div>
       ) : null}

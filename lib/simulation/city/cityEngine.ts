@@ -145,7 +145,7 @@ export class CityEngine {
     }
 
     if (this.tool === "tree") {
-      if (tile.road || tile.buildingId || tile.terrain === "water") return false;
+      if (tile.road || tile.buildingId || tile.terrain === "water" || tile.terrain === "rock" || tile.terrain === "snow") return false;
       tile.tree = { variant: Math.floor(Math.random() * 6), scale: 0.9 + Math.random() * 0.3 };
       this.mapRev += 1;
       awardTileXp("tree");
@@ -153,7 +153,7 @@ export class CityEngine {
     }
 
     if (this.tool === "park") {
-      if (tile.road || tile.buildingId || tile.terrain === "water") return false;
+      if (tile.road || tile.buildingId || tile.terrain === "water" || tile.terrain === "rock" || tile.terrain === "snow") return false;
       tile.terrain = "park";
       if (!tile.tree) tile.tree = { variant: 2, scale: 1 };
       this.mapRev += 1;
@@ -184,7 +184,7 @@ export class CityEngine {
     }
 
     if (this.tool === "parking") {
-      if (tile.road || tile.buildingId || tile.terrain === "water") return false;
+      if (tile.road || tile.buildingId || tile.terrain === "water" || tile.terrain === "rock" || tile.terrain === "snow") return false;
       tile.terrain = "lot";
       tile.tree = null;
       this.mapRev += 1;
@@ -193,7 +193,7 @@ export class CityEngine {
     }
 
     if (this.tool === "sand") {
-      if (tile.road || tile.buildingId || tile.terrain === "water") return false;
+      if (tile.road || tile.buildingId || tile.terrain === "water" || tile.terrain === "rock" || tile.terrain === "snow") return false;
       tile.terrain = "sand";
       tile.tree = null;
       this.mapRev += 1;
@@ -347,7 +347,7 @@ export class CityEngine {
     for (let dy = 0; dy < fp.d; dy++) {
       for (let dx = 0; dx < fp.w; dx++) {
         const tile = this.state.tiles[y + dy]?.[x + dx];
-        if (!tile || tile.road || tile.buildingId || tile.terrain === "water") return false;
+        if (!tile || tile.road || tile.buildingId || tile.terrain === "water" || tile.terrain === "rock" || tile.terrain === "snow") return false;
       }
     }
     const id = `b${this.state.buildings.size + 40}-${x}-${y}`;

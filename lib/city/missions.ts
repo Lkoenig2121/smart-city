@@ -5,6 +5,7 @@ import {
   writePlayer,
   type PlayerState,
 } from "@/lib/city/player";
+import { hasDiscoveredCity } from "@/lib/city/cityProgress";
 import { hasOwnedVehicle } from "@/lib/city/vehicles";
 
 const STORAGE = "smartcity-missions";
@@ -15,6 +16,7 @@ export interface MissionSave {
   beyondRiverside: {
     started: boolean;
     boughtCar: boolean;
+    /** Legacy fields retained for old saves; no longer required. */
     reachedRamp: boolean;
     droveHighway: boolean;
     arrivedDustfall: boolean;
@@ -57,17 +59,16 @@ export function writeMissions(save: MissionSave) {
   window.localStorage.setItem(STORAGE, JSON.stringify(save));
 }
 
+/** Visit Dustfall via the World Map to complete. */
 export function syncBeyondRiverside(player: PlayerState = readPlayer()) {
   const save = readMissions();
   const m = save.beyondRiverside;
   if (!m.started) m.started = true;
   if (hasOwnedVehicle(player)) m.boughtCar = true;
-  if (player.dustfallUnlocked) {
+  if (hasDiscoveredCity("dustfall", player) && player.currentCityId === "dustfall") {
     m.arrivedDustfall = true;
-    m.droveHighway = true;
-    m.reachedRamp = true;
   }
-  if (m.boughtCar && m.reachedRamp && m.droveHighway && m.arrivedDustfall) {
+  if (m.arrivedDustfall) {
     m.completed = true;
   }
   if (m.completed && !m.rewarded) {
@@ -80,40 +81,23 @@ export function syncBeyondRiverside(player: PlayerState = readPlayer()) {
   return save;
 }
 
-export function markMissionRamp() {
-  const save = readMissions();
-  save.beyondRiverside.reachedRamp = true;
-  writeMissions(save);
-  return syncBeyondRiverside();
-}
-
-export function markMissionHighway() {
-  const save = readMissions();
-  save.beyondRiverside.droveHighway = true;
-  writeMissions(save);
-  return syncBeyondRiverside();
-}
-
-export function markMissionDustfall() {
-  const player = readPlayer();
-  player.dustfallUnlocked = true;
-  writePlayer(player);
-  const save = readMissions();
-  save.beyondRiverside.arrivedDustfall = true;
-  save.beyondRiverside.droveHighway = true;
-  save.beyondRiverside.reachedRamp = true;
-  writeMissions(save);
-  return syncBeyondRiverside(player);
-}
-
 export function beyondRiversideStatus(player: PlayerState = readPlayer()) {
   const m = syncBeyondRiverside(player).beyondRiverside;
   const steps = [
-    { id: "level", label: "Reach Level 10 by growing Riverside", done: player.dustfallUnlocked },
-    { id: "car", label: "Purchase a vehicle at Riverside Motors", done: m.boughtCar },
-    { id: "ramp", label: "Drive to the Highway 93 ramp (north)", done: m.reachedRamp },
-    { id: "hwy", label: "Follow Highway 93 toward Dustfall", done: m.droveHighway },
-    { id: "arrive", label: "Reach Dustfall", done: m.arrivedDustfall },
+    {
+      id: "map",
+      label: "Open the World Map and travel to Dustfall",
+      done: m.arrivedDustfall,
+    },
+    {
+      id: "car",
+      label: "Purchase a vehicle at Riverside Motors (optional)",
+      done: m.boughtCar,
+    },
   ];
-  return { ...m, steps, reward: m.rewarded ? `Claimed ${formatDollars(750)} + XP` : `${formatDollars(750)} + XP` };
+  return {
+    ...m,
+    steps,
+    reward: m.rewarded ? `Claimed ${formatDollars(750)} + XP` : `${formatDollars(750)} + XP`,
+  };
 }

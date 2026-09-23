@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
+import { isMountainTerrain, mountainWorldHeight } from "@/lib/city/terrainElevation";
 import { bridgeDeckHeight, TILE, type Blocker } from "./buildCity";
+import { FLOOR_H } from "./textures";
 import { InputKeys } from "./keys";
 
 export const EYE_HEIGHT = 1.7;
@@ -57,6 +59,8 @@ export class StreetControls {
   mode: MoveMode = "hop";
   enabled = true;
   boost = { walk: 1, run: 1, jump: 1, hop: 1 };
+  /** Walking the rock/snow massifs after entering a trailhead. */
+  hiking = false;
   /**
    * Optional tile the player is navigating toward (phone / police waypoint).
    * When set, hops prefer stepping off the street into the open square that
@@ -429,7 +433,7 @@ export class StreetControls {
   private isOpenSquare(tx: number, tz: number) {
     const tile = this.state.tiles[tz]?.[tx];
     if (!tile || tile.road || tile.bridge) return false;
-    if (tile.terrain === "water") return false;
+    if (tile.terrain === "water" || tile.terrain === "rock" || tile.terrain === "snow") return false;
     if (tile.buildingId) {
       const building = this.state.buildings.get(tile.buildingId);
       if (building && building.kind !== "park_pavilion") return false;
@@ -463,7 +467,9 @@ export class StreetControls {
   private tileHoppable(tx: number, tz: number) {
     const tile = this.state.tiles[tz]?.[tx];
     if (!tile) return false;
-    if (tile.terrain === "water" && !tile.bridge) return false;
+    if ((tile.terrain === "water" && !tile.bridge) || (!this.hiking && (tile.terrain === "rock" || tile.terrain === "snow"))) {
+      return false;
+    }
     if (tile.buildingId) {
       const building = this.state.buildings.get(tile.buildingId);
       if (building && building.kind !== "park_pavilion") return false;
@@ -581,7 +587,9 @@ export class StreetControls {
     const tile = this.state.tiles[tz]?.[tx];
     if (!tile) return false;
     // Open water is only crossable where a bridge spans it.
+    // Rock/snow massifs are solid until you enter hiking mode.
     if (tile.terrain === "water" && !tile.bridge) return false;
+    if (!this.hiking && (tile.terrain === "rock" || tile.terrain === "snow")) return false;
 
     for (let oz = -1; oz <= 1; oz++) {
       for (let ox = -1; ox <= 1; ox++) {
@@ -602,13 +610,17 @@ export class StreetControls {
     return true;
   }
 
-  /** Surface height under a world position, raised on bridge decks. */
+  /** Surface height under a world position, raised on bridge decks and mountain trails. */
   groundAt(x: number, z: number) {
     const tx = Math.floor(x / TILE);
     const tz = Math.floor(z / TILE);
     const tile = this.state.tiles[tz]?.[tx];
     if (!tile) return 0;
     if (tile.bridge) return bridgeDeckHeight(tile, x, z, this.state.tiles);
+
+    if (this.hiking && isMountainTerrain(tile.terrain) && !tile.buildingId) {
+      return mountainWorldHeight(tile.terrain, tx, tz, FLOOR_H, this.state.tiles);
+    }
 
     const neighbours = [
       this.state.tiles[tz]?.[tx - 1],

@@ -31,6 +31,12 @@ const RAVENS_ROSTER = ["Rivera", "Chen", "Brooks", "Patel", "Nguyen", "Walsh", "
 const BEARS_ROSTER = ["Vargas", "Cole", "Dunn", "Rossi", "Blake", "Frost", "Dean", "Pike", "Moss"];
 const SCORPIONS_ROSTER = ["Hassan", "Reed", "Okoro", "Sato", "Vega", "Quinn", "Nassar", "Lane", "Cruz"];
 const COYOTES_ROSTER = ["Marsh", "Boone", "Silva", "York", "Perez", "Clay", "Nguyen", "West", "Hahn"];
+const WOLVES_ROSTER = ["Alpine", "Frost", "Berg", "Knox", "Stein", "Vogel", "Hunt", "Ridge", "Snow"];
+const GULLS_ROSTER = ["Shore", "Bay", "Coral", "Drake", "Finch", "Gale", "Harbor", "Isle", "Jetty"];
+const CIRCUITS_ROSTER = ["Nova", "Pixel", "Quark", "Relay", "Spark", "Tesla", "Volt", "Wave", "Zen"];
+const LYNX_ROSTER = ["Ash", "Bramble", "Cedar", "Dale", "Elm", "Fern", "Grove", "Hawk", "Ivy"];
+const TIDES_ROSTER = ["Anchor", "Brine", "Current", "Drift", "Eddy", "Foam", "Gulf", "Hull", "Inlet"];
+const PHANTOMS_ROSTER = ["Arc", "Blink", "Cipher", "Drift", "Echo", "Flux", "Ghost", "Holo", "Ion"];
 
 export const BALLCLUBS: Record<string, Ballclub> = {
   riverside: {
@@ -54,6 +60,39 @@ export const BALLCLUBS: Record<string, Ballclub> = {
     visitorAbbrev: "COY",
     visitorLineup: COYOTES_ROSTER,
     accent: "#2a6b5a",
+  },
+  mountain: {
+    shortName: "Wolves",
+    fullName: "Mountain Wolves",
+    parkName: "Summit Field",
+    abbrev: "WLV",
+    lineup: WOLVES_ROSTER,
+    visitorShort: "Lynx",
+    visitorAbbrev: "LYX",
+    visitorLineup: LYNX_ROSTER,
+    accent: "#5a7a6a",
+  },
+  coastal: {
+    shortName: "Gulls",
+    fullName: "Coastal Gulls",
+    parkName: "Harbor Park",
+    abbrev: "GUL",
+    lineup: GULLS_ROSTER,
+    visitorShort: "Tides",
+    visitorAbbrev: "TID",
+    visitorLineup: TIDES_ROSTER,
+    accent: "#3d7ea6",
+  },
+  future: {
+    shortName: "Circuits",
+    fullName: "Future Circuits",
+    parkName: "Neon Dome",
+    abbrev: "CIR",
+    lineup: CIRCUITS_ROSTER,
+    visitorShort: "Phantoms",
+    visitorAbbrev: "PHN",
+    visitorLineup: PHANTOMS_ROSTER,
+    accent: "#6a8cff",
   },
 };
 

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { roomHasInteriorBalcony } from "@/lib/city/balconies";
+import { cityThemeFor } from "@/lib/city/world/cities";
 import type { Building, CityState } from "@/lib/city/types";
 import { lodgingUse, type LodgingRoom, type LodgingZone } from "@/lib/city/lodging";
 import type { Blocker } from "./buildCity";
@@ -882,7 +883,7 @@ function addCityView(
   state: CityState,
   view: { edgeZ: number; toward: -1 | 1; floor: number },
 ) {
-  const desert = state.id === "dustfall";
+  const desert = cityThemeFor(state.id).desertAccent;
   const dir = view.toward;
   // Air gap so the near ground is a distant street, not a wall in the window.
   const zNear = view.edgeZ + dir * 10;
@@ -1013,7 +1014,7 @@ function addCityFlank(
   toward: -1 | 1,
   floor: number,
 ) {
-  const desert = state.id === "dustfall";
+  const desert = cityThemeFor(state.id).desertAccent;
   const dir = toward;
   const xNear = edgeX + dir * 8;
   const xFar = edgeX + dir * 150;
@@ -1354,7 +1355,7 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
   const floorB = new MeshBuilder();
   const wallB = new MeshBuilder();
   const trimB = new MeshBuilder();
-  const desert = state.id === "dustfall";
+  const desert = cityThemeFor(state.id).desertAccent;
 
   const minX = -18;
   const maxX = 18;

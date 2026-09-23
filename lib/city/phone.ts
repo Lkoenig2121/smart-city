@@ -13,7 +13,6 @@ import { lodgingGateTile, lodgingUse } from "./lodging";
 import { isSubwayStation, subwayGateTile } from "./subway";
 import { findMall, findVenue, venueGateTile, venueRole } from "./venues";
 import { formatClockMinutes } from "@/lib/simulation/weather/weather";
-import { DUSTFALL_UNLOCK_LEVEL } from "./cityProgress";
 
 const STORAGE = "smartcity-phone";
 
@@ -32,6 +31,7 @@ export type PhoneApp =
   | "city"
   | "vehicles"
   | "police"
+  | "world"
   | "settings";
 
 export type PhoneChoice = "accept" | "maybe" | "decline";
@@ -260,21 +260,7 @@ export function phoneInbox(state: CityState, player: PlayerState): PhoneMessage[
     );
   }
 
-  if (!player.dustfallUnlocked && clock.dayIndex >= 0) {
-    messages.push(
-      makeMessage(save, {
-        id: "hwy-tease",
-        sender: "City Planning Desk",
-        handle: "planning",
-        timeMin: 19 * 60 + 12,
-        body: [
-          `Grow Riverside to Level ${DUSTFALL_UNLOCK_LEVEL} — place homes, shops, and parks, and welcome more residents.`,
-          "Hit Level 10 and Dustfall opens on the city map. Highway 93 is still there when you want the scenic route.",
-        ],
-        location: { x: 20, y: 3, label: "Highway 93 ramp" },
-      }),
-    );
-  }
+  // Dustfall tease retired — all regions start available on the World Map.
 
   for (const event of state.events) {
     if (event.kind !== "accident" && event.kind !== "fire" && event.kind !== "storm") continue;

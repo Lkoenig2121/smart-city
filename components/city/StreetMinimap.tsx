@@ -6,29 +6,23 @@ import { BUS_STOPS, isTramTile } from "@/lib/city/transit";
 import { POI_LEGEND, drawPoiMark, poiKind } from "@/lib/city/minimapPois";
 import { readPlayer } from "@/lib/city/player";
 import { isPromenadeTile, waterfrontPois } from "@/lib/city/waterfront";
-import { DUSTFALL_RETURN_BRIDGE, HIGHWAY_RAMP } from "@/lib/city/vehicles";
-import { HIGHWAY_CORRIDOR } from "@/lib/street/DustfallWorld";
 import { useEffect, useRef } from "react";
 
 /**
  * Top-down plan of the city with the walker's position, facing, and landmark
  * marks — subway, hotels, civic buildings, and transit.
- * On Highway 93, swaps to a cropped corridor map (Riverside ↔ Dustfall).
  */
 export function StreetMinimap({
   state,
   positionRef,
   waypoint = null,
   driving = false,
-  highway = false,
 }: {
   state: CityState;
   positionRef: React.RefObject<{ x: number; y: number; yaw: number } | null>;
   waypoint?: PhoneWaypoint | null;
   /** When true, you-are-here is a white car marker; otherwise yellow on foot. */
   driving?: boolean;
-  /** Highway 93 corridor between Riverside and Dustfall. */
-  highway?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -38,8 +32,6 @@ export function StreetMinimap({
   waypointRef.current = waypoint;
   const drivingRef = useRef(driving);
   drivingRef.current = driving;
-  const highwayRef = useRef(highway);
-  highwayRef.current = highway;
 
   const paintCityBase = (size: number) => {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -61,6 +53,8 @@ export function StreetMinimap({
         if (tile.terrain === "water") color = "#2f3a3c";
         else if (tile.terrain === "park" || tile.terrain === "playground") color = "#2f6b34";
         else if (tile.terrain === "sand") color = "#8a7b52";
+        else if (tile.terrain === "rock") color = "#6a6358";
+        else if (tile.terrain === "snow") color = "#d8e0e8";
         else if (tile.terrain === "plaza" || tile.terrain === "lot") color = "#4a4a45";
         if (color) {
           ctx.fillStyle = color;
@@ -80,8 +74,6 @@ export function StreetMinimap({
         }
       }
     }
-
-    paintHighwayExitGreens(ctx, state, cell);
 
     for (const building of state.buildings.values()) {
       ctx.fillStyle = building.floors > 14 ? "#d8dde2" : "#a9a196";
@@ -116,117 +108,18 @@ export function StreetMinimap({
     sizeRef.current = size;
   };
 
-  /** Cropped Highway 93 strip: Dustfall at top, Riverside at bottom. */
-  const paintHighwayBase = (size: number) => {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const base = document.createElement("canvas");
-    base.width = size * dpr;
-    base.height = size * dpr;
-    const ctx = base.getContext("2d");
-    if (!ctx) return;
-    ctx.scale(dpr, dpr);
-
-    const { laneTile, startTileY, endTileY } = HIGHWAY_CORRIDOR;
-    const padX = 11;
-    const padY = 6;
-    const x0 = laneTile - padX;
-    const x1 = laneTile + padX;
-    const y0 = endTileY - padY;
-    const y1 = startTileY + padY;
-    const viewW = x1 - x0;
-    const viewH = y1 - y0;
-    const cellX = size / viewW;
-    const cellY = size / viewH;
-
-    const grad = ctx.createLinearGradient(0, 0, 0, size);
-    grad.addColorStop(0, "#c4a574");
-    grad.addColorStop(0.45, "#a8905c");
-    grad.addColorStop(0.72, "#4a7a3a");
-    grad.addColorStop(1, "#2f6b34");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
-
-    // Soft dunes / rock scatter.
-    ctx.fillStyle = "rgba(90, 60, 35, 0.35)";
-    for (let i = 0; i < 18; i++) {
-      const side = i % 2 ? 1 : -1;
-      const tx = laneTile + side * (6 + (i % 5) * 1.4);
-      const ty = endTileY + 8 + i * 6.5;
-      if (ty > startTileY - 4) continue;
-      const rx = (tx - x0) * cellX;
-      const ry = (ty - y0) * cellY;
-      ctx.beginPath();
-      ctx.ellipse(rx, ry, cellX * 0.9, cellY * 0.55, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Pavement.
-    const roadLeft = (laneTile - 1.15 - x0) * cellX;
-    const roadW = 2.3 * cellX;
-    ctx.fillStyle = "#4a4c52";
-    ctx.fillRect(roadLeft, 0, roadW, size);
-    ctx.fillStyle = "#5a5c62";
-    ctx.fillRect(roadLeft + roadW * 0.08, 0, roadW * 0.84, size);
-
-    // Center dashes.
-    ctx.strokeStyle = "rgba(220, 215, 205, 0.75)";
-    ctx.lineWidth = Math.max(1.2, cellX * 0.12);
-    ctx.setLineDash([cellY * 1.1, cellY * 1.4]);
-    ctx.beginPath();
-    ctx.moveTo((laneTile - x0) * cellX, 4);
-    ctx.lineTo((laneTile - x0) * cellX, size - 4);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Dustfall skyline (north / top).
-    const skyY = (endTileY - y0) * cellY;
-    ctx.fillStyle = "#8a6a4a";
-    for (const dx of [-5.5, -3.2, 3.2, 5.8, 8.2]) {
-      const h = 10 + Math.abs(dx) * 1.4;
-      ctx.fillRect((laneTile + dx - x0) * cellX - 4, skyY - h, 8, h);
-    }
-    ctx.fillStyle = "#a08060";
-    ctx.fillRect((laneTile + 7 - x0) * cellX - 3, skyY - 22, 6, 22);
-
-    // Riverside marker (south / bottom).
-    const rivY = (startTileY - y0) * cellY;
-    ctx.fillStyle = "rgba(80, 140, 200, 0.55)";
-    ctx.fillRect(size * 0.22, rivY - 2, size * 0.56, 5);
-    ctx.fillStyle = "#6a8aaa";
-    ctx.fillRect(size * 0.35, rivY - 14, size * 0.3, 12);
-
-    ctx.font = `600 ${Math.max(9, size * 0.038)}px ui-sans-serif, system-ui, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.fillStyle = "rgba(255, 245, 220, 0.92)";
-    ctx.fillText("DUSTFALL", size / 2, Math.max(14, skyY - 28));
-    ctx.fillStyle = "rgba(210, 230, 255, 0.9)";
-    ctx.fillText("RIVERSIDE", size / 2, Math.min(size - 8, rivY + 16));
-
-    // Stash view transform for the live overlay.
-    (base as HTMLCanvasElement & { __hwy?: HighwayView }).__hwy = {
-      x0,
-      y0,
-      cellX,
-      cellY,
-    };
-
-    baseRef.current = base;
-    sizeRef.current = size;
-  };
-
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
     const resize = () => {
       const width = Math.max(160, Math.round(wrap.clientWidth));
-      if (highway) paintHighwayBase(width);
-      else paintCityBase(width);
+      paintCityBase(width);
     };
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [state, highway]);
+  }, [state]);
 
   useEffect(() => {
     let frame = 0;
@@ -250,14 +143,7 @@ export function StreetMinimap({
           ctx.clearRect(0, 0, size, height);
           ctx.drawImage(base, 0, offsetY, size, size);
 
-          if (highwayRef.current) {
-            const hwy = (base as HTMLCanvasElement & { __hwy?: HighwayView }).__hwy;
-            if (hwy && position) {
-              const px = (position.x - hwy.x0) * hwy.cellX;
-              const py = (position.y - hwy.y0) * hwy.cellY + offsetY;
-              drawPlayerMarker(ctx, px, py, position.yaw, true);
-            }
-          } else {
+          {
             const cell = size / state.size;
             const employerId = readPlayer().career?.employerId;
             const workplace = employerId ? state.buildings.get(employerId) : null;
@@ -308,16 +194,6 @@ export function StreetMinimap({
                 ctx.lineWidth = 1.35;
                 ctx.stroke();
               }
-              if (live.dustfallUnlocked && state.id !== "dustfall") {
-                // Soft pulse tip on the Hwy 93 exit (green zone is on the base map).
-                ctx.fillStyle = "rgba(90, 200, 110, 0.9)";
-                ctx.fillRect(
-                  (HIGHWAY_RAMP.x - 0.15) * cell,
-                  offsetY - 1.5,
-                  1.3 * cell,
-                  2.2,
-                );
-              }
             } catch {
               /* storage */
             }
@@ -337,13 +213,7 @@ export function StreetMinimap({
     return () => cancelAnimationFrame(frame);
   }, [positionRef, state.size]);
 
-  const title = highway
-    ? "Highway 93 · Riverside ↔ Dustfall"
-    : waypoint
-      ? `Waypoint · ${waypoint.label}`
-      : readPlayer().dustfallUnlocked
-        ? "Riverside · Dustfall"
-        : state.name;
+  const title = waypoint ? `Waypoint · ${waypoint.label}` : state.name;
 
   return (
     <div
@@ -354,101 +224,16 @@ export function StreetMinimap({
       <div className="border-t border-white/10 px-2 py-1 text-center text-[0.58rem] uppercase tracking-wider text-slate-300">
         {title}
       </div>
-      {highway ? (
-        <div className="flex items-center justify-between gap-2 border-t border-white/10 px-2.5 py-1.5 text-[0.52rem] text-slate-300">
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-sm bg-[#8a6a4a]" />
-            Dustfall
-          </span>
-          <span className="text-slate-500">N ↑ corridor</span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-sm bg-[#6a8aaa]" />
-            Riverside
-          </span>
-        </div>
-      ) : (
-        <div className="grid grid-cols-5 gap-x-1 gap-y-0.5 border-t border-white/10 px-2 py-1.5">
-          {POI_LEGEND.map((item) => (
-            <div key={item.kind} className="flex items-center gap-0.5 text-[0.52rem] text-slate-300">
-              <LegendDot kind={item.kind} />
-              <span>{item.label}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="grid grid-cols-5 gap-x-1 gap-y-0.5 border-t border-white/10 px-2 py-1.5">
+        {POI_LEGEND.map((item) => (
+          <div key={item.kind} className="flex items-center gap-0.5 text-[0.52rem] text-slate-300">
+            <LegendDot kind={item.kind} />
+            <span>{item.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
-}
-
-type HighwayView = { x0: number; y0: number; cellX: number; cellY: number };
-
-/** Green verge around the city↔highway portal so the exit reads clearly on the radar. */
-function paintHighwayExitGreens(
-  ctx: CanvasRenderingContext2D,
-  state: CityState,
-  cell: number,
-) {
-  const zones =
-    state.id === "dustfall"
-      ? [
-          {
-            x: DUSTFALL_RETURN_BRIDGE.x,
-            y0: DUSTFALL_RETURN_BRIDGE.yMin - 1,
-            y1: state.size - 1,
-            halfW: 3,
-          },
-        ]
-      : state.id === "riverside"
-        ? [
-            {
-              x: HIGHWAY_RAMP.x,
-              y0: 0,
-              y1: HIGHWAY_RAMP.yMax + 2,
-              halfW: 3,
-            },
-          ]
-        : [];
-
-  for (const zone of zones) {
-    for (let y = zone.y0; y <= zone.y1; y++) {
-      if (y < 0 || y >= state.size) continue;
-      const edge = y <= zone.y0 + 1 || y >= zone.y1 - 1;
-      for (let dx = -zone.halfW; dx <= zone.halfW; dx++) {
-        const x = zone.x + dx;
-        if (x < 0 || x >= state.size) continue;
-        const tile = state.tiles[y]?.[x];
-        if (!tile || tile.buildingId) continue;
-        const onRamp = Math.abs(dx) <= 1 && Boolean(tile.road || tile.bridge);
-        // Keep the pavement readable; wash the shoulders and verge in green.
-        if (onRamp) {
-          ctx.fillStyle = edge ? "rgba(62, 140, 72, 0.55)" : "rgba(55, 125, 65, 0.28)";
-        } else {
-          const dist = Math.abs(dx) / zone.halfW;
-          ctx.fillStyle =
-            dist < 0.4
-              ? "rgba(46, 130, 58, 0.72)"
-              : dist < 0.75
-                ? "rgba(42, 115, 52, 0.55)"
-                : "rgba(38, 100, 48, 0.35)";
-        }
-        ctx.fillRect(x * cell, y * cell, cell + 0.5, cell + 0.5);
-      }
-    }
-
-    // Bright green tip past the map edge so “leave city → highway” is obvious.
-    if (state.id !== "dustfall") {
-      ctx.fillStyle = "rgba(70, 190, 95, 0.85)";
-      ctx.fillRect((zone.x - 1.2) * cell, -cell * 0.35, 2.4 * cell, cell * 0.7);
-    } else {
-      ctx.fillStyle = "rgba(70, 190, 95, 0.85)";
-      ctx.fillRect(
-        (zone.x - 1.2) * cell,
-        state.size * cell - cell * 0.35,
-        2.4 * cell,
-        cell * 0.7,
-      );
-    }
-  }
 }
 
 function drawPlayerMarker(

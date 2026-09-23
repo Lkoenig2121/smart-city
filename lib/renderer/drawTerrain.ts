@@ -1,9 +1,10 @@
 import { diamondPoints, tileCenter } from "@/lib/city/iso";
 import { hash2 } from "@/lib/city/rng";
-import type { Graffiti, Terrain, WeatherKind } from "@/lib/city/types";
+import type { Graffiti, Terrain, Tile, WeatherKind } from "@/lib/city/types";
 import { isWestBank, isWestShoreWater } from "@/lib/city/waterfront";
+import { isMountainTerrain, mountainIsoHeight, mountainNeighborIsoHeight } from "@/lib/city/terrainElevation";
 import { paintGraffiti } from "./drawBridges";
-import { drawDiamond } from "./drawIso";
+import { drawDiamond, isoBoxCorners } from "./drawIso";
 import { alpha, lit, mix, shade, type Lighting } from "./palette";
 
 const TERRAIN: Record<Terrain, string> = {
@@ -14,7 +15,95 @@ const TERRAIN: Record<Terrain, string> = {
   sand: "#d6c38a",
   playground: "#5aa35a",
   lot: "#8d8a84",
+  rock: "#7a7368",
+  snow: "#e8eef4",
 };
+
+function rockPalette(x: number, y: number, light: Lighting) {
+  const n = hash2(x, y, 11);
+  const base = mix("#6e675c", n > 0.5 ? "#8a8274" : "#554e44", 0.35 + n * 0.35);
+  return {
+    left: lit(shade(base, 0.72), light, "left"),
+    right: lit(shade(base, 0.88), light, "right"),
+    top: lit(mix(base, "#9a9284", 0.35), light, "top"),
+    base,
+  };
+}
+
+function snowPalette(x: number, y: number, light: Lighting) {
+  const n = hash2(x, y, 11);
+  const base = mix("#eef3f8", n > 0.55 ? "#ffffff" : "#d5dde8", 0.4 + n * 0.25);
+  return {
+    left: lit(mix("#b8c4d0", "#8a949e", 0.35), light, "left"),
+    right: lit(mix("#c8d4e0", "#9aa6b2", 0.3), light, "right"),
+    top: lit(base, light, "top"),
+    base,
+  };
+}
+
+/**
+ * One continuous massif: raised top flush with neighbours, cliffs only where
+ * the mountain meets foothills (or a much lower neighbour).
+ */
+export function drawMountainColumn(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  terrain: Terrain,
+  light: Lighting,
+  tiles?: Tile[][] | null,
+) {
+  if (!isMountainTerrain(terrain)) return;
+  const h = mountainIsoHeight(terrain, x, y, tiles);
+  if (h <= 0) return;
+  const pal = terrain === "snow" ? snowPalette(x, y, light) : rockPalette(x, y, light);
+  // Zero inset so adjacent tops abut into one surface.
+  const { R, B, L, Te, Re, Be, Le } = isoBoxCorners(x, y, 1, 1, h, 0);
+
+  const he = mountainNeighborIsoHeight(tiles, x + 1, y);
+  const hs = mountainNeighborIsoHeight(tiles, x, y + 1);
+  const cliffGap = 10;
+
+  // Right face (east) — only on the massif rim.
+  if (he < h - cliffGap) {
+    ctx.beginPath();
+    ctx.moveTo(R.x, R.y);
+    ctx.lineTo(B.x, B.y);
+    ctx.lineTo(Be.x, Be.y);
+    ctx.lineTo(Re.x, Re.y);
+    ctx.closePath();
+    ctx.fillStyle = pal.right;
+    ctx.fill();
+  }
+
+  // Left face (south) — only on the massif rim.
+  if (hs < h - cliffGap) {
+    ctx.beginPath();
+    ctx.moveTo(L.x, L.y);
+    ctx.lineTo(B.x, B.y);
+    ctx.lineTo(Be.x, Be.y);
+    ctx.lineTo(Le.x, Le.y);
+    ctx.closePath();
+    ctx.fillStyle = pal.left;
+    ctx.fill();
+  }
+
+  // Continuous plateau / slope top.
+  ctx.beginPath();
+  ctx.moveTo(Te.x, Te.y);
+  ctx.lineTo(Re.x, Re.y);
+  ctx.lineTo(Be.x, Be.y);
+  ctx.lineTo(Le.x, Le.y);
+  ctx.closePath();
+  ctx.fillStyle = pal.top;
+  ctx.fill();
+
+  // Subtle ridge shading so the dome reads without per-tile spikes.
+  if (terrain === "snow") {
+    ctx.fillStyle = alpha("#ffffff", 0.14);
+    ctx.fill();
+  }
+}
 
 export function drawTerrainTile(
   ctx: CanvasRenderingContext2D,
@@ -35,6 +124,8 @@ export function drawTerrainTile(
   if (terrain === "park") base = mix("#348646", n > 0.55 ? "#4ca05a" : "#2d7340", 0.4);
   if (terrain === "plaza") base = mix("#c9c0b2", "#b7afa0", n);
   if (terrain === "lot") base = mix("#8d8a84", "#7a7771", n);
+  if (terrain === "rock") base = rockPalette(x, y, light).base;
+  if (terrain === "snow") base = snowPalette(x, y, light).base;
   if (terrain === "sand") {
     const beach = isWestBank(x, y) || y <= 8;
     base = mix(beach ? "#e2d09a" : "#d6c38a", beach ? "#d4bc7c" : "#c4af74", n);
@@ -51,6 +142,7 @@ export function drawTerrainTile(
     return;
   }
 
+  // Rock/snow stay flat in the ground bake; elevation is drawn live.
   drawDiamond(ctx, x, y, lit(base, light, "ground"));
   if (weather === "snow") {
     drawDiamond(ctx, x, y, alpha("#f4f7fb", terrain === "lot" || terrain === "plaza" ? 0.28 : 0.42));
@@ -85,6 +177,14 @@ export function drawTerrainTile(
     ctx.moveTo((d.top.x + d.right.x) / 2, (d.top.y + d.right.y) / 2);
     ctx.lineTo((d.bottom.x + d.left.x) / 2, (d.bottom.y + d.left.y) / 2);
     ctx.stroke();
+  }
+
+  if (terrain === "rock") {
+    drawDiamond(ctx, x, y, alpha("#3a342c", 0.12 + n * 0.1));
+  }
+
+  if (terrain === "snow") {
+    drawDiamond(ctx, x, y, alpha("#ffffff", 0.18));
   }
 
   if (terrain === "playground") {

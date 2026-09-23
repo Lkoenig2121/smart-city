@@ -357,7 +357,7 @@ function MotorsDesk({
       >
         Browse vehicles
       </button>
-      <p className="mt-3 text-[0.65rem] text-slate-500">Highway 93 toward Dustfall starts just north of here</p>
+      <p className="mt-3 text-[0.65rem] text-slate-500">Open the World Map from the city overview to reach Dustfall</p>
     </div>
   );
 }

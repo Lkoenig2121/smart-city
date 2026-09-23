@@ -15,7 +15,7 @@ import type {
   VehicleKind,
 } from "./types";
 
-/** Egypt-inspired desert city past Highway 93 — isometric overview + street. */
+/** Egypt-inspired desert city — isometric overview + street. */
 const SIZE = 36;
 const NILE_X = 10;
 const NILE_W = 3;

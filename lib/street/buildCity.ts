@@ -6,6 +6,7 @@ import { venueRole } from "@/lib/city/venues";
 import { BUS_STOPS, isTramTile } from "@/lib/city/transit";
 import { MeshBuilder } from "./meshBuilder";
 import { BAY_W, FLOOR_H, asphaltTexture, facade, rippleNormal, type FacadeStyle } from "./textures";
+import { isMountainTerrain, mountainWorldHeight } from "@/lib/city/terrainElevation";
 import { addWaterfrontDecor } from "./waterfrontProps";
 import { isPromenadeTile } from "@/lib/city/waterfront";
 import { addGreenMonsterExterior, hasGreenMonster } from "./scorpionMonster";
@@ -29,6 +30,8 @@ const TERRAIN_COLOR: Record<Terrain, string> = {
   sand: "#cdb782",
   playground: "#5f9b52",
   lot: "#87847e",
+  rock: "#6a6358",
+  snow: "#e4ebf2",
 };
 
 const ROAD_COLOR = "#3b3d43";
@@ -217,6 +220,30 @@ export function buildCity(state: CityState): CityMeshes {
       scratch.set(terrainColorOf(tile));
       if (tile.buildingId && mallIds.has(tile.buildingId)) {
         mallGroundB.ground(x0, z0, x1, z1, 0, scratch, 1, 1);
+      } else if (isMountainTerrain(tile.terrain) && !tile.buildingId) {
+        const elev = mountainWorldHeight(tile.terrain, x, y, FLOOR_H, state.tiles);
+        const cliff = new THREE.Color().copy(scratch).multiplyScalar(0.82);
+        // Continuous plateau — full tile top so neighbours fuse into one massif.
+        groundB.ground(x0, z0, x1, z1, elev, scratch, 1, 1);
+        const neighbourElev = (nx: number, ny: number) => {
+          const n = state.tiles[ny]?.[nx];
+          if (!n || n.buildingId || !isMountainTerrain(n.terrain)) return 0;
+          return mountainWorldHeight(n.terrain, nx, ny, FLOOR_H, state.tiles);
+        };
+        const gap = 0.6;
+        // Cliffs only on the rim (or where the dome steps down sharply).
+        if (neighbourElev(x - 1, y) < elev - gap) {
+          groundB.walls(x0, z0, x0 + 0.08, z1, 0, elev, cliff);
+        }
+        if (neighbourElev(x + 1, y) < elev - gap) {
+          groundB.walls(x1 - 0.08, z0, x1, z1, 0, elev, cliff);
+        }
+        if (neighbourElev(x, y - 1) < elev - gap) {
+          groundB.walls(x0, z0, x1, z0 + 0.08, 0, elev, cliff);
+        }
+        if (neighbourElev(x, y + 1) < elev - gap) {
+          groundB.walls(x0, z1 - 0.08, x1, z1, 0, elev, cliff);
+        }
       } else {
         groundB.ground(x0, z0, x1, z1, 0, scratch, 1, 1);
       }
@@ -238,12 +265,14 @@ export function buildCity(state: CityState): CityMeshes {
   };
 
   const volumes: BuildingVolume[] = [];
+  const neonB = new MeshBuilder();
   for (const building of state.buildings.values()) {
     if (venueRole(building) === "mall") {
       addBuilding(building, mallWallsFor, mallRoofB, mallTrimB, mallBalconyB, blockers);
     } else {
       addBuilding(building, wallsFor, roofB, trimB, balconyB, blockers);
     }
+    addNeonBillboardPanels(building, neonB);
     volumes.push(volumeFor(building));
   }
 
@@ -315,6 +344,19 @@ export function buildCity(state: CityState): CityMeshes {
     new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.25 }),
     { cast: true, receive: true },
   );
+
+  if (!neonB.empty) {
+    const neonMat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      emissive: new THREE.Color("#ffffff"),
+      emissiveIntensity: 2.8,
+      roughness: 0.22,
+      metalness: 0.05,
+      toneMapped: false,
+    });
+    emissiveMaterials.push(neonMat);
+    addMesh(neonB, neonMat, { cast: false, receive: false });
+  }
 
   if (!balconyB.empty) {
     const balconyMat = new THREE.MeshStandardMaterial({
@@ -479,6 +521,38 @@ function addSidewalk(
 ) {
   builder.ground(x0, z0, x1, z1, CURB_H, color);
   builder.walls(x0, z0, x1, z1, 0, CURB_H, color);
+}
+
+/** LED billboard panels for Future City neon facades. */
+function addNeonBillboardPanels(building: Building, neonB: MeshBuilder) {
+  const neon = building.stats.extra?.neon;
+  if (typeof neon !== "string") return;
+  if (building.kind === "park_pavilion" || building.kind === "house") return;
+
+  const x0 = building.origin.x * TILE + WALL_INSET;
+  const z0 = building.origin.y * TILE + WALL_INSET;
+  const x1 = (building.origin.x + building.width) * TILE - WALL_INSET;
+  const z1 = (building.origin.y + building.depth) * TILE - WALL_INSET;
+  const roof = Math.max(FLOOR_H * 5, building.floors * FLOOR_H * 0.7);
+  const y0 = FLOOR_H * 0.9;
+  const y1 = Math.min(roof, y0 + FLOOR_H * 5.5);
+  const color = new THREE.Color(neon);
+  const accent = color.clone().lerp(new THREE.Color("#ffffff"), 0.35);
+  const hot = color.clone().lerp(new THREE.Color("#ffffff"), 0.55);
+
+  // Large south (+Z) and east (+X) LED walls.
+  neonB.box(x0 + 0.2, z1 - 0.08, x1 - 0.2, z1 + 0.2, y0, y1, color);
+  neonB.box(x1 - 0.08, z0 + 0.2, x1 + 0.2, z1 - 0.2, y0 + FLOOR_H * 0.4, y1 + FLOOR_H * 0.5, accent);
+  // North / west accents so every approach sees neon.
+  neonB.box(x0 + 0.3, z0 - 0.18, x1 - 0.3, z0 + 0.06, y0 + FLOOR_H, y0 + FLOOR_H * 3.2, hot);
+  neonB.box(x0 - 0.18, z0 + 0.3, x0 + 0.06, z1 - 0.3, y0 + FLOOR_H * 1.2, y0 + FLOOR_H * 3.8, accent);
+  // Upper crown strip.
+  if (building.floors >= 6) {
+    const stripY0 = Math.min(building.floors * FLOOR_H - FLOOR_H * 1.8, y1 + FLOOR_H * 1.5);
+    const stripY1 = stripY0 + FLOOR_H * 1.4;
+    neonB.box(x0 + 0.25, z1 - 0.06, x1 - 0.25, z1 + 0.14, stripY0, stripY1, hot);
+    neonB.box(x1 - 0.06, z0 + 0.25, x1 + 0.14, z1 - 0.25, stripY0, stripY1, color);
+  }
 }
 
 function addLamp(

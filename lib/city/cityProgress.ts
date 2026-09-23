@@ -2,8 +2,9 @@ import type { BuildingKind, CityState, Tool } from "@/lib/city/types";
 import { awardXp, readPlayer, writePlayer, type PlayerState } from "@/lib/city/player";
 import { characterProgress } from "@/lib/city/progression";
 import type { SkillPath } from "@/lib/city/skills";
+import { CITIES, isCityId, type CityId } from "@/lib/city/world/cities";
 
-/** Reach this character level to open Dustfall from the city overview. */
+/** Reach this character level to open Dustfall on the World Map. */
 export const DUSTFALL_UNLOCK_LEVEL = 10;
 
 const POP_STEPS = [40, 80, 140, 220, 320, 450, 600, 800, 1100, 1500];
@@ -12,25 +13,39 @@ const HAPPY_STEPS = [55, 70, 82, 90];
 
 let levelToast: string | null = null;
 
-/** One-shot toast for the city HUD (level-ups / Dustfall unlock). */
+/** One-shot toast for the city HUD (level-ups / city discovery). */
 export function takeLevelToast() {
   const note = levelToast;
   levelToast = null;
   return note;
 }
 
+export function hasDiscoveredCity(cityId: CityId, player: PlayerState = readPlayer()) {
+  return player.discoveredCities.includes(cityId);
+}
+
+/** Discover a city on the World Map (idempotent). */
+export function discoverCity(cityId: CityId, player: PlayerState = readPlayer()): PlayerState {
+  if (!isCityId(cityId)) return player;
+  if (player.discoveredCities.includes(cityId)) return player;
+  player.discoveredCities = [...player.discoveredCities, cityId];
+  writePlayer(player);
+  const name = CITIES[cityId].name;
+  if (!levelToast) {
+    levelToast = `${name} discovered on the World Map`;
+  }
+  return player;
+}
+
 export function dustfallUnlockedByLevel(player: PlayerState = readPlayer()) {
   return characterProgress(player.life.xp).level >= DUSTFALL_UNLOCK_LEVEL;
 }
 
-/** Keep the Dustfall flag in sync with character level (and migrate older saves). */
+/** Keep Dustfall discovery in sync with character level (and migrate older saves). */
 export function syncDustfallUnlock(player: PlayerState = readPlayer()): PlayerState {
-  if (dustfallUnlockedByLevel(player) && !player.dustfallUnlocked) {
-    player.dustfallUnlocked = true;
-    writePlayer(player);
-    if (!levelToast) {
-      levelToast = `Level ${DUSTFALL_UNLOCK_LEVEL} — Dustfall unlocked on the city map`;
-    }
+  if (dustfallUnlockedByLevel(player) && !hasDiscoveredCity("dustfall", player)) {
+    discoverCity("dustfall", player);
+    levelToast = `Level ${DUSTFALL_UNLOCK_LEVEL} — Dustfall unlocked on the World Map`;
   }
   return player;
 }
@@ -39,7 +54,7 @@ function noteLevels(newLevels: number[]) {
   if (!newLevels.length) return;
   const top = newLevels[newLevels.length - 1];
   if (newLevels.includes(DUSTFALL_UNLOCK_LEVEL)) {
-    levelToast = `Level ${DUSTFALL_UNLOCK_LEVEL} — Dustfall unlocked on the city map`;
+    levelToast = `Level ${DUSTFALL_UNLOCK_LEVEL} — Dustfall unlocked on the World Map`;
   } else {
     levelToast = `Level up · you're now level ${top}`;
   }

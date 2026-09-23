@@ -36,17 +36,9 @@ export interface OwnedVehicle {
   parkYaw: number;
 }
 
-/** Dealership lot — center of arterial x=20, facing north toward Hwy 93. */
+/** Dealership lot — center of arterial x=20. */
 export const MOTORS_LOT = { x: 20.5, y: 8.5, yaw: 0 };
 export const MOTORS_GATE = { x: 20, y: 9 };
-export const HIGHWAY_RAMP = { x: 20, yMin: 0, yMax: 5 };
-/** Trigger Dustfall corridor once the car is on the elevated ramp. */
-export const HIGHWAY_PORTAL_Y = 2.4;
-
-/** Dustfall south approach — drive onto the Riverside Bridge to leave. */
-export const DUSTFALL_RETURN_BRIDGE = { x: 16, yMin: 31, yMax: 35 };
-/** Portal fires when the car is far enough south on the bridge. */
-export const DUSTFALL_RETURN_PORTAL_Y = 34.15;
 
 export const VEHICLE_CATALOG: VehicleCatalogItem[] = [
   {

@@ -1,6 +1,7 @@
 import { hash2, pick } from "@/lib/city/rng";
 import { ballclubFor, findStadium, stadiumIsOpen } from "@/lib/city/stadium";
 import type { Building, CityEvent, CityEventKind, CityState } from "@/lib/city/types";
+import { cityThemeFor } from "@/lib/city/world/cities";
 import { findPath, nearestRoad } from "../traffic/pathfinding";
 import {
   formatClockMinutes,
@@ -139,7 +140,7 @@ function seedDailyEvents(state: CityState, rand: () => number) {
         kind: "concert",
         headline: `${stadium.name} is hosting a concert tonight.`,
         detail:
-          state.id === "dustfall"
+          cityThemeFor(state.id).desertAccent
             ? "Sandstone lights and a full house after dusk."
             : "Harbor lights and a full house after dusk.",
         x: stadium.origin.x,

@@ -32,8 +32,8 @@ const NAMED: LevelReward[] = [
   { id: "lv9-stride", name: "City Stride", description: "Unlock City Stride.", category: "athletics", level: 9, effect: { kind: "ability", abilityId: "ath-stride" } },
   {
     id: "lv10-dustfall",
-    name: "Beyond Riverside",
-    description: "Dustfall unlocks on the city map — and Sneaker District athletic wear can be bought.",
+    name: "World Map",
+    description: "Dustfall unlocks on the World Map — and Sneaker District athletic wear can be bought.",
     category: "milestone",
     level: 10,
     effect: { kind: "collection", collection: "athletic" },

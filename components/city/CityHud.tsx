@@ -44,7 +44,6 @@ interface HudProps {
   wallet: number;
   careerLabel: string;
   mallExists?: boolean;
-  canSwitchCities?: boolean;
   level?: number;
   levelInto?: number;
   levelNeed?: number;
@@ -54,7 +53,7 @@ interface HudProps {
   onClose: () => void;
   onEnterStreet: () => void;
   onEnterStation?: () => void;
-  onSwitchCity?: (cityId: "riverside" | "dustfall") => void;
+  onOpenWorldMap?: () => void;
 }
 
 export function CityHud({
@@ -77,7 +76,6 @@ export function CityHud({
   wallet,
   careerLabel,
   mallExists = false,
-  canSwitchCities = false,
   level = 1,
   levelInto = 0,
   levelNeed = 40,
@@ -87,7 +85,7 @@ export function CityHud({
   onClose,
   onEnterStreet,
   onEnterStation,
-  onSwitchCity,
+  onOpenWorldMap,
 }: HudProps) {
   return (
     <>
@@ -103,32 +101,15 @@ export function CityHud({
             <p className="text-lg font-semibold leading-tight text-white">
               {cityName}
             </p>
-            {canSwitchCities && onSwitchCity ? (
-              <div className="mt-1.5 flex gap-1">
-                {(
-                  [
-                    { id: "riverside" as const, label: "Riverside" },
-                    { id: "dustfall" as const, label: "Dustfall" },
-                  ] as const
-                ).map((city) => {
-                  const active = cityId === city.id;
-                  return (
-                    <button
-                      key={city.id}
-                      type="button"
-                      title={`Open ${city.label} overview`}
-                      onClick={() => onSwitchCity(city.id)}
-                      className={`rounded-lg px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] transition ${
-                        active
-                          ? "bg-white/20 text-white"
-                          : "bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80"
-                      }`}
-                    >
-                      {city.label}
-                    </button>
-                  );
-                })}
-              </div>
+            {onOpenWorldMap ? (
+              <button
+                type="button"
+                onClick={onOpenWorldMap}
+                title="Open the World Map"
+                className="mt-1.5 rounded-lg bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-100/90 transition hover:bg-white/15"
+              >
+                World Map
+              </button>
             ) : null}
           </div>
         </div>
@@ -137,9 +118,6 @@ export function CityHud({
           <div className="min-w-[9.5rem] rounded-2xl border border-white/10 bg-[#101826]/72 px-3 py-2 shadow-2xl backdrop-blur-md">
             <p className="text-[10px] uppercase tracking-[0.18em] text-amber-200/80">
               Level {level}
-              {!canSwitchCities ? (
-                <span className="text-white/40"> · Dustfall at 10</span>
-              ) : null}
             </p>
             <p className="mt-0.5 text-xs tabular-nums text-white/70">
               {levelNeed > 0 ? `${levelInto} / ${levelNeed} XP` : "Max"}
@@ -196,7 +174,7 @@ export function CityHud({
       ) : null}
 
       {events.length ? (
-        <div className="pointer-events-none absolute left-4 top-24 z-20 w-[min(22rem,calc(100vw-2rem))] space-y-1.5">
+        <div className="pointer-events-none absolute left-4 top-56 z-20 w-[min(22rem,calc(100vw-2rem))] space-y-1.5">
           {events.slice(0, 4).map((event) => (
             <div
               key={event.id}

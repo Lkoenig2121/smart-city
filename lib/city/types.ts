@@ -5,7 +5,9 @@ export type Terrain =
   | "water"
   | "sand"
   | "playground"
-  | "lot";
+  | "lot"
+  | "rock"
+  | "snow";
 
 export type BuildingKind =
   | "house"
