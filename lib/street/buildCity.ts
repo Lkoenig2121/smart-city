@@ -163,7 +163,7 @@ export function buildCity(state: CityState): CityMeshes {
       }
 
       if (tile.road) {
-        const boardwalk = isPromenadeTile(x, y);
+        const boardwalk = isPromenadeTile(x, y, state.id);
         // Pavements hug the edges that face something other than road.
         const north = isRoad(state.tiles, x, y - 1);
         const south = isRoad(state.tiles, x, y + 1);

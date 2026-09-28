@@ -1,6 +1,8 @@
 import { createBuilding, footprintFor } from "@/lib/simulation/buildings/buildings";
 import { mulberry32, pick, randInt, randRange } from "@/lib/city/rng";
 import { BALLCLUBS, type Ballclub } from "@/lib/city/stadium";
+import { markVenue, type VenueRole } from "@/lib/city/venues";
+import { COASTAL_BOARDWALK_X } from "@/lib/city/waterfront";
 import { spawnCitizens } from "@/lib/simulation/citizens/spawnCitizens";
 import { bootstrapEvents } from "@/lib/simulation/events/cityEvents";
 import { seedTrafficNetwork } from "@/lib/simulation/traffic/roadNetwork";
@@ -287,6 +289,9 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
       addRoad(tiles, a, i);
     }
   }
+  if (kind === "coastal") {
+    for (let y = 1; y < SIZE - 1; y++) addRoad(tiles, COASTAL_BOARDWALK_X, y);
+  }
   // Mountain switchbacks into the valley.
   if (kind === "mountain") {
     for (let y = 6; y <= 11; y++) addRoad(tiles, 16, y);
@@ -523,6 +528,27 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
     place("house", 20, 4);
     place("house", 4, 20);
     place("park_pavilion", 20, 20);
+
+    // Boardwalk storefronts facing the sea.
+    const BOARDWALK_SHOPS: { y: number; name: string; role: VenueRole; wall: string }[] = [
+      { y: 3, name: "Saltwater Taffy Co.", role: "shop", wall: "#f4c6d0" },
+      { y: 8, name: "Crab Shack", role: "restaurant", wall: "#f2e2b8" },
+      { y: 10, name: "Surf & Rental", role: "shop", wall: "#bfe3ee" },
+      { y: 16, name: "Boardwalk Arcade", role: "shop", wall: "#d8c8f0" },
+      { y: 18, name: "Pier Fish & Chips", role: "restaurant", wall: "#f6efe0" },
+      { y: 24, name: "Gelato Cove", role: "restaurant", wall: "#c8f0d8" },
+      { y: 27, name: "Lifeguard Supply", role: "shop", wall: "#f0d0b0" },
+    ];
+    for (const shop of BOARDWALK_SHOPS) {
+      place("shop", COASTAL_BOARDWALK_X - 1, shop.y, (b) => {
+        markVenue(b, shop.role);
+        b.name = shop.name;
+        b.wallColor = shop.wall;
+        b.roofColor = "#3a7a8a";
+        b.accentColor = "#ffffff";
+        b.stats.extra = { ...(b.stats.extra ?? {}), attraction: "Boardwalk" };
+      });
+    }
 
     // Harbor Park — inland of the beach strip.
     {

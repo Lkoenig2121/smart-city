@@ -320,7 +320,7 @@ export class CityRenderer {
       for (let x = 0; x < state.size; x++) {
         const tile = state.tiles[y][x];
         drawTerrainTile(gctx, x, y, tile.terrain, light, 0, tile.graffiti, weather, true);
-        if (tile.road && !tile.bridge) drawRoadTile(gctx, x, y, tile.road, light);
+        if (tile.road && !tile.bridge) drawRoadTile(gctx, x, y, tile.road, light, state.id);
       }
     }
     if (state.id === "future") {

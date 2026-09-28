@@ -11,12 +11,13 @@ export function drawRoadTile(
   y: number,
   road: RoadCell,
   light: Lighting,
+  cityId?: string,
 ) {
   drawDiamond(ctx, x, y, lit("#6d6a66", light, "ground"));
   drawDiamond(ctx, x, y, lit("#3c3d44", light, "ground"));
 
   const d = diamondPoints(x, y);
-  const boardwalk = isPromenadeTile(x, y);
+  const boardwalk = isPromenadeTile(x, y, cityId);
   const asphalt = lit(boardwalk ? "#6a5640" : "#3c3d44", light, "ground");
   const mark = alpha(lit("#d9d4c4", light, "top"), light.phase === "night" ? 0.35 : 0.7);
   const walk = lit(boardwalk ? "#c4b49a" : "#c4bfb4", light, "ground");

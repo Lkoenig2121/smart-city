@@ -63,7 +63,7 @@ export function StreetMinimap({
         if (tile.road) {
           ctx.fillStyle = tile.bridge
             ? "#8d8a80"
-            : state.id !== "dustfall" && isPromenadeTile(x, y)
+            : isPromenadeTile(x, y, state.id)
               ? "#8a7354"
               : "#6a6c72";
           ctx.fillRect(x * cell, y * cell, cell + 0.5, cell + 0.5);

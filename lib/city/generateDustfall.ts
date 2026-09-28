@@ -270,6 +270,25 @@ export function generateDustfall(seed = 934201): CityState {
   place("skyscraper", 30, 20);
   place("tower", 31, 10);
 
+  // The Beacon Hotel — 70-floor landmark on the west bank, north end.
+  const beacon = place("skyscraper", 8, 5) ?? place("skyscraper", 8, 1);
+  if (beacon) {
+    markLodging(beacon, "hotel", "The Beacon Hotel");
+    beacon.name = "The Beacon Hotel";
+    beacon.floors = 70;
+    beacon.stats.residents = 0;
+    beacon.stats.capacity = 0;
+    beacon.stats.jobs = 240;
+    beacon.stats.employees = 190;
+    beacon.stats.revenue = 180_000;
+    beacon.stats.propertyValue = 92_000_000;
+    beacon.stats.extra = {
+      ...beacon.stats.extra,
+      rooms: Math.round(beacon.floors * 18),
+      nightly: "$189",
+    };
+  }
+
   // Scorpion Field — southeast bowl with parking off the arterial.
   const stadiumX = 26;
   const stadiumY = 27;
