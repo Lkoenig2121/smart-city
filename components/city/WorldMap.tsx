@@ -356,7 +356,7 @@ export function WorldMap({
   return (
     <div className="pointer-events-auto absolute inset-0 z-50 grid place-items-center bg-[#060a10]/80 p-4 backdrop-blur-sm">
       <div
-        className="relative overflow-hidden rounded-[2rem] border-4 border-[#f4e3b8] shadow-[0_20px_60px_rgba(0,0,0,0.55)]"
+        className="relative overflow-hidden rounded-4xl border-4 border-[#f4e3b8] shadow-[0_20px_60px_rgba(0,0,0,0.55)]"
         style={{
           width: "min(64rem, calc(100vw - 2rem), calc((100vh - 2rem) * 1.6))",
           aspectRatio: `${VIEW_W} / ${VIEW_H}`,

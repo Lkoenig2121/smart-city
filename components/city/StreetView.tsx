@@ -4,9 +4,10 @@ import type { Building, CityState } from "@/lib/city/types";
 import {
   findStadium,
   GAME_HOURS_LABEL,
-  ballclubFor,
   isGameNight,
+  stadiumClubFor,
   stadiumFinal,
+  stadiumSeriesGame,
   stadiumGateTile,
   stadiumWinner,
 } from "@/lib/city/stadium";
@@ -51,6 +52,7 @@ import {
   syncPoliceCallArrival,
 } from "@/lib/city/police";
 import { consumeHeld } from "@/lib/city/bag";
+import { LeaguePanel } from "./LeaguePanel";
 import { characterStats } from "@/lib/city/character";
 import { consumableById } from "@/lib/city/consumables";
 import { isTypingTarget } from "@/lib/city/input";
@@ -1680,7 +1682,8 @@ export function StreetView({
       ? findLodgingRoom(lodgingBuilding, interior.roomId)
       : null;
 
-  const ballclub = ballclubFor(state);
+  const ballclub = stadiumClubFor(state);
+  const seriesGame = stadiumSeriesGame(state);
   const stadiumBuilding = findStadium(state);
   const doorNearby = Boolean(venueDoor || lodgingDoor || subwayDoor || atGate);
   const carAndDoorChoice = Boolean(
@@ -1779,6 +1782,11 @@ export function StreetView({
           <div className="pointer-events-auto">
             <PlayerStatus player={player} />
           </div>
+          {interior?.kind === "stadium" || atGate ? (
+            <div className="pointer-events-auto">
+              <LeaguePanel clock={state.clock} cityId={state.id} />
+            </div>
+          ) : null}
           {onPoliceDuty(player) ? (
             <div className="pointer-events-auto rounded-xl border border-sky-400/30 bg-[#0e1520]/9 px-3.5 py-2 text-sky-50 backdrop-blur">
               <p className="text-[0.6rem] uppercase tracking-[0.2em] text-sky-300">
@@ -2237,7 +2245,10 @@ export function StreetView({
               style={{ backgroundColor: ballclub.accent }}
             >
               <p className="text-sm font-bold tracking-wide text-white">
-                ⚾ {ballclub.fullName.toUpperCase()}
+                ⚾{" "}
+                {seriesGame
+                  ? `WORLD SERIES · GAME ${seriesGame.game}`
+                  : ballclub.fullName.toUpperCase()}
               </p>
               {lastFinal ? (
                 <div className="mt-1.5 rounded-md bg-[#10233f] px-4 py-1.5">

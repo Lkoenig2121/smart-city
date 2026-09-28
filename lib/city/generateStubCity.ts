@@ -343,9 +343,9 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
       b.roofColor = "#3a2a1c";
     });
 
-    // Summit Field — valley south edge with parking.
+    // Summit Field — southeast foothills, clear of the x=21 arterial.
     {
-      const sx = 17;
+      const sx = 22;
       const sy = 22;
       prepStadiumSite(tiles, sx, sy);
       const club = BALLCLUBS.mountain;
@@ -396,10 +396,10 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
     });
     place("school", 18, 18, (b) => paintNeon(b, 7));
 
-    // Neon Dome — west rim before the dense canyon fill.
+    // Neon Dome — southwest block between the x=5/11 and y=26 arterials, before the canyon fill.
     {
-      const sx = 1;
-      const sy = 25;
+      const sx = 6;
+      const sy = 27;
       prepStadiumSite(tiles, sx, sy);
       const club = BALLCLUBS.future;
       place("baseball_stadium", sx, sy, (b) => {

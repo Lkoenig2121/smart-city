@@ -25,6 +25,10 @@ export interface Ballclub {
   visitorAbbrev: string;
   visitorLineup: string[];
   accent: string;
+  /** Share of this club's games it wins — drives the league standings. */
+  winRate: number;
+  /** Per-club salt so every team's schedule of wins is different. */
+  seed: number;
 }
 
 const RAVENS_ROSTER = ["Rivera", "Chen", "Brooks", "Patel", "Nguyen", "Walsh", "Ortiz", "Kim", "Hale"];
@@ -49,6 +53,8 @@ export const BALLCLUBS: Record<string, Ballclub> = {
     visitorAbbrev: "BEA",
     visitorLineup: BEARS_ROSTER,
     accent: "#1f4d8c",
+    winRate: HOME_WIN_RATE,
+    seed: 0,
   },
   dustfall: {
     shortName: "Scorpions",
@@ -60,6 +66,8 @@ export const BALLCLUBS: Record<string, Ballclub> = {
     visitorAbbrev: "COY",
     visitorLineup: COYOTES_ROSTER,
     accent: "#2a6b5a",
+    winRate: 0.68,
+    seed: 37,
   },
   mountain: {
     shortName: "Wolves",
@@ -71,6 +79,8 @@ export const BALLCLUBS: Record<string, Ballclub> = {
     visitorAbbrev: "LYX",
     visitorLineup: LYNX_ROSTER,
     accent: "#5a7a6a",
+    winRate: 0.56,
+    seed: 71,
   },
   coastal: {
     shortName: "Gulls",
@@ -82,6 +92,8 @@ export const BALLCLUBS: Record<string, Ballclub> = {
     visitorAbbrev: "TID",
     visitorLineup: TIDES_ROSTER,
     accent: "#3d7ea6",
+    winRate: 0.62,
+    seed: 113,
   },
   future: {
     shortName: "Circuits",
@@ -93,6 +105,8 @@ export const BALLCLUBS: Record<string, Ballclub> = {
     visitorAbbrev: "PHN",
     visitorLineup: PHANTOMS_ROSTER,
     accent: "#6a8cff",
+    winRate: 0.7,
+    seed: 157,
   },
 };
 
@@ -127,7 +141,212 @@ export function stadiumGateTile(building: Building) {
 export function isGameNight(state: CityState) {
   const stadium = findStadium(state);
   if (!stadium || !stadiumIsOpen(stadium)) return false;
-  return isBroadcastWindow(state);
+  return isBroadcastWindow(state) && matchupFor(state.id, state.clock) !== null;
+}
+
+// ─── League season + World Series ────────────────────────────────────────────
+
+export const LEAGUE_CITY_IDS = ["riverside", "dustfall", "mountain", "coastal", "future"] as const;
+/** Apr 1 (0-based day of a 365-day year). */
+export const SEASON_START_DOY = 90;
+/** Oct 24 — last regular-season game. */
+export const SEASON_END_DOY = 296;
+/** Oct 26 — World Series Game 1. */
+export const SERIES_START_DOY = 298;
+export const SERIES_WINS_NEEDED = 4;
+export const SERIES_HOST_CITY = "riverside";
+
+export interface TeamRecord {
+  cityId: string;
+  club: Ballclub;
+  wins: number;
+  losses: number;
+  pct: number;
+  gamesBack: number;
+}
+
+export interface SeriesGame {
+  game: number;
+  doy: number;
+  topSeedWon: boolean;
+}
+
+export interface WorldSeries {
+  topSeed: TeamRecord;
+  secondSeed: TeamRecord;
+  games: SeriesGame[];
+}
+
+interface Matchup {
+  club: Ballclub;
+  favorHome: boolean;
+  series: { game: number; topWins: number; secondWins: number } | null;
+}
+
+function clockOn(year: number, doy: number, minuteOfDay = GAME_END_MINUTE): CityClock {
+  return { year, dayOfYear: doy, minuteOfDay, dayIndex: 0 };
+}
+
+function previousDay(clock: CityClock): CityClock {
+  return {
+    dayIndex: (clock.dayIndex + 6) % 7,
+    minuteOfDay: GAME_END_MINUTE,
+    dayOfYear: clock.dayOfYear <= 0 ? 364 : clock.dayOfYear - 1,
+    year: clock.dayOfYear <= 0 ? clock.year - 1 : clock.year,
+  };
+}
+
+/** Last day of this year whose game has gone final. */
+function lastFinalDoy(clock: CityClock) {
+  return clock.minuteOfDay >= GAME_END_MINUTE ? clock.dayOfYear : clock.dayOfYear - 1;
+}
+
+function standingsThrough(year: number, lastDoy: number): TeamRecord[] {
+  const last = Math.min(SEASON_END_DOY, lastDoy);
+  const rows = LEAGUE_CITY_IDS.map((cityId) => {
+    const club = BALLCLUBS[cityId];
+    let wins = 0;
+    let losses = 0;
+    for (let d = SEASON_START_DOY; d <= last; d++) {
+      if (homeFavoredToday(clockOn(year, d), club)) wins += 1;
+      else losses += 1;
+    }
+    const played = wins + losses;
+    return { cityId, club, wins, losses, pct: played ? wins / played : 0, gamesBack: 0 };
+  });
+  rows.sort((a, b) => b.pct - a.pct || b.wins - a.wins || a.club.fullName.localeCompare(b.club.fullName));
+  const leader = rows[0];
+  for (const row of rows) {
+    row.gamesBack = (leader.wins - row.wins + (row.losses - leader.losses)) / 2;
+  }
+  return rows;
+}
+
+/** Live league table as of the city clock. */
+export function leagueStandings(clock: CityClock): TeamRecord[] {
+  return standingsThrough(clock.year, lastFinalDoy(clock));
+}
+
+/** Top two regular-season clubs meet in a best-of-seven at Ravens Ballpark. */
+export function worldSeriesFor(year: number): WorldSeries {
+  const [topSeed, secondSeed] = standingsThrough(year, SEASON_END_DOY);
+  const odds = topSeed.club.winRate / (topSeed.club.winRate + secondSeed.club.winRate);
+  const games: SeriesGame[] = [];
+  let top = 0;
+  let second = 0;
+  for (let i = 0; top < SERIES_WINS_NEEDED && second < SERIES_WINS_NEEDED; i++) {
+    const topSeedWon = hash2(year, 900 + i, 77) < odds;
+    if (topSeedWon) top += 1;
+    else second += 1;
+    games.push({ game: i + 1, doy: SERIES_START_DOY + i, topSeedWon });
+  }
+  return { topSeed, secondSeed, games };
+}
+
+function seriesClub(series: WorldSeries): Ballclub {
+  const home = series.topSeed.club;
+  const away = series.secondSeed.club;
+  return {
+    ...home,
+    parkName: BALLCLUBS[SERIES_HOST_CITY].parkName,
+    visitorShort: away.shortName,
+    visitorAbbrev: away.abbrev,
+    visitorLineup: away.lineup,
+  };
+}
+
+/** Who plays at this city's park on a given day, or null for an off day. */
+function matchupFor(cityId: string, clock: CityClock): Matchup | null {
+  const doy = clock.dayOfYear;
+  const club = BALLCLUBS[cityId] ?? BALLCLUBS.riverside;
+  if (doy >= SEASON_START_DOY && doy <= SEASON_END_DOY) {
+    return { club, favorHome: homeFavoredToday(clock, club), series: null };
+  }
+  if (cityId !== SERIES_HOST_CITY || doy < SERIES_START_DOY) return null;
+  const series = worldSeriesFor(clock.year);
+  const index = series.games.findIndex((g) => g.doy === doy);
+  if (index < 0) return null;
+  const before = series.games.slice(0, index);
+  return {
+    club: seriesClub(series),
+    favorHome: series.games[index].topSeedWon,
+    series: {
+      game: index + 1,
+      topWins: before.filter((g) => g.topSeedWon).length,
+      secondWins: before.filter((g) => !g.topSeedWon).length,
+    },
+  };
+}
+
+/** The matchup on the scoreboard right now: tonight's, or the most recent final. */
+function scoreboardMatchup(state: CityState): Matchup | null {
+  const clock = state.clock;
+  if (clock.minuteOfDay >= GAME_START_MINUTE) return matchupFor(state.id, clock);
+  return matchupFor(state.id, previousDay(clock));
+}
+
+/** Club names for the scoreboard — World Series finalists when Riverside hosts. */
+export function stadiumClubFor(state: CityState): Ballclub {
+  return scoreboardMatchup(state)?.club ?? ballclubFor(state);
+}
+
+/** World Series game number + series score before it, when this park hosts one. */
+export function stadiumSeriesGame(state: CityState) {
+  return scoreboardMatchup(state)?.series ?? null;
+}
+
+export type LeaguePhase = "preseason" | "regular" | "break" | "series" | "complete";
+
+export interface LeagueStatus {
+  phase: LeaguePhase;
+  standings: TeamRecord[];
+  series: {
+    topSeed: TeamRecord;
+    secondSeed: TeamRecord;
+    topWins: number;
+    secondWins: number;
+    nextGame: number | null;
+    nextDoy: number | null;
+  } | null;
+  champion: Ballclub | null;
+}
+
+export function leagueStatus(clock: CityClock): LeagueStatus {
+  const doy = clock.dayOfYear;
+  if (doy < SEASON_START_DOY) {
+    const last = worldSeriesFor(clock.year - 1);
+    const topTook = last.games.filter((g) => g.topSeedWon).length >= SERIES_WINS_NEEDED;
+    return {
+      phase: "preseason",
+      standings: standingsThrough(clock.year, -1),
+      series: null,
+      champion: topTook ? last.topSeed.club : last.secondSeed.club,
+    };
+  }
+  const standings = leagueStandings(clock);
+  if (lastFinalDoy(clock) < SEASON_END_DOY) {
+    return { phase: "regular", standings, series: null, champion: null };
+  }
+  const ws = worldSeriesFor(clock.year);
+  const done = ws.games.filter((g) => g.doy <= lastFinalDoy(clock));
+  const topWins = done.filter((g) => g.topSeedWon).length;
+  const secondWins = done.length - topWins;
+  const next = ws.games[done.length] ?? null;
+  const champion =
+    topWins >= SERIES_WINS_NEEDED ? ws.topSeed.club : secondWins >= SERIES_WINS_NEEDED ? ws.secondSeed.club : null;
+  return {
+    phase: champion ? "complete" : doy < SERIES_START_DOY ? "break" : "series",
+    standings,
+    series: {
+      topSeed: ws.topSeed,
+      secondSeed: ws.secondSeed,
+      topWins,
+      secondWins,
+      nextGame: next?.game ?? null,
+      nextDoy: next?.doy ?? null,
+    },
+    champion,
+  };
 }
 
 /** True during first-pitch hours — used for TV even in cities without a ballpark. */
@@ -148,6 +367,9 @@ export function stadiumAttendance(state: CityState): StadiumAttendance {
   const m = state.clock.minuteOfDay;
   const start = GAME_START_MINUTE;
   const end = GAME_END_MINUTE;
+  if (!matchupFor(state.id, state.clock)) {
+    return { seated: 0.04, walking: 0.08, lights: 0, fireworks: false };
+  }
   if (m >= start && m < end) {
     return { seated: 1, walking: 0.26, lights: 1, fireworks: m >= start + 12 };
   }
@@ -202,7 +424,9 @@ export interface StadiumGame {
 /** Live nine-inning game from 6:00 PM to about 9:00 PM, deterministic per city day. */
 export function stadiumGame(state: CityState): StadiumGame | null {
   if (!isGameNight(state)) return null;
-  return simulateGame(state.clock, state.clock.minuteOfDay, ballclubFor(state));
+  const matchup = matchupFor(state.id, state.clock);
+  if (!matchup) return null;
+  return simulateGame(state.clock, state.clock.minuteOfDay, matchup.club, matchup.favorHome);
 }
 
 /**
@@ -217,22 +441,20 @@ export function stadiumFinal(state: CityState): StadiumGame | null {
 
 /** Box score / live game for hotel TVs — local club when the city has a park. */
 export function stadiumOnTv(state: CityState) {
-  if (isBroadcastWindow(state)) return simulateGame(state.clock, state.clock.minuteOfDay, ballclubFor(state));
+  if (isBroadcastWindow(state)) {
+    const matchup = matchupFor(state.id, state.clock);
+    return matchup ? simulateGame(state.clock, state.clock.minuteOfDay, matchup.club, matchup.favorHome) : null;
+  }
   return broadcastFinal(state);
 }
 
 function broadcastFinal(state: CityState): StadiumGame | null {
-  const club = ballclubFor(state);
   const minute = state.clock.minuteOfDay;
   if (minute >= GAME_START_MINUTE && minute < GAME_END_MINUTE) return null;
-  if (minute >= GAME_END_MINUTE) return simulateGame(state.clock, GAME_END_MINUTE, club);
-  const previous: CityClock = {
-    dayIndex: state.clock.dayIndex - 1,
-    minuteOfDay: GAME_END_MINUTE,
-    dayOfYear: state.clock.dayOfYear <= 1 ? 365 : state.clock.dayOfYear - 1,
-    year: state.clock.dayOfYear <= 1 ? state.clock.year - 1 : state.clock.year,
-  };
-  return simulateGame(previous, GAME_END_MINUTE, club);
+  const day = minute >= GAME_END_MINUTE ? state.clock : previousDay(state.clock);
+  const matchup = matchupFor(state.id, day);
+  if (!matchup) return null;
+  return simulateGame(day, GAME_END_MINUTE, matchup.club, matchup.favorHome);
 }
 
 export function stadiumWinner(game: StadiumGame, club: Ballclub = BALLCLUBS.riverside) {
@@ -289,11 +511,11 @@ function inningOrdinal(n: number) {
   return `${n}th`;
 }
 
-function homeFavoredToday(clock: CityClock) {
-  return hash2(clock.year, clock.dayOfYear, 501) < HOME_WIN_RATE;
+function homeFavoredToday(clock: CityClock, club: Ballclub) {
+  return hash2(clock.year, clock.dayOfYear, 501 + club.seed) < club.winRate;
 }
 
-function simulateGame(clock: CityClock, minuteOfDay: number, club: Ballclub): StadiumGame {
+function simulateGame(clock: CityClock, minuteOfDay: number, club: Ballclub, favorHome: boolean): StadiumGame {
   const elapsed = Math.max(0, minuteOfDay - GAME_START_MINUTE);
   const playMinutes = GAME_END_MINUTE - GAME_START_MINUTE - 8;
   const playing = elapsed < playMinutes;
@@ -308,7 +530,6 @@ function simulateGame(clock: CityClock, minuteOfDay: number, club: Ballclub): St
   let ravens = 0;
   let visitors = 0;
   let justScored = false;
-  const favorHome = homeFavoredToday(clock);
   const lastHalf = playing ? halfIndex : halves - 1;
   for (let half = 0; half <= lastHalf; half++) {
     const events = scoringTimes(clock, half, favorHome);

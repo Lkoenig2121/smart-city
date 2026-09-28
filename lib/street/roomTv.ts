@@ -3,7 +3,7 @@ import { advanceDay, weekdayOf } from "@/lib/city/calendar";
 import { DAYS, type CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
 import { forecastFor, weatherEmoji } from "@/lib/simulation/weather/weather";
-import { isBroadcastWindow, ballclubFor, stadiumBigPlay, stadiumOnTv, stadiumWinner } from "@/lib/city/stadium";
+import { isBroadcastWindow, stadiumClubFor, stadiumBigPlay, stadiumOnTv, stadiumWinner } from "@/lib/city/stadium";
 
 export interface RoomTv {
   update: (dt: number, state: CityState) => void;
@@ -210,7 +210,7 @@ function drawBaseball(
   state: CityState,
 ) {
   const game = stadiumOnTv(state);
-  const club = ballclubFor(state);
+  const club = stadiumClubFor(state);
   const play = game ? stadiumBigPlay(game, club) : null;
   const winner = game ? stadiumWinner(game, club) : null;
   const live = Boolean(game?.playing);
@@ -581,7 +581,7 @@ function drawNews(
   ctx.fillText("Downtown waterfront draws record visitors", 18, 300);
 
   const game = stadiumOnTv(state);
-  const club = ballclubFor(state);
+  const club = stadiumClubFor(state);
   const winner = game ? stadiumWinner(game, club) : null;
   const headlines = [
     ...state.events.map((event) => event.headline),

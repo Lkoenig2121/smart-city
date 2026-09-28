@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
-import { isGameNight, ballclubFor, stadiumAttendance, stadiumFinal, stadiumGame } from "@/lib/city/stadium";
+import { isGameNight, stadiumAttendance, stadiumClubFor, stadiumFinal, stadiumGame } from "@/lib/city/stadium";
 import { createFireworkSparks, FIREWORK_PALETTE, sparkFade, stepFireworks, type FireworkSpark } from "@/lib/city/fireworks";
 import { paintRavensScoreboard } from "./ravensScoreboard";
 import { InteriorControls } from "./interiorControls";
@@ -226,7 +226,9 @@ export class StadiumWorld {
     this.heldView.playSip();
   }
 
-  render(dt: number) {
+  render(rawDt: number) {
+    // The first rAF timestamp can precede the loop's performance.now() seed.
+    const dt = Number.isFinite(rawDt) ? Math.max(0, rawDt) : 0;
     this.time += dt;
     this.controls.update(dt);
     this.controls.applyTo(this.camera);
@@ -263,7 +265,7 @@ export class StadiumWorld {
       stadiumGame(this.state) ?? stadiumFinal(this.state),
       clock,
       this.time,
-      ballclubFor(this.state),
+      stadiumClubFor(this.state),
     );
     this.scoreTexture.needsUpdate = true;
   }
@@ -286,7 +288,8 @@ export class StadiumWorld {
     }
 
     const cycle = this.time % CYCLE;
-    const play = AT_BATS[Math.floor(this.time / CYCLE) % AT_BATS.length];
+    const atBat = Math.floor(this.time / CYCLE);
+    const play = AT_BATS[((atBat % AT_BATS.length) + AT_BATS.length) % AT_BATS.length];
     const pitch = cycle < PITCH_END;
     const inAir = cycle >= PITCH_END && cycle < CONTACT_AT;
     const swung = play.kind !== "take";
