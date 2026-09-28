@@ -1,5 +1,16 @@
 import { hash2, pick } from "@/lib/city/rng";
-import { ballclubFor, findStadium, stadiumIsOpen } from "@/lib/city/stadium";
+import { formatDate } from "@/lib/city/calendar";
+import {
+  BALLCLUBS,
+  SEASON_END_DOY,
+  SEASON_START_DOY,
+  SERIES_HOST_CITY,
+  SERIES_START_DOY,
+  ballclubFor,
+  findStadium,
+  leagueStatus,
+  stadiumIsOpen,
+} from "@/lib/city/stadium";
 import type { Building, CityEvent, CityEventKind, CityState } from "@/lib/city/types";
 import { cityThemeFor } from "@/lib/city/world/cities";
 import { findPath, nearestRoad } from "../traffic/pathfinding";
@@ -117,15 +128,97 @@ function seedStorm(state: CityState) {
   });
 }
 
+/** League-wide World Series coverage — every city's news desk runs it. */
+function seedWorldSeriesNews(state: CityState) {
+  const doy = state.clock.dayOfYear;
+  if (doy < SEASON_END_DOY - 7) return;
+  const status = leagueStatus(state.clock);
+  const host = BALLCLUBS[SERIES_HOST_CITY].parkName;
+  const stadium = findStadium(state);
+  const at = stadium ? { x: stadium.origin.x, y: stadium.origin.y, buildingId: stadium.id } : { x: 16, y: 16 };
+  const date = (d: number) => formatDate(state.clock.year, d);
+
+  if (status.phase === "regular") {
+    const [first, second, third] = status.standings;
+    const left = SEASON_END_DOY - doy + 1;
+    pushEvent(state, {
+      kind: "baseball",
+      headline:
+        left <= 1
+          ? "Final day of the regular season — World Series berths on the line."
+          : `Pennant race: ${first.club.shortName} and ${second.club.shortName} hold the World Series spots.`,
+      detail: third
+        ? `${third.club.fullName} sit ${third.gamesBack - second.gamesBack} back of 2nd with ${left} day${left === 1 ? "" : "s"} left. Series opens ${date(SERIES_START_DOY)} at ${host}.`
+        : `Series opens ${date(SERIES_START_DOY)} at ${host}.`,
+      ...at,
+      remaining: 240,
+    });
+    return;
+  }
+
+  const series = status.series;
+  if (!series) return;
+  const a = series.topSeed.club;
+  const b = series.secondSeed.club;
+
+  if (status.phase === "break") {
+    pushEvent(state, {
+      kind: "baseball",
+      headline: `World Series set: ${a.fullName} vs. ${b.fullName}.`,
+      detail: `Best of seven at ${host}, Riverside. Game 1 ${date(SERIES_START_DOY)} at 6:00 PM.`,
+      ...at,
+      remaining: 240,
+    });
+    return;
+  }
+
+  if (status.phase === "series" && series.nextGame && series.nextDoy === doy) {
+    const tally =
+      series.topWins === series.secondWins
+        ? `Series tied ${series.topWins}–${series.secondWins}.`
+        : series.topWins > series.secondWins
+          ? `${a.shortName} lead ${series.topWins}–${series.secondWins}.`
+          : `${b.shortName} lead ${series.secondWins}–${series.topWins}.`;
+    const clinch = series.topWins === 3 || series.secondWins === 3;
+    pushEvent(state, {
+      kind: "baseball",
+      headline: `World Series Game ${series.nextGame} tonight: ${a.shortName} vs. ${b.shortName}.`,
+      detail: `${series.nextGame === 1 ? "Series opener." : tally}${clinch ? " A title could be decided tonight." : ""} First pitch 6:00 PM at ${host} — watch for the blimp.`,
+      ...at,
+      remaining: 240,
+    });
+    return;
+  }
+
+  if (status.phase === "complete" && status.champion) {
+    const lastGame = series.topWins + series.secondWins;
+    const clinchedDoy = SERIES_START_DOY + lastGame - 1;
+    if (doy > clinchedDoy + 2) return;
+    const high = Math.max(series.topWins, series.secondWins);
+    const low = Math.min(series.topWins, series.secondWins);
+    pushEvent(state, {
+      kind: "baseball",
+      icon: "🏆",
+      headline: `${status.champion.fullName} win the World Series!`,
+      detail: `Took the series ${high}–${low} at ${host}. Parade talk is already underway.`,
+      ...at,
+      remaining: 240,
+    });
+  }
+}
+
 function seedDailyEvents(state: CityState, rand: () => number) {
   seedStorm(state);
 
   const stadium = findStadium(state);
   const club = ballclubFor(state);
   const hash = hash2(state.clock.year, state.clock.dayOfYear, 441);
+  const doy = state.clock.dayOfYear;
+  const inSeason = doy >= SEASON_START_DOY && doy <= SEASON_END_DOY;
+  seedWorldSeriesNews(state);
   if (stadium && stadiumIsOpen(stadium)) {
     const weekend = state.clock.dayIndex >= 4;
-    if (weekend || hash < 0.18) {
+    if (inSeason && (weekend || hash < 0.18)) {
       pushEvent(state, {
         kind: "baseball",
         headline: `${club.fullName} vs. ${club.visitorShort} — 6:00 PM.`,

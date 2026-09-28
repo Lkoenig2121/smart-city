@@ -24,6 +24,14 @@ export interface StadiumInterior {
   /** Seated fan indices on the Green Monster — only shown during gametime. */
   monsterFanStart: number;
   rest: Float32Array;
+  /** Hidden until a World Series game: sell-out extras + neon glow gear. */
+  seriesCrowd: {
+    extras: THREE.InstancedMesh;
+    sticks: THREE.InstancedMesh;
+    bands: THREE.InstancedMesh;
+    neonRest: Float32Array;
+    neonCount: number;
+  };
   groundAt: (x: number, z: number) => number;
   dispose: () => void;
 }
@@ -369,6 +377,9 @@ export function buildStadiumInterior(opts: { greenMonster?: boolean } = {}): Sta
   group.add(fans);
   disposables.push(fans.geometry);
   disposables.push(fans.material as THREE.Material);
+  const seriesCrowd = buildSeriesCrowd(Boolean(opts.greenMonster));
+  group.add(seriesCrowd.extras, seriesCrowd.sticks, seriesCrowd.bands);
+  disposables.push(seriesCrowd);
 
   return {
     group,
@@ -381,6 +392,7 @@ export function buildStadiumInterior(opts: { greenMonster?: boolean } = {}): Sta
     walkingCount: WALKING_FANS,
     monsterFanStart,
     rest,
+    seriesCrowd,
     groundAt: (x, z) => stadiumGroundAt(x, z, Boolean(opts.greenMonster)),
     dispose: () => {
       for (const item of disposables) item.dispose();
@@ -811,4 +823,77 @@ function buildFans(greenMonster = false) {
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   return { mesh, rest, monsterFanStart };
+}
+
+const NEON = ["#00e8ff", "#ff2d95", "#39ff14", "#ffe14a", "#c44dff", "#ff8c00"];
+
+/**
+ * Sell-out extras for World Series nights: fans in every bowl seat the regular
+ * crowd leaves empty, plus glow sticks / neon headbands for most of the house.
+ */
+function buildSeriesCrowd(greenMonster = false) {
+  const seats = seatLayout(greenMonster);
+  const extraSeats = seats.slice(SEATED_FANS);
+
+  const fanGeo = new THREE.CapsuleGeometry(0.22, 0.72, 3, 6);
+  const fanMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78 });
+  const extras = new THREE.InstancedMesh(fanGeo, fanMat, Math.max(1, extraSeats.length));
+  extras.frustumCulled = false;
+  extras.visible = false;
+  const matrix = new THREE.Matrix4();
+  const color = new THREE.Color();
+  const shirts = ["#1f4d8c", "#c0392b", "#f4f1ea", "#2c3e6b", "#e8c36a", "#3d5a80", "#d4a017", "#4aa3c4", "#2a6b5a", "#3d7ea6"];
+  extraSeats.forEach((seat, i) => {
+    matrix.makeTranslation(seat.x, seat.y, seat.z);
+    extras.setMatrixAt(i, matrix);
+    extras.setColorAt(i, color.set(shirts[(i * 7) % shirts.length]));
+  });
+  extras.instanceMatrix.needsUpdate = true;
+  if (extras.instanceColor) extras.instanceColor.needsUpdate = true;
+
+  const glowing = seats.filter((_, i) => ((i * 2654435761) >>> 0) % 100 < 62);
+  const neonMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
+  const stickGeo = new THREE.BoxGeometry(0.06, 0.46, 0.06);
+  stickGeo.translate(0, 0.23, 0);
+  const sticks = new THREE.InstancedMesh(stickGeo, neonMat, Math.max(1, glowing.length));
+  const bandGeo = new THREE.TorusGeometry(0.21, 0.035, 5, 14);
+  bandGeo.rotateX(Math.PI / 2);
+  const bands = new THREE.InstancedMesh(bandGeo, neonMat, Math.max(1, glowing.length));
+  const neonRest = new Float32Array(glowing.length * 3);
+  for (const mesh of [sticks, bands]) {
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  }
+  glowing.forEach((seat, i) => {
+    neonRest[i * 3] = seat.x;
+    neonRest[i * 3 + 1] = seat.y;
+    neonRest[i * 3 + 2] = seat.z;
+    color.set(NEON[i % NEON.length]);
+    sticks.setColorAt(i, color);
+    bands.setColorAt(i, color.set(NEON[(i + 3) % NEON.length]));
+    matrix.makeTranslation(seat.x, seat.y + 0.44, seat.z);
+    bands.setMatrixAt(i, matrix);
+    matrix.makeTranslation(seat.x + 0.2, seat.y + 0.3, seat.z);
+    sticks.setMatrixAt(i, matrix);
+  });
+  for (const mesh of [sticks, bands]) {
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }
+
+  return {
+    extras,
+    sticks,
+    bands,
+    neonRest,
+    neonCount: glowing.length,
+    dispose() {
+      fanGeo.dispose();
+      fanMat.dispose();
+      neonMat.dispose();
+      stickGeo.dispose();
+      bandGeo.dispose();
+    },
+  };
 }

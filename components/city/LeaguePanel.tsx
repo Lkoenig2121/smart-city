@@ -6,7 +6,15 @@ import type { CityClock } from "@/lib/city/types";
 import { BALLCLUBS, GAME_END_MINUTE, SERIES_HOST_CITY, leagueStatus } from "@/lib/city/stadium";
 
 /** Closable league table + World Series tracker, shown under the player card. */
-export function LeaguePanel({ clock, cityId }: { clock: CityClock; cityId: string }) {
+export function LeaguePanel({
+  clock,
+  cityId,
+  onJumpToSeries,
+}: {
+  clock: CityClock;
+  cityId: string;
+  onJumpToSeries?: () => void;
+}) {
   const [open, setOpen] = useState(true);
   const { year, dayOfYear, minuteOfDay, dayIndex } = clock;
   const afterFinal = minuteOfDay >= GAME_END_MINUTE;
@@ -117,6 +125,15 @@ export function LeaguePanel({ clock, cityId }: { clock: CityClock; cityId: strin
         </tbody>
       </table>
       {footer ? <p className="mt-1.5 text-[0.65rem] leading-snug text-sky-100/75">{footer}</p> : null}
+      {onJumpToSeries && status.phase !== "series" ? (
+        <button
+          type="button"
+          onClick={onJumpToSeries}
+          className="mt-2 w-full rounded-lg bg-amber-400 px-2.5 py-1.5 text-[0.7rem] font-semibold text-[#1a1206] hover:bg-amber-300"
+        >
+          ⏩ Jump to World Series Game 1 · Oct 26
+        </button>
+      ) : null}
     </div>
   );
 }

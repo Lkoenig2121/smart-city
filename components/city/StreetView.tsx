@@ -87,6 +87,7 @@ import { attachPointerInput } from "@/lib/street/keys";
 import {
   canSleepNow,
   formatClock,
+  jumpToWorldSeries,
   sleepUntilMorning,
 } from "@/lib/simulation/city/cityTick";
 import { weatherEmoji } from "@/lib/simulation/weather/weather";
@@ -1784,7 +1785,15 @@ export function StreetView({
           </div>
           {interior?.kind === "stadium" || atGate ? (
             <div className="pointer-events-auto">
-              <LeaguePanel clock={state.clock} cityId={state.id} />
+              <LeaguePanel
+                clock={state.clock}
+                cityId={state.id}
+                onJumpToSeries={() => {
+                  jumpToWorldSeries(state);
+                  setClock(formatClock(state));
+                  setPlayer(readPlayer());
+                }}
+              />
             </div>
           ) : null}
           {onPoliceDuty(player) ? (

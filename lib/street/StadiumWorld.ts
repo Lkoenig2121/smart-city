@@ -1,7 +1,17 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
 import { formatClock } from "@/lib/simulation/city/cityTick";
-import { isGameNight, stadiumAttendance, stadiumClubFor, stadiumFinal, stadiumGame } from "@/lib/city/stadium";
+import {
+  GAME_END_MINUTE,
+  GAME_START_MINUTE,
+  isGameNight,
+  stadiumAttendance,
+  stadiumClubFor,
+  stadiumFinal,
+  stadiumGame,
+  stadiumSeriesGame,
+} from "@/lib/city/stadium";
+import { buildBlimp, type Blimp } from "./blimp";
 import { createFireworkSparks, FIREWORK_PALETTE, sparkFade, stepFireworks, type FireworkSpark } from "@/lib/city/fireworks";
 import { paintRavensScoreboard } from "./ravensScoreboard";
 import { InteriorControls } from "./interiorControls";
@@ -97,6 +107,9 @@ export class StadiumWorld {
   private sparkDummy = new THREE.Object3D();
   private sparkLife: FireworkSpark[] = [];
   private heldView = new HeldItemView();
+  private blimp: Blimp;
+  private neonDummy = new THREE.Object3D();
+  private blimpBanner = "";
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -210,6 +223,10 @@ export class StadiumWorld {
     }
     if (this.sparks.instanceColor) this.sparks.instanceColor.needsUpdate = true;
     this.scene.add(this.sparks);
+
+    this.blimp = buildBlimp();
+    this.blimp.group.visible = false;
+    this.scene.add(this.blimp.group);
   }
 
   resize(width: number, height: number) {
@@ -251,7 +268,9 @@ export class StadiumWorld {
 
     this.drawScoreboard();
     this.playField();
+    this.flyBlimp(night);
     this.fillCrowd(crowd, dt);
+    this.seriesCrowd(crowd.seated);
     this.playFireworks(crowd.fireworks, dt);
     this.renderer.render(this.scene, this.camera);
   }
@@ -346,6 +365,58 @@ export class StadiumWorld {
     }
   }
 
+  /** World Series sell-out: every seat filled and glow sticks waving. */
+  private seriesCrowd(seated: number) {
+    const crowd = this.interior.seriesCrowd;
+    const on = seated >= 0.95 && stadiumSeriesGame(this.state) !== null;
+    crowd.extras.visible = on;
+    crowd.sticks.visible = on;
+    crowd.bands.visible = on;
+    if (!on) return;
+    const dummy = this.neonDummy;
+    const rest = crowd.neonRest;
+    for (let i = 0; i < crowd.neonCount; i++) {
+      const phase = this.time * 3.2 + i * 0.7;
+      dummy.position.set(
+        rest[i * 3] + 0.2,
+        rest[i * 3 + 1] + 0.3 + Math.abs(Math.sin(phase * 0.75)) * 0.08,
+        rest[i * 3 + 2],
+      );
+      dummy.rotation.set(0, 0, Math.sin(phase) * 0.55);
+      dummy.updateMatrix();
+      crowd.sticks.setMatrixAt(i, dummy.matrix);
+    }
+    crowd.sticks.instanceMatrix.needsUpdate = true;
+  }
+
+  /** World Series only: one slow pass beyond the outfield through the middle innings. */
+  private flyBlimp(night: boolean) {
+    const blimp = this.blimp;
+    const series = stadiumSeriesGame(this.state);
+    const game = series ? stadiumGame(this.state) : null;
+    if (!series || !game?.playing) {
+      blimp.group.visible = false;
+      return;
+    }
+    const playMinutes = GAME_END_MINUTE - GAME_START_MINUTE - 8;
+    const progress = (this.state.clock.minuteOfDay - GAME_START_MINUTE) / playMinutes;
+    const t = (progress - 0.38) / 0.24;
+    if (t < 0 || t > 1) {
+      blimp.group.visible = false;
+      return;
+    }
+    const banner = `WORLD SERIES · GAME ${series.game}`;
+    if (banner !== this.blimpBanner) {
+      const club = stadiumClubFor(this.state);
+      blimp.setBanner(banner, club.accent);
+      this.blimpBanner = banner;
+    }
+    blimp.setNight(night);
+    blimp.group.visible = true;
+    blimp.group.position.set(-95 + 190 * t, 36 + Math.sin(this.time * 0.6) * 0.6, -48);
+    blimp.group.rotation.set(0, 0, Math.sin(this.time * 0.4) * 0.03);
+  }
+
   private placeHit(play: AtBatPlay, t: number, pitchX: number) {
     const x = PLATE.x + pitchX + (play.landX - PLATE.x - pitchX) * t;
     const z = PLATE.z + (play.landZ - PLATE.z) * t;
@@ -433,6 +504,7 @@ export class StadiumWorld {
   }
 
   dispose() {
+    this.blimp.dispose();
     this.heldView.dispose();
     this.interior.dispose();
     this.scoreTexture.dispose();

@@ -1,10 +1,10 @@
 import { advanceDay, formatDate, weekdayOf } from "@/lib/city/calendar";
 import { mulberry32 } from "@/lib/city/rng";
 import type { CityState } from "@/lib/city/types";
-import { STADIUM_DAILY_REVENUE, stadiumIsOpen } from "@/lib/city/stadium";
+import { SERIES_START_DOY, STADIUM_DAILY_REVENUE, stadiumIsOpen } from "@/lib/city/stadium";
 import { tickBuildingStats } from "../buildings/buildingLogic";
 import { stepCitizens, syncCitizenSchedules, wanderOutdoors } from "../citizens/citizenBehavior";
-import { tickCityEvents } from "../events/cityEvents";
+import { bootstrapEvents, tickCityEvents } from "../events/cityEvents";
 import { seedVehicle, stepVehicles } from "../traffic/vehicleMovement";
 import { tickRoadNetwork } from "../traffic/roadNetwork";
 import { SIM_MINUTES_PER_SECOND } from "../weather/weather";
@@ -74,6 +74,24 @@ export function sleepUntilMorning(state: CityState) {
   const { player, interest } = payOvernightInterest(state.clock);
   tickCity(state, 0, true, { skipInterest: true });
   return { slept: true, interest, player };
+}
+
+/** 5:30 PM — gates open and the crowd is filing in before first pitch. */
+export const SERIES_JUMP_MINUTE = 17 * 60 + 30;
+
+/**
+ * Fast-forward to World Series Game 1 (this year's, or next year's once the
+ * series is behind us). Skips the in-between days without simulating them.
+ */
+export function jumpToWorldSeries(state: CityState) {
+  const year = state.clock.dayOfYear < SERIES_START_DOY ? state.clock.year : state.clock.year + 1;
+  state.clock.year = year;
+  state.clock.dayOfYear = SERIES_START_DOY;
+  state.clock.dayIndex = weekdayOf(year, SERIES_START_DOY);
+  state.clock.minuteOfDay = SERIES_JUMP_MINUTE;
+  abandonOpenShift();
+  bootstrapEvents(state);
+  tickCity(state, 0, true, { skipInterest: true });
 }
 
 /** Advance the live city clock by a number of simulated minutes. */

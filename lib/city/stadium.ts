@@ -1,5 +1,6 @@
 import { footprintFor } from "@/lib/simulation/buildings/buildings";
 import type { Building, CityClock, CityState } from "@/lib/city/types";
+import { weekdayOf } from "./calendar";
 import { hash2 } from "./rng";
 
 export const STADIUM_COST = 750_000;
@@ -53,7 +54,7 @@ export const BALLCLUBS: Record<string, Ballclub> = {
     visitorAbbrev: "BEA",
     visitorLineup: BEARS_ROSTER,
     accent: "#1f4d8c",
-    winRate: HOME_WIN_RATE,
+    winRate: 0.6,
     seed: 0,
   },
   dustfall: {
@@ -66,7 +67,7 @@ export const BALLCLUBS: Record<string, Ballclub> = {
     visitorAbbrev: "COY",
     visitorLineup: COYOTES_ROSTER,
     accent: "#2a6b5a",
-    winRate: 0.68,
+    winRate: 0.57,
     seed: 37,
   },
   mountain: {
@@ -79,7 +80,7 @@ export const BALLCLUBS: Record<string, Ballclub> = {
     visitorAbbrev: "LYX",
     visitorLineup: LYNX_ROSTER,
     accent: "#5a7a6a",
-    winRate: 0.56,
+    winRate: 0.45,
     seed: 71,
   },
   coastal: {
@@ -92,7 +93,7 @@ export const BALLCLUBS: Record<string, Ballclub> = {
     visitorAbbrev: "TID",
     visitorLineup: TIDES_ROSTER,
     accent: "#3d7ea6",
-    winRate: 0.62,
+    winRate: 0.52,
     seed: 113,
   },
   future: {
@@ -105,7 +106,7 @@ export const BALLCLUBS: Record<string, Ballclub> = {
     visitorAbbrev: "PHN",
     visitorLineup: PHANTOMS_ROSTER,
     accent: "#6a8cff",
-    winRate: 0.7,
+    winRate: 0.55,
     seed: 157,
   },
 };
@@ -201,6 +202,11 @@ function lastFinalDoy(clock: CityClock) {
   return clock.minuteOfDay >= GAME_END_MINUTE ? clock.dayOfYear : clock.dayOfYear - 1;
 }
 
+/** League games count Fri–Sun (~88 a season); weeknights are exhibitions. */
+export function isLeagueDay(year: number, doy: number) {
+  return weekdayOf(year, doy) >= 4;
+}
+
 function standingsThrough(year: number, lastDoy: number): TeamRecord[] {
   const last = Math.min(SEASON_END_DOY, lastDoy);
   const rows = LEAGUE_CITY_IDS.map((cityId) => {
@@ -208,6 +214,7 @@ function standingsThrough(year: number, lastDoy: number): TeamRecord[] {
     let wins = 0;
     let losses = 0;
     for (let d = SEASON_START_DOY; d <= last; d++) {
+      if (!isLeagueDay(year, d)) continue;
       if (homeFavoredToday(clockOn(year, d), club)) wins += 1;
       else losses += 1;
     }
@@ -235,7 +242,7 @@ export function worldSeriesFor(year: number): WorldSeries {
   let top = 0;
   let second = 0;
   for (let i = 0; top < SERIES_WINS_NEEDED && second < SERIES_WINS_NEEDED; i++) {
-    const topSeedWon = hash2(year, 900 + i, 77) < odds;
+    const topSeedWon = leagueRoll(year, 900 + i, 77) < odds;
     if (topSeedWon) top += 1;
     else second += 1;
     games.push({ game: i + 1, doy: SERIES_START_DOY + i, topSeedWon });
@@ -511,8 +518,19 @@ function inningOrdinal(n: number) {
   return `${n}th`;
 }
 
+/** Well-mixed 0–1 roll; `hash2` loses its low bits for year-sized inputs. */
+function leagueRoll(a: number, b: number, c: number) {
+  let h = Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b | 0, 0x165667b1) ^ Math.imul(c | 0, 0x9e3779b1);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
 function homeFavoredToday(clock: CityClock, club: Ballclub) {
-  return hash2(clock.year, clock.dayOfYear, 501 + club.seed) < club.winRate;
+  return leagueRoll(clock.year, clock.dayOfYear, 501 + club.seed) < club.winRate;
 }
 
 function simulateGame(clock: CityClock, minuteOfDay: number, club: Ballclub, favorHome: boolean): StadiumGame {
