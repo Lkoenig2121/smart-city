@@ -12,6 +12,14 @@ import {
   stadiumWinner,
 } from "@/lib/city/stadium";
 import {
+  buyGameTicket,
+  buySeasonPass,
+  GAME_TICKET_PRICE,
+  gateIsTicketed,
+  SEASON_PASS_PRICE,
+  stadiumAccess,
+} from "@/lib/city/tickets";
+import {
   canEnterLodgingRoom,
   findLodging,
   findLodgingRoom,
@@ -189,6 +197,16 @@ export function StreetView({
   const interiorRef = useRef(interior);
   interiorRef.current = interior;
   const [atGate, setAtGate] = useState(false);
+  const [ticketBooth, setTicketBooth] = useState(false);
+  const ticketBoothRef = useRef(false);
+  const [ticketError, setTicketError] = useState<string | null>(null);
+  const [passToast, setPassToast] = useState<number | null>(null);
+  const showPassToast = () => setPassToast(Date.now());
+  useEffect(() => {
+    if (passToast === null) return;
+    const timer = window.setTimeout(() => setPassToast(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [passToast]);
   const [lodgingDoor, setLodgingDoor] = useState<Building | null>(null);
   const [mountainTrail, setMountainTrail] = useState<"enter" | "exit" | null>(
     null,
@@ -627,6 +645,18 @@ export function StreetView({
   }, [active, atDesk, pickingStop, pickingRoom, roomCustomize, riding]);
 
   useEffect(() => {
+    if (!ticketBooth) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== "Escape") return;
+      ticketBoothRef.current = false;
+      setTicketBooth(false);
+      setTicketError(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ticketBooth]);
+
+  useEffect(() => {
     if (!active) return;
     const onDown = (event: globalThis.MouseEvent) => {
       if (event.button !== 0) return;
@@ -759,6 +789,14 @@ export function StreetView({
         return true;
       }
       if (target.kind === "stadium") {
+        const access = stadiumAccess(readPlayer(), state);
+        if (access === "needed") {
+          ticketBoothRef.current = true;
+          setTicketBooth(true);
+          if (document.pointerLockElement === canvas) document.exitPointerLock();
+          return true;
+        }
+        if (access === "pass" && gateIsTicketed(state)) showPassToast();
         setInterior({ kind: "stadium" });
         setPlayer(discoverPlace("ravens-ballpark", 48));
         return true;
@@ -936,6 +974,11 @@ export function StreetView({
       const gate = world.nearStadiumGate();
       atGateRef.current = gate;
       setAtGate((prev) => (prev === gate ? prev : gate));
+      if (!gate && ticketBoothRef.current) {
+        ticketBoothRef.current = false;
+        setTicketBooth(false);
+        setTicketError(null);
+      }
       const door = world.nearLodgingEntrance();
       lodgingDoorRef.current = door;
       setLodgingDoor((prev) => (prev?.id === door?.id ? prev : door));
@@ -1701,6 +1744,24 @@ export function StreetView({
   const ballclub = stadiumClubFor(state);
   const seriesGame = stadiumSeriesGame(state);
   const stadiumBuilding = findStadium(state);
+  const parkName = stadiumBuilding?.name ?? ballclub.parkName;
+  const gateAccess = atGate ? stadiumAccess(player, state) : null;
+  const closeTicketBooth = () => {
+    ticketBoothRef.current = false;
+    setTicketBooth(false);
+    setTicketError(null);
+  };
+  const purchaseTicket = (kind: "game" | "season") => {
+    const result = kind === "game" ? buyGameTicket(state, parkName) : buySeasonPass(state, parkName);
+    if (typeof result === "string") {
+      setTicketError(result);
+      return;
+    }
+    setPlayer(result);
+    closeTicketBooth();
+    if (kind === "season") showPassToast();
+    setInterior({ kind: "stadium" });
+  };
   const doorNearby = Boolean(venueDoor || lodgingDoor || subwayDoor || atGate);
   const carAndDoorChoice = Boolean(
     nearCar && doorNearby && !driving && !inside && !failed,
@@ -2147,19 +2208,76 @@ export function StreetView({
         </div>
       ) : null}
 
-      {atGate && !carAndDoorChoice && !inside && !failed ? (
+      {atGate && !carAndDoorChoice && !inside && !failed && !ticketBooth ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
-              {stadiumBuilding?.name ?? ballclub.parkName}
+              {parkName}
             </p>
             <p className="mt-1 text-xl font-semibold text-white">
-              Enter stadium
+              {gateAccess === "needed" ? "Buy a ticket" : "Enter stadium"}
             </p>
             <p className="mt-1 text-sm text-slate-300">
               <span className="font-semibold text-white">Click</span> or{" "}
               <span className="font-semibold text-white">E</span>
+              {gateAccess === "needed"
+                ? ` · ${formatDollars(GAME_TICKET_PRICE)} tonight or ${formatDollars(SEASON_PASS_PRICE)} season pass`
+                : gateAccess === "pass"
+                  ? " · season pass"
+                  : gateAccess === "ticket"
+                    ? " · ticket for tonight"
+                    : " · no game today, free entry"}
             </p>
+          </div>
+        </div>
+      ) : null}
+
+      {ticketBooth && atGate && !inside && !failed ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40">
+          <div className="w-80 rounded-2xl border border-amber-300/40 bg-slate-950/95 p-5 text-center shadow-2xl">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
+              {parkName} · box office
+            </p>
+            <p className="mt-1 text-lg font-semibold text-white">
+              {seriesGame
+                ? `World Series · Game ${seriesGame.game}`
+                : `${ballclub.visitorShort} at ${ballclub.shortName}`}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              Wallet {formatDollars(player.wallet)}
+            </p>
+            <div className="mt-4 grid gap-2">
+              <button
+                type="button"
+                onClick={() => purchaseTicket("game")}
+                className="rounded-xl bg-amber-400 px-4 py-2.5 text-left text-slate-950 hover:bg-amber-300"
+              >
+                <span className="flex items-baseline justify-between">
+                  <span className="font-semibold">Game ticket</span>
+                  <span className="font-semibold tabular-nums">{formatDollars(GAME_TICKET_PRICE)}</span>
+                </span>
+                <span className="block text-xs text-slate-800">Tonight&apos;s game at this park</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => purchaseTicket("season")}
+                className="rounded-xl border border-amber-300/50 bg-white/5 px-4 py-2.5 text-left text-white hover:bg-white/10"
+              >
+                <span className="flex items-baseline justify-between">
+                  <span className="font-semibold">Season pass</span>
+                  <span className="font-semibold tabular-nums">{formatDollars(SEASON_PASS_PRICE)}</span>
+                </span>
+                <span className="block text-xs text-slate-400">Every game at every stadium, forever</span>
+              </button>
+            </div>
+            {ticketError ? <p className="mt-3 text-xs text-rose-300">{ticketError}</p> : null}
+            <button
+              type="button"
+              onClick={closeTicketBooth}
+              className="mt-3 text-xs text-slate-400 hover:text-white"
+            >
+              Not now · Esc
+            </button>
           </div>
         </div>
       ) : null}
@@ -2845,6 +2963,20 @@ export function StreetView({
           startApp={phoneStartApp}
           startThreadId={phoneThread}
         />
+      ) : null}
+
+      {passToast !== null && interior?.kind === "stadium" && !failed ? (
+        <div className="pointer-events-none absolute right-4 top-16 z-40 w-64 rounded-2xl border border-amber-300/40 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur">
+          <p className="text-[0.65rem] uppercase tracking-[0.2em] text-amber-300">
+            Season pass · scanned
+          </p>
+          <p className="mt-1 text-sm font-semibold text-white">
+            Welcome to {parkName}
+          </p>
+          <p className="text-xs text-slate-300">
+            {seriesGame ? `World Series · Game ${seriesGame.game}` : "Tonight's game"} · no ticket needed
+          </p>
+        </div>
       ) : null}
 
       {phoneToast && !phoneOpen && !failed ? (

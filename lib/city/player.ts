@@ -148,6 +148,10 @@ export interface PlayerState {
   equippedFurnish: RoomLoadout;
   ownedHomes: OwnedHome[];
   activeHomeId: string | null;
+  /** Ballpark season pass — every stadium, every game. */
+  seasonPass: boolean;
+  /** Single-game tickets as `cityId:year:dayOfYear`, newest first. */
+  ballTickets: string[];
 }
 
 export function emptyPlayer(): PlayerState {
@@ -170,6 +174,8 @@ export function emptyPlayer(): PlayerState {
     equippedFurnish: emptyRoomLoadout(),
     ownedHomes: [],
     activeHomeId: null,
+    seasonPass: false,
+    ballTickets: [],
   };
 }
 
@@ -552,6 +558,10 @@ function parsePlayer(value: unknown): PlayerState {
     equippedFurnish: parseRoomLoadout(raw.equippedFurnish),
     ownedHomes: parseOwnedHomes(raw.ownedHomes),
     activeHomeId: typeof raw.activeHomeId === "string" ? raw.activeHomeId : null,
+    seasonPass: raw.seasonPass === true,
+    ballTickets: Array.isArray(raw.ballTickets)
+      ? raw.ballTickets.filter((key): key is string => typeof key === "string").slice(0, 12)
+      : [],
   };
 }
 

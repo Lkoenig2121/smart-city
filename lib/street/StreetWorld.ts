@@ -14,6 +14,7 @@ import { StreetControls, EYE_HEIGHT, type MoveMode } from "./controls";
 import { skyTexture } from "./textures";
 import { StreetWeatherFx } from "./weatherFx";
 import { StreetFireworks } from "./streetFireworks";
+import { ValetLine } from "./valetLine";
 import { HeldItemView } from "./heldItem";
 import { DutyUniformView } from "./dutyUniform";
 import type { PhoneWaypoint } from "@/lib/city/phone";
@@ -62,6 +63,7 @@ export class StreetWorld {
   private time = 0;
   private weatherFx = new StreetWeatherFx();
   private fireworks = new StreetFireworks();
+  private valet: ValetLine;
   private fireworkOrigin = new THREE.Vector3();
   private heldView = new HeldItemView();
   private dutyView = new DutyUniformView();
@@ -123,6 +125,8 @@ export class StreetWorld {
     this.scene.add(this.agents.group);
     this.scene.add(this.weatherFx.group);
     this.city.group.add(this.fireworks.group);
+    this.valet = new ValetLine(state, (x, z) => this.controls.groundAt(x, z));
+    this.city.group.add(this.valet.group);
 
     // The sun casts across a moving box centred on the player.
     this.sun.castShadow = true;
@@ -974,6 +978,7 @@ export class StreetWorld {
 
     this.weatherFx.update(dt, this.camera, this.state.weather?.kind ?? "clear");
     this.updateFireworks(dt);
+    this.valet.update(dt);
     this.updateGlow(dt);
     this.updateNavArrows();
     this.renderer.render(this.scene, this.camera);
@@ -1202,6 +1207,7 @@ export class StreetWorld {
     this.weatherFx.dispose();
     this.fireworks.group.removeFromParent();
     this.fireworks.dispose();
+    this.valet.dispose();
     this.navArrows.geometry.dispose();
     this.navMat.dispose();
     this.city.dispose();

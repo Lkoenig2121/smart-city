@@ -139,6 +139,13 @@ export function stadiumGateTile(building: Building) {
   };
 }
 
+/** This city's park hosts a game today (regular season or World Series). */
+export function hasGameToday(state: CityState) {
+  const stadium = findStadium(state);
+  if (!stadium || !stadiumIsOpen(stadium)) return false;
+  return matchupFor(state.id, state.clock) !== null;
+}
+
 export function isGameNight(state: CityState) {
   const stadium = findStadium(state);
   if (!stadium || !stadiumIsOpen(stadium)) return false;
