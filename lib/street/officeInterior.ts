@@ -587,9 +587,11 @@ function buildRoof(building: Building, bucket: Bucket, screen: ConferenceScreen)
   trimB.box(MIN_X, MIN_Z, MIN_X + 0.06, MAX_Z, 0, 1.1, glass);
   trimB.box(MAX_X - 0.06, MIN_Z, MAX_X, MAX_Z, 0, 1.1, glass);
   trimB.box(MIN_X, MAX_Z - 0.06, MAX_X, MAX_Z, 0, 1.1, glass);
+  trimB.box(MIN_X, MIN_Z, MAX_X, MIN_Z + 0.06, 0, 1.1, glass);
   wallB.box(MIN_X - 0.03, MIN_Z, MIN_X + 0.09, MAX_Z, 1.1, 1.18, steel);
   wallB.box(MAX_X - 0.09, MIN_Z, MAX_X + 0.03, MAX_Z, 1.1, 1.18, steel);
   wallB.box(MIN_X, MAX_Z - 0.09, MAX_X, MAX_Z + 0.03, 1.1, 1.18, steel);
+  wallB.box(MIN_X, MIN_Z - 0.03, MAX_X, MIN_Z + 0.09, 1.1, 1.18, steel);
 
   const faceZ = -6.8;
   wallB.box(-6, MIN_Z, 6, faceZ, 0, 3.4, house);
