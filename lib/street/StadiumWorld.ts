@@ -10,6 +10,7 @@ import {
   stadiumFinal,
   stadiumGame,
   stadiumSeriesGame,
+  ballclubFor,
 } from "@/lib/city/stadium";
 import { consumableById } from "@/lib/city/consumables";
 import { buildBlimp, type Blimp } from "./blimp";
@@ -163,6 +164,7 @@ export class StadiumWorld {
     this.heldView.attach(this.camera);
     this.interior = buildStadiumInterior({
       greenMonster: [...this.state.buildings.values()].some(hasGreenMonster),
+      club: ballclubFor(this.state),
     });
     this.scene.add(this.interior.group);
 

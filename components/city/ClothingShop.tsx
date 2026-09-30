@@ -13,11 +13,16 @@ interface Props {
   clock: CityClock;
   onPlayer: (player: PlayerState) => void;
   onClose: () => void;
+  /** Ballclub whose merch a ballpark team store stocks. */
+  club?: string;
+  /** Overrides the store's catalog name and blurb. */
+  title?: string;
+  blurb?: string;
 }
 
-export function ClothingShop({ store, player, clock, onPlayer, onClose }: Props) {
+export function ClothingShop({ store, player, clock, onPlayer, onClose, club, title, blurb }: Props) {
   const info = STORES.find((item) => item.id === store);
-  const catalog = useMemo(() => clothingInStore(store), [store]);
+  const catalog = useMemo(() => clothingInStore(store, club), [store, club]);
   const [picked, setPicked] = useState(catalog[0]?.id ?? CLOTHING[0].id);
   const [note, setNote] = useState<string | null>(null);
   const item = catalog.find((piece) => piece.id === picked) ?? catalog[0];
@@ -40,8 +45,8 @@ export function ClothingShop({ store, player, clock, onPlayer, onClose }: Props)
       <div className="flex max-h-[min(44rem,calc(100vh-2rem))] w-[min(52rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-amber-300/30 bg-[#10141c]/95 shadow-2xl">
         <header className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-3">
           <div>
-            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">{info?.name ?? "Store"}</p>
-            <p className="text-lg font-semibold text-white">{info?.blurb}</p>
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">{title ?? info?.name ?? "Store"}</p>
+            <p className="text-lg font-semibold text-white">{blurb ?? info?.blurb}</p>
             <p className="text-sm text-sky-100/80">Wallet {formatDollars(player.wallet)}</p>
           </div>
           <button

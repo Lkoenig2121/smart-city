@@ -44,6 +44,8 @@ export interface StadiumInterior {
 export interface StadiumStand {
   name: string;
   title: string;
+  /** Food counters open a snack menu; the team store opens the club's merch. */
+  kind: "food" | "merch";
   items: string[];
   color: string;
   /** Point just in front of the counter. */
@@ -156,7 +158,16 @@ const IVY = "#1f4a28";
  * A walkable ballpark: concourse behind home plate, seating bowl, field,
  * dugouts, scoreboard, and concession stands around the bowl.
  */
-export function buildStadiumInterior(opts: { greenMonster?: boolean } = {}): StadiumInterior {
+export interface StadiumClub {
+  shortName: string;
+  fullName: string;
+  accent: string;
+}
+
+export function buildStadiumInterior(
+  opts: { greenMonster?: boolean; club?: StadiumClub } = {},
+): StadiumInterior {
+  const club = opts.club ?? { shortName: "Ravens", fullName: "Riverside Ravens", accent: "#1f4d8c" };
   const group = new THREE.Group();
   const blockers: Blocker[] = [];
   const disposables: Array<{ dispose: () => void }> = [];
@@ -360,6 +371,23 @@ export function buildStadiumInterior(opts: { greenMonster?: boolean } = {}): Sta
     { name: "PIZZA", menu: "Pepperoni · Extra cheese", face: "x+", x: -24.8, z: 2.2, color: "#b83218", width: 5.6 },
     { name: "SWEETS", menu: "Cotton candy · Popcorn", face: "x-", x: 21.3, z: 2.2, color: "#7b2d8b", width: 5.6 },
     { name: "PIZZERIA", menu: "Whole pies · Calzones · Garlic knots", face: "x-", x: 21.3, z: -9.3, color: "#2f7a3e", width: 5.6 },
+    // Freestanding kiosks on the concourse midway between each pair of aisle stairs, narrow
+    // enough that the food lines on either side still fit past them.
+    ...[(AISLES[1] + AISLES[0]) / 2, (AISLES[0] + AISLES[2]) / 2].map(
+      (mid): ShopSpec => ({
+        name: "TEAM STORE",
+        title: `${club.shortName} Team Store`,
+        menu: `${club.fullName} · Caps · Jerseys`,
+        face: "z+",
+        x: mid - 2,
+        z: 31,
+        color: club.accent,
+        width: 4,
+        depth: 2.6,
+        maxLine: 4,
+        kind: "merch",
+      }),
+    ),
   ];
   const stands = shops.map((shop) => addShop(wallB, trimB, blockers, group, disposables, shop));
 
@@ -444,6 +472,9 @@ interface ShopSpec {
   color: string;
   width?: number;
   depth?: number;
+  title?: string;
+  kind?: "merch";
+  maxLine?: number;
 }
 
 function addShop(
@@ -476,6 +507,10 @@ function addShop(
   walls.box(x0, z0, x1, z1, 0, h, concrete);
   walls.box(x0 - 0.06, z0 - 0.06, x1 + 0.06, z1 + 0.06, h, h + 0.12, accent);
   blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, maxY: STAND_CLEAR + 0.05 });
+  const addFoodProps = (a: number, b: number, c: number, alongX = false) =>
+    spec.kind === "merch"
+      ? addMerchProps(trim, accent, a, b, c, alongX)
+      : addCounterFood(trim, group, disposables, spec.name, a, b, c, alongX);
 
   const awning = 0.7;
   const cx = (x0 + x1) / 2;
@@ -486,21 +521,21 @@ function addShop(
   if (spec.face === "x+") {
     trim.box(x1, z0 + 0.12, x1 + awning, z1 - 0.12, 1.95, 2.22, accent);
     trim.box(x1 - 0.08, z0 + 0.3, x1 + 0.12, z1 - 0.3, 1.02, 1.16, counterTop);
-    addFoodProps(trim, group, disposables, spec.name, x1 - 0.45, z0 + 0.6, z1 - 0.6);
+    addFoodProps(x1 - 0.45, z0 + 0.6, z1 - 0.6);
     signX = x1 + 0.1;
     signZ = cz;
     rotY = -Math.PI / 2;
   } else if (spec.face === "x-") {
     trim.box(x0 - awning, z0 + 0.12, x0, z1 - 0.12, 1.95, 2.22, accent);
     trim.box(x0 - 0.12, z0 + 0.3, x0 + 0.08, z1 - 0.3, 1.02, 1.16, counterTop);
-    addFoodProps(trim, group, disposables, spec.name, x0 + 0.2, z0 + 0.6, z1 - 0.6);
+    addFoodProps(x0 + 0.2, z0 + 0.6, z1 - 0.6);
     signX = x0 - 0.1;
     signZ = cz;
     rotY = Math.PI / 2;
   } else if (spec.face === "z+") {
     trim.box(x0 + 0.12, z1, x1 - 0.12, z1 + awning, 1.95, 2.22, accent);
     trim.box(x0 + 0.3, z1 - 0.08, x1 - 0.3, z1 + 0.12, 1.02, 1.16, counterTop);
-    addFoodProps(trim, group, disposables, spec.name, x0 + 0.6, z1 - 0.45, x1 - 0.6, true);
+    addFoodProps(x0 + 0.6, z1 - 0.45, x1 - 0.6, true);
     signX = cx;
     signZ = z1 + 0.1;
     rotY = 0;
@@ -539,13 +574,14 @@ function addShop(
       ];
   return {
     name: spec.name,
-    title: STAND_TITLES[spec.name] ?? spec.name,
+    title: spec.title ?? STAND_TITLES[spec.name] ?? spec.name,
+    kind: spec.kind ?? "food",
     items: STADIUM_STAND_MENUS[spec.name] ?? [],
     color: spec.color,
     counter,
     out,
     walk,
-    maxLine: side ? 3 : 7,
+    maxLine: spec.maxLine ?? (side ? 3 : 7),
   } satisfies StadiumStand;
 }
 
@@ -566,7 +602,49 @@ const COUNTER_DISPLAYS: Record<string, string[]> = {
   PRETZELS: ["food-pretzel", "food-pretzel-cheese", "food-pretzel"],
 };
 
-function addFoodProps(
+/** Folded jerseys, caps, and a foam finger on the counter, with jerseys hanging in the window. */
+function addMerchProps(trim: MeshBuilder, accent: THREE.Color, a: number, b: number, c: number, alongX: boolean) {
+  const cream = new THREE.Color("#f4f1ea");
+  const shelf = new THREE.Color("#3d342c");
+  // Local frame: `u` runs along the counter, `v` is distance out from the stand's front face.
+  const face = (alongX ? b : a) + 0.45;
+  const box = (u0: number, v0: number, u1: number, v1: number, y0: number, y1: number, color: THREE.Color) => {
+    if (alongX) trim.box(u0, face + v0, u1, face + v1, y0, y1, color);
+    else trim.box(face + v0, u0, face + v1, u1, y0, y1, color);
+  };
+  const start = alongX ? a : b;
+  const slot = (c - start) / 3;
+  const mid = (i: number) => start + slot * (i + 0.5);
+
+  box(start, 0, c, 0.34, 1.14, 1.18, shelf);
+
+  for (let layer = 0; layer < 4; layer++) {
+    const y = 1.18 + layer * 0.06;
+    box(mid(0) - 0.22, 0.03, mid(0) + 0.22, 0.3, y, y + 0.055, layer % 2 ? cream : accent);
+  }
+
+  for (const offset of [-0.2, 0.2]) {
+    const u = mid(1) + offset;
+    box(u - 0.11, 0.03, u + 0.11, 0.24, 1.18, 1.3, accent);
+    box(u - 0.1, 0.04, u + 0.1, 0.23, 1.3, 1.33, accent);
+    box(u - 0.1, 0.24, u + 0.1, 0.36, 1.18, 1.2, accent);
+    box(u - 0.02, 0.12, u + 0.02, 0.16, 1.33, 1.35, cream);
+  }
+
+  box(mid(2) - 0.1, 0.08, mid(2) + 0.1, 0.24, 1.18, 1.22, cream);
+  box(mid(2) - 0.08, 0.12, mid(2) + 0.08, 0.2, 1.22, 1.56, accent);
+  box(mid(2) - 0.03, 0.125, mid(2) + 0.03, 0.195, 1.56, 1.78, accent);
+
+  // Two jerseys hang flat on the front face at the window edges.
+  for (const u of [start + 0.1, c - 0.1]) {
+    box(u - 0.24, 0.01, u + 0.24, 0.05, 1.3, 1.86, accent);
+    box(u - 0.4, 0.01, u + 0.4, 0.05, 1.66, 1.86, accent);
+    box(u - 0.08, 0.04, u + 0.08, 0.06, 1.8, 1.86, cream);
+    box(u - 0.24, 0.04, u + 0.24, 0.06, 1.5, 1.56, cream);
+  }
+}
+
+function addCounterFood(
   trim: MeshBuilder,
   group: THREE.Group,
   disposables: Array<{ dispose: () => void }>,

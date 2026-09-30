@@ -1,4 +1,5 @@
 import type { SkillPath } from "./skills";
+import { BALLCLUBS } from "./stadium";
 
 export type ClothSlot = "head" | "upper" | "lower" | "feet" | "accessory";
 export type ClothStore =
@@ -17,7 +18,8 @@ export type ClothStore =
   | "tech"
   | "music"
   | "sport"
-  | "toys";
+  | "toys"
+  | "ballpark";
 export type ClothCollection =
   | "everyday"
   | "athletic"
@@ -40,6 +42,8 @@ export interface ClothingItem {
   color: string;
   accent: string;
   bonus?: { stat: import("./skills").StatId; amount: number };
+  /** Ballclub city id for team merch; only that club's park stocks it. */
+  club?: string;
 }
 
 export const COLLECTIONS: { id: ClothCollection; name: string; level: number }[] = [
@@ -68,7 +72,23 @@ export const STORES: { id: ClothStore; name: string; blurb: string }[] = [
   { id: "music", name: "Atrium Records", blurb: "Headphones, caps, and band tees." },
   { id: "sport", name: "Court Sport", blurb: "Jerseys, shorts, and court shoes." },
   { id: "toys", name: "Sky Toys", blurb: "Kids packs, caps, and play layers." },
+  { id: "ballpark", name: "Team Store", blurb: "Caps, jerseys, and game-day gear." },
 ];
+
+const CREAM = "#f4f1ea";
+
+/** Every club's merch table, sold only at that club's ballpark. */
+const TEAM_MERCH: ClothingItem[] = Object.entries(BALLCLUBS).flatMap(([cityId, club]) => {
+  const base = { store: "ballpark" as const, collection: "everyday" as const, level: 1, club: cityId };
+  return [
+    { ...base, id: `${cityId}-cap`, name: `${club.shortName} Cap`, description: `The fitted home cap from ${club.parkName}.`, price: 35, slot: "head" as const, category: "accessories" as const, color: club.accent, accent: CREAM },
+    { ...base, id: `${cityId}-jersey`, name: `${club.shortName} Home Jersey`, description: `Pinstriped home whites with ${club.abbrev} across the chest.`, price: 120, slot: "upper" as const, category: "clothing" as const, color: CREAM, accent: club.accent },
+    { ...base, id: `${cityId}-road-jersey`, name: `${club.shortName} Road Jersey`, description: `Away colors, as worn on the road.`, price: 120, slot: "upper" as const, category: "clothing" as const, color: club.accent, accent: CREAM },
+    { ...base, id: `${cityId}-hoodie`, name: `${club.fullName} Hoodie`, description: "Heavy fleece for cool night games.", price: 85, slot: "upper" as const, category: "clothing" as const, color: club.accent, accent: CREAM },
+    { ...base, id: `${cityId}-finger`, name: `${club.shortName} Foam Finger`, description: "We're number one. Loudly.", price: 20, slot: "accessory" as const, category: "accessories" as const, color: club.accent, accent: CREAM },
+    { ...base, id: `${cityId}-pennant`, name: `${club.shortName} Pennant`, description: `A felt ${club.abbrev} pennant on a wooden stick.`, price: 15, slot: "accessory" as const, category: "accessories" as const, color: CREAM, accent: club.accent },
+  ];
+});
 
 export const CLOTHING: ClothingItem[] = [
   { id: "tee-harbor", name: "Harbor Tee", description: "Soft cotton with a river print.", price: 45, slot: "upper", category: "clothing", store: "fashion", collection: "everyday", level: 1, color: "#d8c4a8", accent: "#2f5d4a" },
@@ -154,6 +174,8 @@ export const CLOTHING: ClothingItem[] = [
   { id: "cloak-legend", name: "Riverside Legend Coat", description: "The city's highest cut.", price: 2500, slot: "upper", category: "clothing", store: "gallery", collection: "legendary", level: 100, color: "#c9a44c", accent: "#1a1206", bonus: { stat: "xpGain", amount: 0.05 } },
   { id: "boot-legend", name: "Legend Boots", description: "Walk the whole map in them.", price: 1800, slot: "feet", category: "clothing", store: "gallery", collection: "legendary", level: 100, color: "#1a1206", accent: "#c9a44c", bonus: { stat: "walk", amount: 0.05 } },
   { id: "pin-legend", name: "Founder's Pin", description: "A tiny gold river.", price: 900, slot: "accessory", category: "accessories", store: "gallery", collection: "legendary", level: 100, color: "#c9a44c", accent: "#f4f1ea", bonus: { stat: "salary", amount: 0.05 } },
+
+  ...TEAM_MERCH,
 ];
 
 export const STARTER_CLOTHING = ["tee-harbor", "jeans-indigo", "kicks-river"];
@@ -165,8 +187,10 @@ export function clothingById(id: string) {
   return CLOTHING.find((item) => item.id === id) ?? null;
 }
 
-export function clothingInStore(store: ClothStore) {
-  return CLOTHING.filter((item) => item.store === store && item.price > 0);
+export function clothingInStore(store: ClothStore, club?: string) {
+  return CLOTHING.filter(
+    (item) => item.store === store && item.price > 0 && (item.club === undefined || item.club === club),
+  );
 }
 
 export const EMPTY_SLOTS: Record<ClothSlot, string | null> = {

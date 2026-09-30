@@ -2,6 +2,7 @@
 
 import type { Building, CityState } from "@/lib/city/types";
 import {
+  ballclubFor,
   findStadium,
   GAME_HOURS_LABEL,
   isGameNight,
@@ -1089,8 +1090,14 @@ export function StreetView({
       consumeKey: (event) => {
         if (event.code !== "KeyE") return false;
         event.preventDefault();
-        if (mallSnackRef.current || characterMenuRef.current) return true;
+        if (mallSnackRef.current || mallShopRef.current || characterMenuRef.current) return true;
         const stand = world.nearStand();
+        if (stand?.kind === "merch") {
+          mallShopRef.current = "ballpark";
+          setMallShop("ballpark");
+          if (document.pointerLockElement === canvas) document.exitPointerLock();
+          return true;
+        }
         if (stand && stand.items.length) {
           const menu = { name: stand.title, items: stand.items };
           mallSnackRef.current = menu;
@@ -1131,7 +1138,9 @@ export function StreetView({
       world.dispose();
       stadiumRef.current = null;
       mallSnackRef.current = null;
+      mallShopRef.current = null;
       setMallSnack(null);
+      setMallShop(null);
       setMallHut(null);
     };
   }, [active, interior, state]);
@@ -2879,22 +2888,30 @@ export function StreetView({
         />
       ) : null}
 
-      {interior?.kind === "stadium" && mallHut && !mallSnack && !characterMenu ? (
+      {interior?.kind === "stadium" && mallHut && !mallSnack && !mallShop && !characterMenu ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
-              {mallHut} · press <span className="font-semibold text-white">E</span> to order
+              {mallHut} · press <span className="font-semibold text-white">E</span> to{" "}
+              {mallHut.endsWith("Team Store") ? "shop merch" : "order"}
             </p>
           </div>
         </div>
       ) : null}
 
-      {mallShop && venueBuilding && interior?.kind === "venue" ? (
+      {mallShop && ((venueBuilding && interior?.kind === "venue") || interior?.kind === "stadium") ? (
         <ClothingShop
           store={mallShop}
           player={player}
           clock={state.clock}
           onPlayer={setPlayer}
+          {...(interior?.kind === "stadium"
+            ? {
+                club: state.id,
+                title: `${ballclubFor(state).shortName} Team Store`,
+                blurb: `${ballclubFor(state).parkName} · Caps, jerseys, and game-day gear`,
+              }
+            : {})}
           onClose={() => {
             mallShopRef.current = null;
             setMallShop(null);
