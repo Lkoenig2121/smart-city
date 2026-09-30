@@ -8,6 +8,9 @@ import { HeldItemView } from "./heldItem";
 import { DutyUniformView } from "./dutyUniform";
 import { TILE } from "./buildCity";
 
+/** Half-width the office floor needs clear of neighbouring buildings (its walls sit at ±11). */
+const OFFICE_CLEARANCE = 12.5;
+
 export class VenueWorld {
   readonly camera: THREE.PerspectiveCamera;
   readonly controls: InteriorControls;
@@ -22,6 +25,9 @@ export class VenueWorld {
   private heldView = new HeldItemView();
   private dutyView = new DutyUniformView();
   private mall: boolean;
+  private onRoof = false;
+  private outside = false;
+  private cityScale = 1;
   private borrowedCity: THREE.Group | null = null;
 
   constructor(canvas: HTMLCanvasElement, private state: CityState, building: Building) {
@@ -42,7 +48,7 @@ export class VenueWorld {
     this.scene.add(this.camera);
     this.heldView.attach(this.camera);
     this.dutyView.attach(this.camera);
-    this.interior = buildVenueInterior(building);
+    this.interior = buildVenueInterior(building, () => this.state);
     this.scene.add(this.interior.group);
 
     this.controls = new InteriorControls(
@@ -111,6 +117,18 @@ export class VenueWorld {
 
   attachCity(city: THREE.Group) {
     this.detachCity();
+    if (this.interior.elevator) {
+      // Office floors are wider than slim towers, so grow the streets until neighbours clear the glass.
+      const halfW = Math.max(1, (this.building.width * TILE) / 2);
+      const halfD = Math.max(1, (this.building.depth * TILE) / 2);
+      this.cityScale = Math.max(1, OFFICE_CLEARANCE / halfW, OFFICE_CLEARANCE / halfD);
+      city.scale.setScalar(this.cityScale);
+      city.rotation.set(0, 0, 0);
+      this.scene.add(city);
+      this.borrowedCity = city;
+      this.placeOfficeCity();
+      return;
+    }
     const halfW = Math.max(1, (this.building.width * TILE) / 2);
     const halfD = Math.max(1, (this.building.depth * TILE) / 2);
     const midX = (this.building.origin.x + this.building.width / 2) * TILE;
@@ -136,6 +154,7 @@ export class VenueWorld {
       city.position.set(0, 0, 0);
       city.rotation.set(0, 0, 0);
       city.scale.set(1, 1, 1);
+      city.visible = true;
       city.traverse((obj) => {
         if (obj.userData.mallShell) obj.visible = true;
       });
@@ -146,6 +165,55 @@ export class VenueWorld {
 
   nearDesk() {
     return this.interior.nearDesk(this.controls.position.x, this.controls.position.z);
+  }
+
+  nearElevator() {
+    return this.interior.elevator?.near(this.controls.position.x, this.controls.position.z) ?? false;
+  }
+
+  /** Floor buttons for the elevator panel, or null when this venue has no elevator. */
+  elevatorMenu() {
+    const elevator = this.interior.elevator;
+    if (!elevator) return null;
+    return { floors: elevator.floors, current: elevator.current(), desk: elevator.deskFloor };
+  }
+
+  /** Lines the borrowed streets up under the office floor the player is on, or hides them. */
+  private placeOfficeCity() {
+    const elevator = this.interior.elevator;
+    const city = this.borrowedCity;
+    if (!elevator || !city) return;
+    const view = elevator.view(elevator.current());
+    city.visible = view !== null;
+    if (!view) return;
+    const s = this.cityScale;
+    const midX = (this.building.origin.x + this.building.width / 2) * TILE;
+    const midZ = (this.building.origin.y + this.building.depth / 2) * TILE;
+    city.position.set(-midX * s, -(view.height * s + view.lift), -midZ * s);
+  }
+
+  rideElevator(index: number) {
+    const elevator = this.interior.elevator;
+    if (!elevator) return;
+    const stop = elevator.goTo(index);
+    this.controls.clearKeys();
+    this.controls.spawn(stop.x, stop.z, stop.yaw, 0);
+    this.onRoof = elevator.isRoof(elevator.current());
+    this.outside = elevator.view(elevator.current()) !== null;
+    this.placeOfficeCity();
+    this.camera.far = this.outside ? 1400 : 80;
+    this.camera.updateProjectionMatrix();
+    if (this.scene.fog instanceof THREE.Fog) {
+      this.scene.fog.near = this.outside ? 180 : 16;
+      this.scene.fog.far = this.outside ? 1100 : 42;
+    }
+    if (this.outside) this.applySky();
+    else {
+      const night = this.isNight();
+      const indoor = night ? "#12151a" : "#1c1814";
+      if (this.scene.background instanceof THREE.Color) this.scene.background.set(indoor);
+      if (this.scene.fog instanceof THREE.Fog) this.scene.fog.color.set(indoor);
+    }
   }
 
   nearExit() {
@@ -226,9 +294,15 @@ export class VenueWorld {
       this.hemi.intensity = night ? 1.05 : this.borrowedCity ? 1.35 : 1.55;
       this.fill.intensity = night ? 48 : 70;
       this.applySky();
+    } else if (this.onRoof) {
+      const light = lightingFor(this.state);
+      this.sun.intensity = night ? 0.55 : Math.max(1.5, light.sun * 2.2);
+      this.hemi.intensity = night ? 0.8 : 1.35;
+      this.applySky();
     } else {
       this.sun.intensity = night ? 0.45 : 1.25;
       this.hemi.intensity = night ? 0.75 : 1.15;
+      if (this.outside) this.applySky();
     }
     this.renderer.render(this.scene, this.camera);
   }

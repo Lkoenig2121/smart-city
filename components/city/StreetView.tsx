@@ -250,6 +250,14 @@ export function StreetView({
     null,
   );
   const [mallHut, setMallHut] = useState<string | null>(null);
+  const [elevatorNear, setElevatorNear] = useState(false);
+  const [elevatorMenu, setElevatorMenu] = useState<{
+    floors: string[];
+    current: number;
+    desk: number;
+  } | null>(null);
+  const elevatorMenuRef = useRef(false);
+  const [elevatorFade, setElevatorFade] = useState(false);
   const [mallSnack, setMallSnack] = useState<{
     name: string;
     items: string[];
@@ -655,6 +663,25 @@ export function StreetView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [ticketBooth]);
+
+  useEffect(() => {
+    if (!elevatorMenu) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== "Escape") return;
+      elevatorMenuRef.current = false;
+      setElevatorMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [elevatorMenu]);
+
+  const rideElevator = (index: number) => {
+    elevatorMenuRef.current = false;
+    setElevatorMenu(null);
+    setElevatorFade(true);
+    window.setTimeout(() => venueRef.current?.rideElevator(index), 380);
+    window.setTimeout(() => setElevatorFade(false), 820);
+  };
 
   useEffect(() => {
     if (!active) return;
@@ -1350,7 +1377,9 @@ export function StreetView({
 
     const street = worldRef.current;
     const city =
-      venueRole(building) === "mall" ? (street?.borrowCity() ?? null) : null;
+      venueRole(building) === "mall" || venueRole(building) === "office"
+        ? (street?.borrowCity() ?? null)
+        : null;
     let world: VenueWorld;
     try {
       world = new VenueWorld(canvas, state, building);
@@ -1408,11 +1437,20 @@ export function StreetView({
           characterMenuRef.current ||
           mallShopRef.current ||
           mallFurnishRef.current ||
-          mallSnackRef.current
+          mallSnackRef.current ||
+          elevatorMenuRef.current
         )
           return true;
         if (world.nearExit()) leaveStreet();
-        else {
+        else if (world.nearElevator()) {
+          const menu = world.elevatorMenu();
+          if (menu) {
+            elevatorMenuRef.current = true;
+            setElevatorMenu(menu);
+            if (document.pointerLockElement === canvas)
+              document.exitPointerLock();
+          }
+        } else {
           const hut = world.nearSnack();
           if (hut) {
             const menu = { name: hut.name, items: hut.items };
@@ -1473,6 +1511,8 @@ export function StreetView({
       setMallHut((prev) =>
         prev === (hut?.name ?? null) ? prev : (hut?.name ?? null),
       );
+      const lift = world.nearElevator();
+      setElevatorNear((prev) => (prev === lift ? prev : lift));
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
@@ -1492,6 +1532,9 @@ export function StreetView({
       if (borrowed) worldRef.current?.returnCity(borrowed);
       world.dispose();
       venueRef.current = null;
+      elevatorMenuRef.current = false;
+      setElevatorMenu(null);
+      setElevatorNear(false);
     };
   }, [active, interior, state]);
 
@@ -2667,6 +2710,8 @@ export function StreetView({
       !mallShop &&
       !mallFurnish &&
       !mallSnack &&
+      !elevatorNear &&
+      !elevatorMenu &&
       !characterMenu ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
@@ -2694,6 +2739,12 @@ export function StreetView({
                 Walk the concourse into a store · ride the escalators · press{" "}
                 <span className="font-semibold text-white">E</span> at the doors
                 to leave
+              </p>
+            ) : venueBuilding && venueRole(venueBuilding) === "office" ? (
+              <p className="text-xs text-slate-200">
+                Take the elevators to your desk or the roof · press{" "}
+                <span className="font-semibold text-white">E</span> at the lobby
+                doors to leave
               </p>
             ) : (
               <p className="text-xs text-slate-200">
@@ -2963,6 +3014,73 @@ export function StreetView({
           startApp={phoneStartApp}
           startThreadId={phoneThread}
         />
+      ) : null}
+
+      {interior?.kind === "venue" && elevatorNear && !elevatorMenu && !elevatorFade && !characterMenu ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
+            <p className="text-xs text-slate-200">
+              Elevator · press <span className="font-semibold text-white">E</span> to pick a floor
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {elevatorMenu && interior?.kind === "venue" ? (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40">
+          <div className="w-80 rounded-2xl border border-white/15 bg-slate-950/95 p-5 shadow-2xl">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
+              {venueBuilding?.name ?? "Office"} · elevator
+            </p>
+            <p className="mt-1 text-lg font-semibold text-white">Choose a floor</p>
+            <div className="mt-4 grid grid-cols-4 gap-2">
+              {[...elevatorMenu.floors].map((label, index) => ({ label, index })).reverse().map(({ label, index }) => {
+                const here = index === elevatorMenu.current;
+                const wide = label === "Roof" || label === "Lobby";
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    disabled={here}
+                    onClick={() => rideElevator(index)}
+                    className={`relative rounded-xl border px-2 py-2 text-sm font-semibold tabular-nums ${
+                      wide ? "col-span-2" : ""
+                    } ${
+                      here
+                        ? "border-amber-300/60 bg-amber-300/15 text-amber-200"
+                        : "border-white/10 bg-white/5 text-white hover:bg-white/15"
+                    }`}
+                  >
+                    {label === "Roof" ? "Roof deck" : label}
+                    {index === elevatorMenu.desk ? (
+                      <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-amber-400" />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-3 text-xs text-slate-400">
+              <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />
+              Your desk · floor {elevatorMenu.floors[elevatorMenu.desk]} · roof has the conference and break deck
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                elevatorMenuRef.current = false;
+                setElevatorMenu(null);
+              }}
+              className="mt-3 text-xs text-slate-400 hover:text-white"
+            >
+              Stay here · Esc
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {elevatorFade ? (
+        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-black/85 transition-opacity">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-300">Ding · doors opening</p>
+        </div>
       ) : null}
 
       {passToast !== null && interior?.kind === "stadium" && !failed ? (

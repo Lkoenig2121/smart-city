@@ -1,11 +1,12 @@
 import * as THREE from "three";
-import type { Building } from "@/lib/city/types";
+import type { Building, CityState } from "@/lib/city/types";
 import type { ClothStore } from "@/lib/city/clothing";
 import type { FurnishStore } from "@/lib/city/furnishings";
 import { FOOD_COURT_MENU, PIZZERIA_MENU } from "@/lib/city/consumables";
 import { venueRole, type VenueRole } from "@/lib/city/venues";
 import type { Blocker } from "./buildCity";
 import { MeshBuilder } from "./meshBuilder";
+import { buildOfficeTower, type OfficeElevator } from "./officeInterior";
 
 export interface VenueInterior {
   group: THREE.Group;
@@ -20,6 +21,7 @@ export interface VenueInterior {
   nearSnack?: (x: number, z: number, feetY?: number) => { id: string; name: string; items: string[] } | null;
   update?: (dt: number) => void;
   rideAt?: (x: number, z: number, feetY?: number) => { x: number; z: number } | null;
+  elevator?: OfficeElevator;
   dispose: () => void;
 }
 
@@ -101,9 +103,10 @@ function addPizzaKitchen(
   disposables.push(texture, mat, geo);
 }
 
-export function buildVenueInterior(building: Building): VenueInterior {
+export function buildVenueInterior(building: Building, getState?: () => CityState | null): VenueInterior {
   const role = venueRole(building) ?? "office";
   if (role === "mall") return buildMallInterior();
+  if (role === "office") return buildOfficeTower(building, getState);
   const pizzeria = building.stats.extra?.cuisine === "pizzeria";
   const pal = pizzeria ? PIZZERIA_PALETTE : PALETTE[role];
   const group = new THREE.Group();
@@ -147,19 +150,14 @@ export function buildVenueInterior(building: Building): VenueInterior {
 
   assemble(group, floorB, wallB, trimB, disposables);
 
-  const office = role === "office";
   const orderAt = (x: number, z: number) => Math.abs(x) < 7.2 && z > -5.2 && z < 0.6;
   return {
     group,
     blockers,
-    spawn: office ? { x: 0, z: -3.2, yaw: 0, pitch: -0.06 } : { x: 0, z: 9.4, yaw: 0, pitch: -0.06 },
+    spawn: { x: 0, z: 9.4, yaw: 0, pitch: -0.06 },
     bounds: { minX, maxX, minZ, maxZ },
     groundAt: () => 0,
-    nearDesk: office
-      ? (x, z) => Math.abs(x) < 9 && z < 8.4
-      : pizzeria
-        ? () => false
-        : orderAt,
+    nearDesk: pizzeria ? () => false : orderAt,
     nearSnack: pizzeria
       ? (x, z) => (orderAt(x, z) ? { id: "pizzeria", name: building.name, items: [...PIZZERIA_MENU] } : null)
       : undefined,
@@ -1570,15 +1568,6 @@ function furnish(
     blockers.push({ minX: -8.6, maxX: -1.2, minZ: 1.4, maxZ: 7.6 });
     wallB.box(6.2, 1.2, 10.2, 8.4, 0, 2.1, trim);
     blockers.push({ minX: 6.2, maxX: 10.2, minZ: 1.2, maxZ: 8.4 });
-  } else if (role === "office") {
-    for (let col = 0; col < 3; col++) {
-      for (let row = 0; row < 2; row++) {
-        const x = -8.6 + col * 5.8;
-        const z = 0.4 + row * 4.2;
-        trimB.box(x, z, x + 4.6, z + 3.4, 0, 1.12, furn);
-        blockers.push({ minX: x, maxX: x + 4.6, minZ: z, maxZ: z + 3.4 });
-      }
-    }
   } else if (role === "shop") {
     for (const z of [-1.6, 2.2, 6.0]) {
       trimB.box(-9.4, z, -5.2, z + 1.4, 0, 1.7, furn);
