@@ -189,7 +189,7 @@ export class VenueWorld {
     const s = this.cityScale;
     const midX = (this.building.origin.x + this.building.width / 2) * TILE;
     const midZ = (this.building.origin.y + this.building.depth / 2) * TILE;
-    city.position.set(-midX * s, -(view.height * s + view.lift), -midZ * s);
+    city.position.set(-midX * s, -(view.height + view.lift) * s, -midZ * s);
   }
 
   rideElevator(index: number) {

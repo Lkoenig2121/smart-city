@@ -37,8 +37,8 @@ export interface OfficeElevator {
   /** Switches to a floor and returns where the rider steps out. */
   goTo: (index: number) => { x: number; z: number; yaw: number };
   /**
-   * How the real streets line up with a floor that has a view outside: `height` is in city units
-   * up the modelled tower, `lift` in interior units above that. Null for floors without windows.
+   * How the real streets line up with a floor that has a view outside: `height` up the modelled
+   * tower plus `lift` above that, both in city units. Null for floors without windows.
    */
   view: (index: number) => { height: number; lift: number } | null;
 }
@@ -179,7 +179,7 @@ const ROOF_CROWD: CrowdSpec = {
       [-3.2, -5.8],
       [3.2, -5.8],
       [0, -4.5],
-      [-1, 2],
+      [-1.4, 2],
       [1, 9.6],
       [6.8, 3.4],
       [6, -2.5],
@@ -581,7 +581,7 @@ function buildRoof(building: Building, bucket: Bucket, screen: ConferenceScreen)
   floorB.ground(MIN_X, MIN_Z, MAX_X, MAX_Z, 0, pavers);
   floorB.ground(-10.4, -3.6, -1.4, 6.8, 0.01, deck);
   floorB.ground(1.6, 1, 10.4, 10.4, 0.01, deck);
-  wallB.walls(MIN_X, MIN_Z, MAX_X, MAX_Z, -OFFICE_ROOF_DECK, 0, c("#c9c4ba"));
+  wallB.walls(MIN_X, MIN_Z, MAX_X, MAX_Z, -OFFICE_ROOF_DECK * 4, 0, c("#c9c4ba"));
 
   const glass = c("#a9d3ea");
   trimB.box(MIN_X, MIN_Z, MIN_X + 0.06, MAX_Z, 0, 1.1, glass);
@@ -601,8 +601,9 @@ function buildRoof(building: Building, bucket: Bucket, screen: ConferenceScreen)
   sign.mesh.position.set(0, 4.15, faceZ + 0.1);
   group.add(sign.mesh);
 
-  trimB.box(-0.3, -0.3, 0.3, 0.3, 0, 6, steel);
-  blockers.push({ minX: -0.3, maxX: 0.3, minZ: -0.3, maxZ: 0.3 });
+  wallB.box(-0.55, -0.55, 0.55, 0.55, 0, 2.4, house);
+  trimB.box(-0.3, -0.3, 0.3, 0.3, 2.4, 6, steel);
+  blockers.push({ minX: -0.55, maxX: 0.55, minZ: -0.55, maxZ: 0.55 });
 
   // Conference pergola.
   for (const [px, pz] of [
