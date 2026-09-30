@@ -7,6 +7,7 @@ import { stepCitizens, syncCitizenSchedules, wanderOutdoors } from "../citizens/
 import { bootstrapEvents, tickCityEvents } from "../events/cityEvents";
 import { seedVehicle, stepVehicles } from "../traffic/vehicleMovement";
 import { tickRoadNetwork } from "../traffic/roadNetwork";
+import { tickSeriesTraffic } from "../traffic/seriesTraffic";
 import { SIM_MINUTES_PER_SECOND } from "../weather/weather";
 import { abandonOpenShift, accrueBankInterest, payOvernightInterest, syncPlayerShift } from "@/lib/city/player";
 import { syncCityMilestones } from "@/lib/city/cityProgress";
@@ -146,6 +147,7 @@ export function tickCity(
 
   syncCitizenSchedules(state);
   wanderOutdoors(state, rand);
+  tickSeriesTraffic(state, dtSeconds, rand);
   stepVehicles(state, dtSeconds, rand);
   stepCitizens(state, dtSeconds);
   tickBuildingStats(state);

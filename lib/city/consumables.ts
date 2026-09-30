@@ -30,6 +30,51 @@ export const CONSUMABLES: ConsumableItem[] = [
   { id: "food-fries", name: "Fries", detail: "Salted, in a cup", price: 4, kind: "food", color: "#e8c36a", accent: "#c45c4a" },
   { id: "food-noodles", name: "Wok noodles", detail: "Garlic · greens", price: 10, kind: "food", color: "#c45c4a", accent: "#f4f1ea" },
   { id: "drink-smoothie", name: "Berry smoothie", detail: "Iced blend", price: 6, kind: "drink", color: "#d48aa0", accent: "#f4f1ea" },
+  // Ballpark concessions
+  { id: "food-nachos-loaded", name: "Loaded nachos", detail: "Jalapeños · extra cheese", price: 11, kind: "food", color: "#e8c36a", accent: "#3d7a3a" },
+  { id: "food-chili-dog", name: "Chili dog", detail: "Chili · onions", price: 9, kind: "food", color: "#8b3a22", accent: "#e8c36a" },
+  { id: "food-relish-dog", name: "Relish dog", detail: "Sweet relish · mustard", price: 8, kind: "food", color: "#c45c4a", accent: "#6b8f3a" },
+  { id: "food-pretzel-cheese", name: "Pretzel & cheese dip", detail: "Warm cheddar cup", price: 7, kind: "food", color: "#c47a2c", accent: "#e8c36a" },
+  { id: "food-cheeseburger", name: "Cheeseburger", detail: "American cheese · pickles", price: 12, kind: "food", color: "#8b5a2b", accent: "#e8c36a" },
+  { id: "food-sundae", name: "Sundae", detail: "Fudge · cherry", price: 8, kind: "food", color: "#f4f1ea", accent: "#6a3a32" },
+  { id: "food-cotton-candy", name: "Cotton candy", detail: "Pink swirl", price: 5, kind: "food", color: "#e8a0d0", accent: "#f4f1ea" },
+  { id: "food-popcorn", name: "Popcorn", detail: "Buttered bucket", price: 6, kind: "food", color: "#f4e7b0", accent: "#c0392b" },
+  // Pizza
+  { id: "food-pizza-pepperoni", name: "Pepperoni slice", detail: "Crispy cups", price: 7, kind: "food", color: "#e8c36a", accent: "#b83218" },
+  { id: "food-pizza-extra", name: "Extra cheese slice", detail: "Double mozzarella", price: 7, kind: "food", color: "#f2dc8a", accent: "#e8c36a" },
+  { id: "food-pizza-margherita", name: "Margherita pie", detail: "Basil · fresh mozz", price: 18, kind: "food", color: "#e8c36a", accent: "#3d7a3a" },
+  { id: "food-pizza-supreme", name: "Supreme pie", detail: "Sausage · peppers · olives", price: 22, kind: "food", color: "#d8a85a", accent: "#2f5d3a" },
+  { id: "food-calzone", name: "Calzone", detail: "Ricotta · marinara", price: 12, kind: "food", color: "#d8a85a", accent: "#c0392b" },
+  { id: "food-garlic-knots", name: "Garlic knots", detail: "Parmesan · parsley", price: 6, kind: "food", color: "#e8d09a", accent: "#6b8f3a" },
+  { id: "food-cannoli", name: "Cannoli", detail: "Sweet ricotta", price: 5, kind: "food", color: "#f0e2c0", accent: "#6a3a32" },
+  { id: "drink-italian-soda", name: "Italian soda", detail: "Blood orange", price: 4, kind: "drink", color: "#e0602a", accent: "#f4f1ea" },
+];
+
+/** What each ballpark stand actually sells — matches the sign over the counter. */
+export const STADIUM_STAND_MENUS: Record<string, string[]> = {
+  NACHOS: ["food-nachos", "food-nachos-loaded", "drink-soda"],
+  "HOT DOGS": ["food-hotdog", "food-relish-dog", "food-chili-dog", "drink-soda"],
+  PRETZELS: ["food-pretzel", "food-pretzel-cheese", "drink-lemonade"],
+  BURGERS: ["food-cheeseburger", "food-fries", "drink-soda"],
+  DRINKS: ["drink-soda", "drink-lemonade", "drink-water"],
+  "ICE CREAM": ["food-ice-cream", "food-sundae"],
+  PIZZA: ["food-pizza-pepperoni", "food-pizza-extra", "drink-soda"],
+  PIZZERIA: ["food-pizza-margherita", "food-pizza-supreme", "food-calzone", "food-garlic-knots", "drink-italian-soda"],
+  SWEETS: ["food-cotton-candy", "food-popcorn", "drink-lemonade"],
+};
+
+/** That's Amore, Riverside. */
+export const PIZZERIA_MENU = [
+  "food-pizza-margherita",
+  "food-pizza-supreme",
+  "food-pizza-pepperoni",
+  "food-pizza",
+  "food-calzone",
+  "food-garlic-knots",
+  "food-cannoli",
+  "drink-italian-soda",
+  "drink-lemonade",
+  "drink-espresso",
 ];
 
 export const FOOD_COURT_MENU = [

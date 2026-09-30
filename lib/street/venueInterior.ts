@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { Building } from "@/lib/city/types";
 import type { ClothStore } from "@/lib/city/clothing";
 import type { FurnishStore } from "@/lib/city/furnishings";
-import { FOOD_COURT_MENU } from "@/lib/city/consumables";
+import { FOOD_COURT_MENU, PIZZERIA_MENU } from "@/lib/city/consumables";
 import { venueRole, type VenueRole } from "@/lib/city/venues";
 import type { Blocker } from "./buildCity";
 import { MeshBuilder } from "./meshBuilder";
@@ -47,10 +47,65 @@ const PALETTE: Record<VenueRole, Palette> = {
   apartment: { floor: "#b7c3c9", wall: "#e6ddd2", trim: "#5c5348", accent: "#3d5a80", furniture: "#6e6256" },
 };
 
+const PIZZERIA_PALETTE: Palette = {
+  floor: "#e8dcc8",
+  wall: "#f4ede0",
+  trim: "#2f7a3e",
+  accent: "#c0392b",
+  furniture: "#6b4a32",
+};
+
+/** Brick oven behind the counter plus a lit sign with the restaurant's name. */
+function addPizzaKitchen(
+  group: THREE.Group,
+  wallB: MeshBuilder,
+  trimB: MeshBuilder,
+  disposables: Array<{ dispose: () => void }>,
+  name: string,
+  minZ: number,
+) {
+  const brick = new THREE.Color("#8a3b28");
+  const soot = new THREE.Color("#2a1a14");
+  const fire = new THREE.Color("#ff8a2a");
+  const back = minZ + 0.45;
+  wallB.box(-2.4, back, 2.4, back + 2.2, 0, 2.2, brick);
+  wallB.box(-1.9, back + 0.2, 1.9, back + 1.9, 2.2, 2.9, brick);
+  wallB.box(-0.7, back + 0.2, 0.7, back + 0.9, 2.9, 4.6, brick);
+  trimB.box(-1.0, back + 2.18, 1.0, back + 2.24, 1.3, 2.05, soot);
+  trimB.box(-0.8, back + 2.15, 0.8, back + 2.2, 1.35, 1.7, fire);
+
+  const el = document.createElement("canvas");
+  el.width = 1024;
+  el.height = 256;
+  const ctx = el.getContext("2d");
+  if (!ctx) return;
+  ctx.fillStyle = "#1e3a24";
+  ctx.fillRect(0, 0, el.width, el.height);
+  const stripe = el.width / 3;
+  ["#2f7a3e", "#f4ede0", "#c0392b"].forEach((c, i) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(i * stripe, el.height - 26, stripe, 26);
+  });
+  ctx.fillStyle = "#fff4d6";
+  ctx.font = "italic 800 120px Georgia, serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(name, el.width / 2, el.height / 2 - 12);
+  const texture = new THREE.CanvasTexture(el);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshStandardMaterial({ map: texture, emissiveMap: texture, emissive: new THREE.Color("#ffffff"), emissiveIntensity: 0.6 });
+  const geo = new THREE.PlaneGeometry(4.8, 1.2);
+  const sign = new THREE.Mesh(geo, mat);
+  sign.position.set(0, 3.7, back + 2.26);
+  group.add(sign);
+  disposables.push(texture, mat, geo);
+}
+
 export function buildVenueInterior(building: Building): VenueInterior {
   const role = venueRole(building) ?? "office";
   if (role === "mall") return buildMallInterior();
-  const pal = PALETTE[role];
+  const pizzeria = building.stats.extra?.cuisine === "pizzeria";
+  const pal = pizzeria ? PIZZERIA_PALETTE : PALETTE[role];
   const group = new THREE.Group();
   const blockers: Blocker[] = [];
   const disposables: Array<{ dispose: () => void }> = [];
@@ -88,10 +143,12 @@ export function buildVenueInterior(building: Building): VenueInterior {
   blockers.push({ minX: -6.4, maxX: 6.4, minZ: minZ + 0.45, maxZ: -5.4 });
 
   furnish(role, wallB, trimB, blockers, furn, accent, trim);
+  if (pizzeria) addPizzaKitchen(group, wallB, trimB, disposables, building.name, minZ);
 
   assemble(group, floorB, wallB, trimB, disposables);
 
   const office = role === "office";
+  const orderAt = (x: number, z: number) => Math.abs(x) < 7.2 && z > -5.2 && z < 0.6;
   return {
     group,
     blockers,
@@ -100,7 +157,12 @@ export function buildVenueInterior(building: Building): VenueInterior {
     groundAt: () => 0,
     nearDesk: office
       ? (x, z) => Math.abs(x) < 9 && z < 8.4
-      : (x, z) => Math.abs(x) < 7.2 && z > -5.2 && z < 0.6,
+      : pizzeria
+        ? () => false
+        : orderAt,
+    nearSnack: pizzeria
+      ? (x, z) => (orderAt(x, z) ? { id: "pizzeria", name: building.name, items: [...PIZZERIA_MENU] } : null)
+      : undefined,
     nearExit: (x, z) => z > 9.6 && Math.abs(x) < 2.6,
     dispose: () => {
       for (const item of disposables) item.dispose();

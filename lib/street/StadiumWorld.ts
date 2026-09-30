@@ -11,6 +11,7 @@ import {
   stadiumGame,
   stadiumSeriesGame,
 } from "@/lib/city/stadium";
+import { consumableById } from "@/lib/city/consumables";
 import { buildBlimp, type Blimp } from "./blimp";
 import { createFireworkSparks, FIREWORK_PALETTE, sparkFade, stepFireworks, type FireworkSpark } from "@/lib/city/fireworks";
 import { paintRavensScoreboard } from "./ravensScoreboard";
@@ -18,6 +19,33 @@ import { InteriorControls } from "./interiorControls";
 import { buildStadiumInterior, type StadiumInterior } from "./stadiumInterior";
 import { HeldItemView } from "./heldItem";
 import { hasGreenMonster } from "./scorpionMonster";
+
+const LINE_SLOTS = 7;
+const WALKERS = 2;
+const SHIRTS = ["#1f4d8c", "#c0392b", "#f4f1ea", "#2c3e6b", "#e8c36a", "#3d5a80", "#d4a017", "#4aa3c4", "#8a4b2f", "#2a6b5a", "#7a2e2e"];
+
+function smooth(t: number) {
+  const c = Math.min(1, Math.max(0, t));
+  return c * c * (3 - 2 * c);
+}
+
+/** Point `t` (0–1) of the way along a polyline, by length. */
+function alongPath(path: { x: number; z: number }[], t: number) {
+  let total = 0;
+  for (let i = 1; i < path.length; i++) total += Math.hypot(path[i].x - path[i - 1].x, path[i].z - path[i - 1].z);
+  let left = Math.min(1, Math.max(0, t)) * total;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1];
+    const b = path[i];
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    if (left <= len || i === path.length - 1) {
+      const k = len > 0 ? Math.min(1, left / len) : 1;
+      return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k };
+    }
+    left -= len;
+  }
+  return { ...path[path.length - 1] };
+}
 
 const DEFENSE: { x: number; z: number }[] = [
   { x: 0, z: 8.7 },
@@ -109,6 +137,10 @@ export class StadiumWorld {
   private heldView = new HeldItemView();
   private blimp: Blimp;
   private neonDummy = new THREE.Object3D();
+  private linePeople: THREE.InstancedMesh;
+  private lineFood: THREE.InstancedMesh;
+  private lineDummy = new THREE.Object3D();
+  private lineColor = new THREE.Color();
   private blimpBanner = "";
 
   constructor(
@@ -224,6 +256,24 @@ export class StadiumWorld {
     if (this.sparks.instanceColor) this.sparks.instanceColor.needsUpdate = true;
     this.scene.add(this.sparks);
 
+    const standCount = this.interior.stands.length;
+    this.linePeople = new THREE.InstancedMesh(
+      new THREE.CapsuleGeometry(0.22, 0.72, 3, 6),
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78 }),
+      standCount * (LINE_SLOTS + WALKERS),
+    );
+    this.lineFood = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.26, 0.14, 0.2),
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }),
+      standCount * WALKERS,
+    );
+    for (const mesh of [this.linePeople, this.lineFood]) {
+      mesh.frustumCulled = false;
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      for (let i = 0; i < mesh.count; i++) mesh.setColorAt(i, this.lineColor.set("#ffffff"));
+      this.scene.add(mesh);
+    }
+
     this.blimp = buildBlimp();
     this.blimp.group.visible = false;
     this.scene.add(this.blimp.group);
@@ -271,6 +321,7 @@ export class StadiumWorld {
     this.flyBlimp(night);
     this.fillCrowd(crowd, dt);
     this.seriesCrowd(crowd.seated);
+    this.runConcessions(crowd.seated);
     this.playFireworks(crowd.fireworks, dt);
     this.renderer.render(this.scene, this.camera);
   }
@@ -363,6 +414,94 @@ export class StadiumWorld {
     } else {
       this.placeHit(play, flight, pitchX);
     }
+  }
+
+  /** Nearest concession counter the player can order from. */
+  nearStand() {
+    return this.interior.nearStand(this.camera.position.x, this.camera.position.z);
+  }
+
+  /**
+   * Concession lines during games: fans shuffle up, get served, and carry their
+   * food back up the aisles. Deterministic per stand so it loops seamlessly.
+   */
+  private runConcessions(seated: number) {
+    const stands = this.interior.stands;
+    const series = stadiumSeriesGame(this.state) !== null;
+    const busy = seated >= 0.95 ? (series ? 1 : 0.75) : seated >= 0.3 ? 0.4 : 0;
+    const people = this.linePeople;
+    const food = this.lineFood;
+    const dummy = this.lineDummy;
+    const hide = () => {
+      dummy.position.set(0, -40, 0);
+      dummy.scale.setScalar(0.001);
+      dummy.updateMatrix();
+      return dummy.matrix;
+    };
+    let p = 0;
+    let f = 0;
+    for (let s = 0; s < stands.length; s++) {
+      const stand = stands[s];
+      const lineLen = Math.round(stand.maxLine * busy);
+      const period = 5.2 + (s % 3) * 0.9;
+      const clock = this.time + s * 1.7;
+      const cycle = Math.floor(clock / period);
+      const u = (clock % period) / period;
+      const step = u < 0.72 ? 0 : smooth((u - 0.72) / 0.28);
+
+      for (let k = 0; k < LINE_SLOTS; k++) {
+        if (k >= lineLen) {
+          people.setMatrixAt(p++, hide());
+          continue;
+        }
+        const d = (k + 1 - step) * 0.72 - 0.72;
+        const x = stand.counter.x + stand.out.x * d + Math.sin(cycle + k) * 0.08;
+        const z = stand.counter.z + stand.out.z * d;
+        dummy.scale.setScalar(1);
+        dummy.position.set(x, this.interior.groundAt(x, z) + 0.95, z);
+        dummy.rotation.set(0, Math.atan2(-stand.out.x, -stand.out.z), 0);
+        dummy.updateMatrix();
+        people.setMatrixAt(p, dummy.matrix);
+        people.setColorAt(p, this.lineColor.set(SHIRTS[(cycle + k) % SHIRTS.length]));
+        p++;
+      }
+
+      for (let j = 0; j < WALKERS; j++) {
+        const t = (u + j) / WALKERS;
+        if (lineLen === 0) {
+          people.setMatrixAt(p++, hide());
+          food.setMatrixAt(f++, hide());
+          continue;
+        }
+        const at = alongPath(stand.walk, t);
+        const ahead = alongPath(stand.walk, Math.min(1, t + 0.02));
+        const y = this.interior.groundAt(at.x, at.z);
+        const yaw = Math.atan2(ahead.x - at.x, ahead.z - at.z);
+        dummy.scale.setScalar(t > 0.94 ? Math.max(0.001, (1 - t) / 0.06) : 1);
+        dummy.position.set(at.x, y + 0.95 + Math.abs(Math.sin(t * 60)) * 0.04, at.z);
+        dummy.rotation.set(0, yaw, 0);
+        dummy.updateMatrix();
+        people.setMatrixAt(p, dummy.matrix);
+        // Served fan is the one who just left the front of the line.
+        const served = cycle - 1 - j;
+        people.setColorAt(p, this.lineColor.set(SHIRTS[((served % SHIRTS.length) + SHIRTS.length) % SHIRTS.length]));
+        p++;
+
+        const menu = Math.max(1, stand.items.length);
+        const item = consumableById(stand.items[((served % menu) + menu) % menu] ?? "");
+        const hx = at.x + Math.sin(yaw) * 0.32 + Math.cos(yaw) * 0.18;
+        const hz = at.z + Math.cos(yaw) * 0.32 - Math.sin(yaw) * 0.18;
+        dummy.position.set(hx, y + 1.12, hz);
+        dummy.updateMatrix();
+        food.setMatrixAt(f, dummy.matrix);
+        food.setColorAt(f, this.lineColor.set(item?.color ?? stand.color));
+        f++;
+      }
+    }
+    people.instanceMatrix.needsUpdate = true;
+    food.instanceMatrix.needsUpdate = true;
+    if (people.instanceColor) people.instanceColor.needsUpdate = true;
+    if (food.instanceColor) food.instanceColor.needsUpdate = true;
   }
 
   /** World Series sell-out: every seat filled and glow sticks waving. */
@@ -504,6 +643,10 @@ export class StadiumWorld {
   }
 
   dispose() {
+    for (const mesh of [this.linePeople, this.lineFood]) {
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    }
     this.blimp.dispose();
     this.heldView.dispose();
     this.interior.dispose();

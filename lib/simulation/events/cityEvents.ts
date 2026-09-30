@@ -183,7 +183,7 @@ function seedWorldSeriesNews(state: CityState) {
     pushEvent(state, {
       kind: "baseball",
       headline: `World Series Game ${series.nextGame} tonight: ${a.shortName} vs. ${b.shortName}.`,
-      detail: `${series.nextGame === 1 ? "Series opener." : tally}${clinch ? " A title could be decided tonight." : ""} First pitch 6:00 PM at ${host} — watch for the blimp.`,
+      detail: `${series.nextGame === 1 ? "Series opener." : tally}${clinch ? " A title could be decided tonight." : ""} First pitch 6:00 PM at ${host} — watch for the blimp.${state.id === SERIES_HOST_CITY ? " Heavy traffic around the ballpark from 3 PM." : ""}`,
       ...at,
       remaining: 240,
     });

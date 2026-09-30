@@ -1,5 +1,7 @@
 import * as THREE from "three";
+import { STADIUM_STAND_MENUS } from "@/lib/city/consumables";
 import type { Blocker } from "./buildCity";
+import { displayFood } from "./heldItem";
 import { MeshBuilder } from "./meshBuilder";
 import {
   addGreenMonsterInterior,
@@ -32,8 +34,26 @@ export interface StadiumInterior {
     neonRest: Float32Array;
     neonCount: number;
   };
+  stands: StadiumStand[];
+  nearStand: (x: number, z: number) => StadiumStand | null;
   groundAt: (x: number, z: number) => number;
   dispose: () => void;
+}
+
+/** A concession counter: where to order, which way the line forms, and where fans carry food. */
+export interface StadiumStand {
+  name: string;
+  title: string;
+  items: string[];
+  color: string;
+  /** Point just in front of the counter. */
+  counter: { x: number; z: number };
+  /** Unit direction the line extends away from the counter. */
+  out: { x: number; z: number };
+  /** Route a served fan follows with their food, counter first. */
+  walk: { x: number; z: number }[];
+  /** Max people in line without spilling into walls/columns. */
+  maxLine: number;
 }
 
 const SEAT_ROWS = 10;
@@ -339,10 +359,9 @@ export function buildStadiumInterior(opts: { greenMonster?: boolean } = {}): Sta
     { name: "ICE CREAM", menu: "Soft serve · Sundaes", face: "z+", x: 15.0, z: 21.4, color: "#d48aa8", width: 5.8 },
     { name: "PIZZA", menu: "Pepperoni · Extra cheese", face: "x+", x: -24.8, z: 2.2, color: "#b83218", width: 5.6 },
     { name: "SWEETS", menu: "Cotton candy · Popcorn", face: "x-", x: 21.3, z: 2.2, color: "#7b2d8b", width: 5.6 },
+    { name: "PIZZERIA", menu: "Whole pies · Calzones · Garlic knots", face: "x-", x: 21.3, z: -9.3, color: "#2f7a3e", width: 5.6 },
   ];
-  for (const shop of shops) {
-    addShop(wallB, trimB, blockers, group, disposables, shop);
-  }
+  const stands = shops.map((shop) => addShop(wallB, trimB, blockers, group, disposables, shop));
 
   // ─── Assemble ──────────────────────────────────────────────────────────────
   const add = (builder: MeshBuilder, material: THREE.MeshStandardMaterial) => {
@@ -393,6 +412,19 @@ export function buildStadiumInterior(opts: { greenMonster?: boolean } = {}): Sta
     monsterFanStart,
     rest,
     seriesCrowd,
+    stands,
+    nearStand: (x, z) => {
+      let best: StadiumStand | null = null;
+      let bestD = 2.4;
+      for (const stand of stands) {
+        const d = Math.hypot(x - stand.counter.x, z - stand.counter.z);
+        if (d < bestD) {
+          bestD = d;
+          best = stand;
+        }
+      }
+      return best;
+    },
     groundAt: (x, z) => stadiumGroundAt(x, z, Boolean(opts.greenMonster)),
     dispose: () => {
       for (const item of disposables) item.dispose();
@@ -421,13 +453,13 @@ function addShop(
   group: THREE.Group,
   disposables: Array<{ dispose: () => void }>,
   spec: ShopSpec,
-) {
+): StadiumStand {
   const depth = spec.depth ?? 3.35;
   const width = spec.width ?? 5.6;
   const h = 2.52;
   const concrete = new THREE.Color(CONCRETE);
   const accent = new THREE.Color(spec.color);
-  const counter = new THREE.Color("#3d342c");
+  const counterTop = new THREE.Color("#3d342c");
 
   let x0 = spec.x;
   let z0 = spec.z;
@@ -453,37 +485,118 @@ function addShop(
   let rotY = 0;
   if (spec.face === "x+") {
     trim.box(x1, z0 + 0.12, x1 + awning, z1 - 0.12, 1.95, 2.22, accent);
-    trim.box(x1 - 0.08, z0 + 0.3, x1 + 0.12, z1 - 0.3, 1.02, 1.16, counter);
-    addFoodProps(trim, spec.name, x1 - 0.45, z0 + 0.6, z1 - 0.6);
+    trim.box(x1 - 0.08, z0 + 0.3, x1 + 0.12, z1 - 0.3, 1.02, 1.16, counterTop);
+    addFoodProps(trim, group, disposables, spec.name, x1 - 0.45, z0 + 0.6, z1 - 0.6);
     signX = x1 + 0.1;
     signZ = cz;
     rotY = -Math.PI / 2;
   } else if (spec.face === "x-") {
     trim.box(x0 - awning, z0 + 0.12, x0, z1 - 0.12, 1.95, 2.22, accent);
-    trim.box(x0 - 0.12, z0 + 0.3, x0 + 0.08, z1 - 0.3, 1.02, 1.16, counter);
-    addFoodProps(trim, spec.name, x0 + 0.2, z0 + 0.6, z1 - 0.6);
+    trim.box(x0 - 0.12, z0 + 0.3, x0 + 0.08, z1 - 0.3, 1.02, 1.16, counterTop);
+    addFoodProps(trim, group, disposables, spec.name, x0 + 0.2, z0 + 0.6, z1 - 0.6);
     signX = x0 - 0.1;
     signZ = cz;
     rotY = Math.PI / 2;
   } else if (spec.face === "z+") {
     trim.box(x0 + 0.12, z1, x1 - 0.12, z1 + awning, 1.95, 2.22, accent);
-    trim.box(x0 + 0.3, z1 - 0.08, x1 - 0.3, z1 + 0.12, 1.02, 1.16, counter);
-    addFoodProps(trim, spec.name, x0 + 0.6, z1 - 0.45, x1 - 0.6, true);
+    trim.box(x0 + 0.3, z1 - 0.08, x1 - 0.3, z1 + 0.12, 1.02, 1.16, counterTop);
+    addFoodProps(trim, group, disposables, spec.name, x0 + 0.6, z1 - 0.45, x1 - 0.6, true);
     signX = cx;
     signZ = z1 + 0.1;
     rotY = 0;
   } else {
     trim.box(x0 + 0.12, z0 - awning, x1 - 0.12, z0, 1.95, 2.22, accent);
-    trim.box(x0 + 0.3, z0 - 0.12, x1 - 0.3, z0 + 0.08, 1.02, 1.16, counter);
+    trim.box(x0 + 0.3, z0 - 0.12, x1 - 0.3, z0 + 0.08, 1.02, 1.16, counterTop);
     signX = cx;
     signZ = z0 - 0.1;
     rotY = Math.PI;
   }
 
   addShopSign(group, disposables, spec.name, spec.menu, spec.color, signX, 2.38, signZ, rotY, width * 0.82);
+
+  const reach = awning + 0.55;
+  const out =
+    spec.face === "x+" ? { x: 1, z: 0 } : spec.face === "x-" ? { x: -1, z: 0 } : spec.face === "z+" ? { x: 0, z: 1 } : { x: 0, z: -1 };
+  const counter =
+    spec.face === "x+"
+      ? { x: x1 + reach, z: cz }
+      : spec.face === "x-"
+        ? { x: x0 - reach, z: cz }
+        : spec.face === "z+"
+          ? { x: cx, z: z1 + reach }
+          : { x: cx, z: z0 - reach };
+  const side = spec.face === "x+" || spec.face === "x-";
+  const aisle = AISLES.reduce((a, b) => (Math.abs(b - cx) < Math.abs(a - cx) ? b : a));
+  // Side corridors run under the stands toward home plate; the main concourse
+  // sends fans to the foot of the nearest aisle stair and up into the seats.
+  const walk = side
+    ? [counter, { x: counter.x + out.x * 0.6, z: counter.z + 1.2 }, { x: counter.x + out.x * 0.6, z: SEAT_Z0 - 1.2 }]
+    : [
+        counter,
+        { x: aisle + Math.sign(cx - aisle || 1) * (AISLE_HALF + 0.9), z: STAIR_Z1 - 0.2 },
+        { x: aisle, z: STAIR_Z1 + 0.4 },
+        { x: aisle, z: STAIR_Z0 + 0.5 },
+      ];
+  return {
+    name: spec.name,
+    title: STAND_TITLES[spec.name] ?? spec.name,
+    items: STADIUM_STAND_MENUS[spec.name] ?? [],
+    color: spec.color,
+    counter,
+    out,
+    walk,
+    maxLine: side ? 3 : 7,
+  } satisfies StadiumStand;
 }
 
-function addFoodProps(trim: MeshBuilder, name: string, a: number, b: number, c: number, alongX = false) {
+const STAND_TITLES: Record<string, string> = {
+  NACHOS: "Nacho Stand",
+  "HOT DOGS": "Hot Dog Stand",
+  PRETZELS: "Pretzel Cart",
+  BURGERS: "Burger Grill",
+  DRINKS: "Drink Stand",
+  "ICE CREAM": "Ice Cream Stand",
+  PIZZA: "Pizza Slices",
+  PIZZERIA: "Ballpark Pizzeria",
+  SWEETS: "Sweets Stand",
+};
+
+const COUNTER_DISPLAYS: Record<string, string[]> = {
+  "HOT DOGS": ["food-hotdog", "food-relish-dog", "food-chili-dog"],
+  PRETZELS: ["food-pretzel", "food-pretzel-cheese", "food-pretzel"],
+};
+
+function addFoodProps(
+  trim: MeshBuilder,
+  group: THREE.Group,
+  disposables: Array<{ dispose: () => void }>,
+  name: string,
+  a: number,
+  b: number,
+  c: number,
+  alongX = false,
+) {
+  const display = COUNTER_DISPLAYS[name];
+  if (display) {
+    const steel = new THREE.Color("#9aa3ab");
+    const slot = alongX ? (c - a) / 3 : (c - b) / 3;
+    display.forEach((id, i) => {
+      const x = alongX ? a + slot * (i + 0.5) : a + 0.22;
+      const z = alongX ? b + 0.22 : b + slot * (i + 0.5);
+      const hx = alongX ? 0.36 : 0.17;
+      const hz = alongX ? 0.17 : 0.36;
+      trim.box(x - hx, z - hz, x + hx, z + hz, 1.16, 1.18, steel);
+      for (const offset of [-0.17, 0.17]) {
+        const food = displayFood(id, disposables);
+        if (!food) continue;
+        food.scale.setScalar(1.3);
+        food.rotation.y = alongX ? 0 : Math.PI / 2;
+        food.position.set(alongX ? x + offset : x, 1.19, alongX ? z : z + offset);
+        group.add(food);
+      }
+    });
+    return;
+  }
   const colors: Record<string, string[]> = {
     NACHOS: ["#e8c36a", "#e67e22", "#c0392b"],
     "HOT DOGS": ["#c0392b", "#f4f1ea", "#6b8f3a"],
@@ -492,6 +605,7 @@ function addFoodProps(trim: MeshBuilder, name: string, a: number, b: number, c: 
     PRETZELS: ["#c47a2c", "#e8c36a", "#8b5a2b"],
     "ICE CREAM": ["#f4f1ea", "#d48aa8", "#7ec8e3"],
     PIZZA: ["#c0392b", "#e8c36a", "#3d7a3a"],
+    PIZZERIA: ["#e8c36a", "#b83218", "#f4f1ea"],
     SWEETS: ["#e8a0d0", "#f4f1ea", "#e67e22"],
   };
   const palette = colors[name] ?? ["#e8c36a", "#c0392b", "#1f4d8c"];

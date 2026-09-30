@@ -1,7 +1,7 @@
 import { createBuilding, footprintFor } from "@/lib/simulation/buildings/buildings";
 import { markLodging } from "./lodging";
 import { SUBWAY_STATIONS, markSubwayStation } from "./subway";
-import { markDealership, markMall, markNotableVenues } from "./venues";
+import { markDealership, markMall, markNotableVenues, markPizzeria } from "./venues";
 import {
   RIVER_W,
   riverXAt,
@@ -342,6 +342,8 @@ export function generateCity(seed = 20260903): CityState {
     [33, 21],
     [36, 16],
   ];
+  const pizzeria = placeNear("shop", 21, 33) ?? placeNear("shop", 28, 21);
+  if (pizzeria) markPizzeria(pizzeria);
   for (const [x, y] of shopStrip) place("shop", x, y);
 
   for (let y = 0; y < SIZE; y++) {

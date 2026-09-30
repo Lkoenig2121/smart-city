@@ -297,6 +297,11 @@ export function stadiumClubFor(state: CityState): Ballclub {
   return scoreboardMatchup(state)?.club ?? ballclubFor(state);
 }
 
+/** Tonight's World Series game at this city's park (null on any other day/city). */
+export function seriesGameToday(state: CityState) {
+  return matchupFor(state.id, state.clock)?.series ?? null;
+}
+
 /** World Series game number + series score before it, when this park hosts one. */
 export function stadiumSeriesGame(state: CityState) {
   return scoreboardMatchup(state)?.series ?? null;

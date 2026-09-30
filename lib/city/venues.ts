@@ -191,6 +191,20 @@ export function markBank(building: Building, name?: string) {
   building.stats.revenue = Math.max(building.stats.revenue, 3800);
 }
 
+export function isPizzeria(building: Building) {
+  return building.stats.extra?.cuisine === "pizzeria";
+}
+
+export function markPizzeria(building: Building, name = "That's Amore") {
+  markVenue(building, "restaurant", name);
+  building.stats.extra = { ...building.stats.extra, cuisine: "pizzeria" };
+  building.wallColor = "#f4efe6";
+  building.roofColor = "#c0392b";
+  building.accentColor = "#2f7a3e";
+  building.stats.jobs = Math.max(building.stats.jobs, 14);
+  building.stats.employees = Math.max(building.stats.employees, 10);
+}
+
 export function markMall(building: Building, name = "Harbor Mall") {
   markVenue(building, "mall", name);
   building.wallColor = "#ead9c4";
@@ -271,7 +285,7 @@ export function markNotableVenues(buildings: Map<string, Building>) {
   );
   const reserved = (b: Building) => {
     const role = venueRole(b);
-    return role === "mall" || role === "dealership" || role === "bank";
+    return role === "mall" || role === "dealership" || role === "bank" || isPizzeria(b);
   };
   const shops = list.filter(
     (b) => b.kind === "shop" && !b.stats.extra?.waterfront && !reserved(b),

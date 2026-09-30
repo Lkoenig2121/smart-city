@@ -3,6 +3,7 @@ import type { CityState } from "@/lib/city/types";
 import { citizenIsOutdoors } from "@/lib/simulation/citizens/citizenBehavior";
 import { citizenHairColor, citizenHairStyle } from "@/lib/simulation/citizens/citizenLook";
 import { laneOffset, sidewalkOffset } from "@/lib/simulation/traffic/pathfinding";
+import { SERIES_TRAFFIC_EXTRA } from "@/lib/simulation/traffic/seriesTraffic";
 import { CURB_H, DECK_H, TILE } from "./buildCity";
 
 /**
@@ -34,7 +35,7 @@ export class AgentLayer {
     private groundAt: (x: number, z: number) => number,
   ) {
     const peopleCount = Math.max(1, state.citizens.length);
-    const vehicleCount = Math.max(1, state.vehicles.length);
+    const vehicleCount = Math.max(1, state.vehicles.length) + SERIES_TRAFFIC_EXTRA;
 
     // A capsule torso and a sphere head read clearly as a person at eye level.
     const bodyGeo = new THREE.CapsuleGeometry(0.22, 0.72, 4, 8);
