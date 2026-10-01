@@ -25,7 +25,7 @@ import { buildStreetPerson, disposeObject3D } from "./streetPerson";
 import { driveStats } from "@/lib/city/vehicles";
 import { findPath, nearestRoad } from "@/lib/simulation/traffic/pathfinding";
 import { DriveControls } from "./driveControls";
-import { makePlayerCarMesh, placeCarMesh, updateDutySiren } from "./playerCar";
+import { makePlayerCarMesh, updateDutySiren } from "./playerCar";
 
 /** Field of view at rest, and how far it narrows mid-hop. */
 const BASE_FOV = 72;
@@ -186,7 +186,7 @@ export class StreetWorld {
     return this.drivingId;
   }
 
-  syncOwnedCars(cars: OwnedVehicle[], hideId: string | null = null) {
+  syncOwnedCars(cars: OwnedVehicle[]) {
     const seen = new Set<string>();
     for (const car of cars) {
       seen.add(car.id);
@@ -200,36 +200,14 @@ export class StreetWorld {
       if (body && body.material instanceof THREE.MeshStandardMaterial) {
         body.material.color.set(car.color);
       }
-      if (car.id === hideId) {
-        mesh.visible = false;
-        continue;
-      }
-      const ground = this.controls.groundAt(car.parkX * TILE, car.parkY * TILE);
-      placeCarMesh(mesh, car, ground);
+      // Cars only exist while you're in them: C summons one under you and it vanishes on exit.
+      if (car.id !== this.drivingId) mesh.visible = false;
     }
     for (const [id, mesh] of this.ownedCarMeshes) {
       if (seen.has(id)) continue;
       mesh.removeFromParent();
       this.ownedCarMeshes.delete(id);
     }
-  }
-
-  nearOwnedCar(cars: OwnedVehicle[]) {
-    if (this.isDriving) return null;
-    const px = this.controls.position.x;
-    const pz = this.controls.position.z;
-    let best: OwnedVehicle | null = null;
-    let bestD = TILE * 2.4;
-    for (const car of cars) {
-      const dx = px - car.parkX * TILE;
-      const dz = pz - car.parkY * TILE;
-      const d = Math.hypot(dx, dz);
-      if (d < bestD) {
-        bestD = d;
-        best = car;
-      }
-    }
-    return best;
   }
 
   startDriving(car: OwnedVehicle) {
@@ -268,9 +246,19 @@ export class StreetWorld {
     const id = this.drivingId;
     this.drivingId = null;
     const mesh = this.ownedCarMeshes.get(id);
-    if (mesh) mesh.visible = true;
+    if (mesh) mesh.visible = false;
     this.refreshDutyPresentation();
     return { x, y, yaw };
+  }
+
+  /** Puts the player behind the wheel of `car` right where they're standing. */
+  summonCar(car: OwnedVehicle) {
+    this.startDriving({
+      ...car,
+      parkX: this.controls.position.x / TILE,
+      parkY: this.controls.position.z / TILE,
+      parkYaw: this.controls.yaw,
+    });
   }
 
   driveMph() {

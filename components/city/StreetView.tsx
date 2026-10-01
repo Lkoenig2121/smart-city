@@ -266,7 +266,6 @@ export function StreetView({
   const [motorsOpen, setMotorsOpen] = useState(false);
   const [driving, setDriving] = useState(false);
   const [policeLights, setPoliceLights] = useState(false);
-  const [nearCar, setNearCar] = useState<OwnedVehicle | null>(null);
   const motorsOpenRef = useRef(false);
   const drivingRef = useRef(false);
   const [barMenu, setBarMenu] = useState(false);
@@ -852,7 +851,7 @@ export function StreetView({
             return true;
           }
         }
-        if (event.code !== "KeyE" && event.code !== "KeyF" && event.code !== "KeyL") return false;
+        if (event.code !== "KeyE" && event.code !== "KeyC" && event.code !== "KeyL") return false;
         event.preventDefault();
         if (event.code === "KeyL") {
           if (!onPoliceDuty(readPlayer())) return false;
@@ -865,7 +864,6 @@ export function StreetView({
           return true;
         }
         if (drivingRef.current) {
-          if (event.code !== "KeyE") return false;
           const parked = world.stopDriving();
           const id = activeOwnedVehicle(readPlayer())?.id;
           if (parked && id) {
@@ -883,25 +881,12 @@ export function StreetView({
           setDriving(false);
           return true;
         }
-        const car = world.nearOwnedCar(readPlayer().ownedVehicles);
-        const doorNearby = Boolean(world.enterTarget());
-
-        // F = drive when a car is in range (also when a building door competes for E).
-        if (event.code === "KeyF") {
-          if (!car) return false;
-          world.startDriving(car);
+        if (event.code === "KeyC") {
+          const car = activeOwnedVehicle(readPlayer());
+          if (!car || world.hiking) return false;
+          world.summonCar(car);
           drivingRef.current = true;
           setDriving(true);
-          setNearCar(null);
-          return true;
-        }
-
-        // E = enter building when both are nearby; otherwise enter the car.
-        if (car && !doorNearby) {
-          world.startDriving(car);
-          drivingRef.current = true;
-          setDriving(true);
-          setNearCar(null);
           return true;
         }
         if (tryPoliceCallAction()) return true;
@@ -920,7 +905,7 @@ export function StreetView({
       world.setWaypoint(waypointRef.current);
       const live = readPlayer();
       const activeCar = activeOwnedVehicle(live);
-      world.syncOwnedCars(live.ownedVehicles, world.drivingVehicleId);
+      world.syncOwnedCars(live.ownedVehicles);
       if (world.isDriving && activeCar) {
         world.setDriveFuelEmpty(false);
       } else {
@@ -988,10 +973,6 @@ export function StreetView({
         );
         writePlayer(next);
         if (Math.random() < 0.02) setPlayer(next);
-      }
-      if (!world.isDriving) {
-        const car = world.nearOwnedCar(live.ownedVehicles);
-        setNearCar((prev) => (prev?.id === car?.id ? prev : car));
       }
       const pin = waypointRef.current;
       // Police dispatch pins stay on the minimap for the whole call; only
@@ -1814,34 +1795,6 @@ export function StreetView({
     if (kind === "season") showPassToast();
     setInterior({ kind: "stadium" });
   };
-  const doorNearby = Boolean(venueDoor || lodgingDoor || subwayDoor || atGate);
-  const carAndDoorChoice = Boolean(
-    nearCar && doorNearby && !driving && !inside && !failed,
-  );
-  const doorChoiceLabel = lodgingDoor
-    ? lodgingDoor.name
-    : subwayDoor
-      ? subwayDoor.name
-      : atGate
-        ? (stadiumBuilding?.name ?? ballclub.parkName)
-        : venueDoor
-          ? venueDoor.name
-          : "Building";
-  const doorChoiceKind = lodgingDoor
-    ? lodgingUse(lodgingDoor) === "hotel"
-      ? "Hotel"
-      : "Residences"
-    : subwayDoor
-      ? "Subway"
-      : atGate
-        ? "Stadium"
-        : venueDoor
-          ? (() => {
-              const role = venueRole(venueDoor);
-              return role ? venueLabel(role) : "Building";
-            })()
-          : "Enter";
-
   const placeName =
     interior?.kind === "stadium"
       ? (stadiumBuilding?.name ?? ballclub.parkName)
@@ -2133,7 +2086,8 @@ export function StreetView({
               · <span className="font-semibold text-white">A</span>/
               <span className="font-semibold text-white">D</span> steer ·{" "}
               <span className="font-semibold text-white">Space</span> handbrake
-              · <span className="font-semibold text-white">E</span> exit
+              · <span className="font-semibold text-white">C</span>/
+              <span className="font-semibold text-white">E</span> exit
             </>
           ) : mode === "hop" && !inside ? (
             <>
@@ -2153,6 +2107,11 @@ export function StreetView({
               <span className="font-semibold text-white">E</span>/
               <span className="font-semibold text-white">Click</span>{" "}
               {inside ? "leave" : "enter"} ·{" "}
+              {!inside && activeOwnedVehicle(player) ? (
+                <>
+                  <span className="font-semibold text-white">C</span> car ·{" "}
+                </>
+              ) : null}
               <span className="font-semibold text-white">I</span> inventory ·{" "}
               <span className="font-semibold text-white">M</span> phone
             </>
@@ -2178,67 +2137,7 @@ export function StreetView({
               W gas · S brake · A/D steer · Space handbrake · Shift boost
             </p>
             <p className="mt-0.5 text-[0.65rem] text-slate-500">
-              E exit vehicle · Mouse look
-            </p>
-          </div>
-        </div>
-      ) : null}
-
-      {carAndDoorChoice && nearCar ? (
-        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
-          <div className="min-w-[16rem] rounded-2xl border border-white/20 bg-black/80 px-5 py-4 shadow-2xl backdrop-blur">
-            <p className="text-center text-[0.65rem] uppercase tracking-[0.28em] text-slate-400">
-              Choose
-            </p>
-            <div className="mt-3 space-y-2.5">
-              <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-300/35 bg-amber-400/10 px-3 py-2">
-                <div className="min-w-0 text-left">
-                  <p className="text-[0.6rem] uppercase tracking-[0.2em] text-amber-300">
-                    {doorChoiceKind}
-                  </p>
-                  <p className="truncate text-sm font-semibold text-white">
-                    {doorChoiceLabel}
-                  </p>
-                </div>
-                <p className="shrink-0 text-sm text-slate-300">
-                  <span className="font-semibold text-white">Click</span>/
-                  <span className="font-semibold text-white">E</span> enter
-                </p>
-              </div>
-              <div className="flex items-center justify-between gap-4 rounded-xl border border-sky-300/35 bg-sky-400/10 px-3 py-2">
-                <div className="min-w-0 text-left">
-                  <p className="text-[0.6rem] uppercase tracking-[0.2em] text-sky-300">
-                    Your vehicle
-                  </p>
-                  <p className="truncate text-sm font-semibold text-white">
-                    {nearCar.model}
-                  </p>
-                </div>
-                <p className="shrink-0 text-sm text-slate-300">
-                  <span className="font-semibold text-white">F</span> drive
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {nearCar &&
-      !carAndDoorChoice &&
-      !driving &&
-      !inside &&
-      !failed ? (
-        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
-          <div className="rounded-2xl border border-sky-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
-            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-sky-300">
-              Your vehicle
-            </p>
-            <p className="mt-1 text-xl font-semibold text-white">
-              {nearCar.model}
-            </p>
-            <p className="mt-1 text-sm text-slate-300">
-              Press <span className="font-semibold text-white">E</span> or{" "}
-              <span className="font-semibold text-white">F</span> to drive
+              C/E exit vehicle · Mouse look
             </p>
           </div>
         </div>
@@ -2260,7 +2159,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {atGate && !carAndDoorChoice && !inside && !failed && !ticketBooth ? (
+      {atGate && !inside && !failed && !ticketBooth ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
@@ -2334,7 +2233,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {mountainTrail && !carAndDoorChoice && !inside && !failed && !driving ? (
+      {mountainTrail && !inside && !failed && !driving ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-emerald-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-emerald-300">
@@ -2359,7 +2258,7 @@ export function StreetView({
         </div>
       ) : null}
 
-      {lodgingDoor && !carAndDoorChoice && !inside && !failed ? (
+      {lodgingDoor && !inside && !failed ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
@@ -2378,7 +2277,6 @@ export function StreetView({
       ) : null}
 
       {venueDoor &&
-      !carAndDoorChoice &&
       !lodgingDoor &&
       !subwayDoor &&
       !atGate &&
@@ -2409,7 +2307,6 @@ export function StreetView({
       ) : null}
 
       {subwayDoor &&
-      !carAndDoorChoice &&
       !lodgingDoor &&
       !atGate &&
       !inside &&
