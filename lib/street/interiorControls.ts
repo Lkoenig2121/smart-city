@@ -14,6 +14,10 @@ const GRAVITY = 32;
 const JUMP_SPEED = 8.5;
 const PITCH_LIMIT = Math.PI / 2 - 0.04;
 const LOOK_SENSITIVITY = 0.0022;
+const CLIMB_SPEED = 3.4;
+
+/** A climbable zone: W climbs, S descends, topping out drops you at `exit`. */
+export type Ladder = { bottom: number; top: number; exit: { x: number; z: number; yaw: number } };
 
 /**
  * First-person walking for interiors: the same feel as Street View's walk
@@ -29,11 +33,13 @@ export class InteriorControls {
   private velocity = new THREE.Vector3();
   private keys = new InputKeys();
   private grounded = true;
+  private onLadder = false;
 
   constructor(
     private blockers: Blocker[],
     private groundY: (x: number, z: number, feetY?: number) => number,
     private bounds: { minX: number; maxX: number; minZ: number; maxZ: number },
+    private ladderAt?: (x: number, z: number, feetY: number) => Ladder | null,
   ) {}
 
   spawn(x: number, z: number, yaw: number, pitch = 0) {
@@ -42,6 +48,7 @@ export class InteriorControls {
     this.pitch = pitch;
     this.velocity.set(0, 0, 0);
     this.grounded = true;
+    this.onLadder = false;
   }
 
   keyDown(event: KeyboardEvent) {
@@ -68,6 +75,7 @@ export class InteriorControls {
 
   update(dt: number) {
     if (!this.enabled) return;
+    if (this.climb(dt)) return;
     let f = 0;
     let r = 0;
     if (this.has("KeyW", "ArrowUp")) f += 1;
@@ -119,6 +127,44 @@ export class InteriorControls {
     } else {
       this.position.y = floor;
     }
+  }
+
+  private climb(dt: number) {
+    const feet = this.position.y - EYE_HEIGHT;
+    const ladder = this.ladderAt?.(this.position.x, this.position.z, feet) ?? null;
+    if (!ladder) {
+      this.onLadder = false;
+      return false;
+    }
+    const v = (this.has("KeyW", "ArrowUp") ? 1 : 0) - (this.has("KeyS", "ArrowDown") ? 1 : 0);
+    if (!this.onLadder) {
+      if (feet <= ladder.bottom + 0.05 && v <= 0) return false;
+      this.onLadder = true;
+      if (feet >= ladder.top - 0.05) {
+        // Stepping in from above: grab the rungs facing the ladder.
+        this.position.y = ladder.top - 0.8 + EYE_HEIGHT;
+        this.yaw = ladder.exit.yaw + Math.PI;
+        this.velocity.set(0, 0, 0);
+        return true;
+      }
+    }
+    this.velocity.set(0, 0, 0);
+    this.grounded = true;
+    const next = Math.max(ladder.bottom, feet + v * CLIMB_SPEED * dt);
+    if (next >= ladder.top) {
+      this.position.set(ladder.exit.x, ladder.top + EYE_HEIGHT, ladder.exit.z);
+      this.yaw = ladder.exit.yaw;
+      this.onLadder = false;
+      return true;
+    }
+    this.position.y = next + EYE_HEIGHT;
+    if (next <= ladder.bottom && v < 0) this.onLadder = false;
+    const side = (this.has("KeyD", "ArrowRight") ? 1 : 0) - (this.has("KeyA", "ArrowLeft") ? 1 : 0);
+    if (side !== 0) {
+      const s = side * WALK_SPEED * 0.35 * dt;
+      this.nudge(Math.cos(this.yaw) * s, -Math.sin(this.yaw) * s);
+    }
+    return true;
   }
 
   private step(dx: number, dz: number) {

@@ -125,7 +125,6 @@ import {
   applyDriveTick,
   applyParkVehicle,
   snapFleetToMotorsApproach,
-  type OwnedVehicle,
 } from "@/lib/city/vehicles";
 type Interior =
   | { kind: "stadium" }

@@ -5,6 +5,7 @@ import type { FurnishStore } from "@/lib/city/furnishings";
 import { FOOD_COURT_MENU, PIZZERIA_MENU } from "@/lib/city/consumables";
 import { venueRole, type VenueRole } from "@/lib/city/venues";
 import type { Blocker } from "./buildCity";
+import type { Ladder } from "./interiorControls";
 import { MeshBuilder } from "./meshBuilder";
 import { buildOfficeTower, type OfficeElevator } from "./officeInterior";
 
@@ -21,6 +22,7 @@ export interface VenueInterior {
   nearSnack?: (x: number, z: number, feetY?: number) => { id: string; name: string; items: string[] } | null;
   update?: (dt: number) => void;
   rideAt?: (x: number, z: number, feetY?: number) => { x: number; z: number } | null;
+  ladderAt?: (x: number, z: number, feetY: number) => Ladder | null;
   elevator?: OfficeElevator;
   dispose: () => void;
 }
@@ -181,6 +183,9 @@ const MALL_DOOR = 2.8;
 const MALL_SKY = 22;
 const MALL_SHOP = 46;
 const MALL_STORE_H = 5.65;
+const MALL_ROOF = MALL_CEIL + 0.6;
+/** Roof hatch over the hidden ladder in level 3's north-east corner. */
+const HATCH = { minX: 55.9, maxX: 58.1, minZ: 59.6, maxZ: MALL_MAX - 0.55 };
 const ESC_W = 4.15;
 const ESC_GAP = 0.16;
 const ESC_LANDING = 4.4;
@@ -200,7 +205,29 @@ const MALL_BAYS: {
   color: string;
   name: string;
   blurb: string;
+  /** Island store in the open atrium: needs its own back wall and roof. */
+  freestanding?: boolean;
 }[] = [
+  // Level 1 atrium islands around the fountain.
+  { id: "denim", minX: -18, maxX: -7, minZ: 7, maxZ: 18, y0: 0, front: "z+", color: "#3d5a80", name: "Indigo & Co", blurb: "Jeans · jackets", freestanding: true },
+  { id: "hats", minX: 7, maxX: 18, minZ: 7, maxZ: 18, y0: 0, front: "z+", color: "#7a6a52", name: "Cap & Crown", blurb: "Fedoras · caps", freestanding: true },
+  { id: "optics", minX: -18, maxX: -7, minZ: -18, maxZ: -7, y0: 0, front: "z-", color: "#1a1206", name: "Clear View Optics", blurb: "Frames · shades", freestanding: true },
+  { id: "bags", minX: 7, maxX: 18, minZ: -18, maxZ: -7, y0: 0, front: "z-", color: "#6a4a2a", name: "Carry Goods", blurb: "Totes · duffels", freestanding: true },
+  // Level 1 border corners.
+  { id: "shoes", minX: -61.4, maxX: -MALL_SHOP, minZ: 28.48, maxZ: 45.7, y0: 0, front: "x+", color: "#5a3a22", name: "Step Shoe Co", blurb: "Boots · loafers" },
+  { id: "suits", minX: -61.4, maxX: -MALL_SHOP, minZ: -45.7, maxZ: -28.48, y0: 0, front: "x+", color: "#5a6070", name: "Tailor Row", blurb: "Suits · ties" },
+  { id: "swim", minX: MALL_SHOP, maxX: 61.4, minZ: 28.48, maxZ: 45.7, y0: 0, front: "x-", color: "#2aa3a0", name: "Harbor Surf", blurb: "Boards · sandals" },
+  { id: "vintage", minX: MALL_SHOP, maxX: 61.4, minZ: -45.7, maxZ: -28.48, y0: 0, front: "x-", color: "#7a2f8a", name: "Second Spin Vintage", blurb: "Retro · thrift" },
+  // Level 2 border corners.
+  { id: "knit", minX: -61.4, maxX: -MALL_SHOP, minZ: 20.68, maxZ: 44.6, y0: MALL_L2, front: "x+", color: "#8a6a4a", name: "Wool & Loom", blurb: "Sweaters · scarves" },
+  { id: "street", minX: -61.4, maxX: -MALL_SHOP, minZ: -44.6, maxZ: -20.68, y0: MALL_L2, front: "x+", color: "#1a1206", name: "Block Streetwear", blurb: "Hoodies · high-tops" },
+  { id: "yoga", minX: MALL_SHOP, maxX: 61.4, minZ: 20.68, maxZ: 44.6, y0: MALL_L2, front: "x-", color: "#7eb3e0", name: "Flow Studio", blurb: "Yoga · lounge" },
+  { id: "rain", minX: MALL_SHOP, maxX: 61.4, minZ: -44.6, maxZ: -20.68, y0: MALL_L2, front: "x-", color: "#c9a42a", name: "Drizzle Rainwear", blurb: "Slickers · boots" },
+  // Level 3 border corners.
+  { id: "watch", minX: -61.4, maxX: -MALL_SHOP, minZ: 18.68, maxZ: 44.6, y0: MALL_L3, front: "x+", color: "#1d2d4f", name: "Tick Tock Watches", blurb: "Dive · smart" },
+  { id: "formal", minX: -61.4, maxX: -MALL_SHOP, minZ: -44.6, maxZ: -18.68, y0: MALL_L3, front: "x+", color: "#1a1f3a", name: "Evening Hall", blurb: "Tuxes · gowns" },
+  { id: "skate", minX: MALL_SHOP, maxX: 61.4, minZ: 18.68, maxZ: 44.6, y0: MALL_L3, front: "x-", color: "#c45c4a", name: "Ramp Skate Shop", blurb: "Decks · shoes" },
+  { id: "western", minX: MALL_SHOP, maxX: 61.4, minZ: -44.6, maxZ: -18.68, y0: MALL_L3, front: "x-", color: "#8a6a4a", name: "Dustfall Outfitters", blurb: "Hats · boots" },
   { id: "fashion", minX: -61.4, maxX: -MALL_SHOP, minZ: 2.6, maxZ: 28.2, y0: 0, front: "x+", color: "#c45c4a", name: "Fashion Avenue", blurb: "Jackets · shirts" },
   { id: "jewelry", minX: -61.4, maxX: -MALL_SHOP, minZ: -28.2, maxZ: -2.6, y0: 0, front: "x+", color: "#c9a44c", name: "Harbor Jewels", blurb: "Watches · rings" },
   { id: "sneaker", minX: MALL_SHOP, maxX: 61.4, minZ: 2.6, maxZ: 28.2, y0: 0, front: "x-", color: "#2aa3a0", name: "Sneaker District", blurb: "Kicks · athletic" },
@@ -340,7 +367,9 @@ function buildMallInterior(): VenueInterior {
   floorB.ground(minX, minZ, maxX, maxZ, 0.04, floor);
   floorB.ground(-40, -40, 40, 44, 0.06, marble);
   addCeiling(floorB, minX, minZ, maxX, -MALL_SKY, ceilY, cream);
-  addCeiling(floorB, minX, MALL_SKY, maxX, maxZ, ceilY, cream);
+  addCeiling(floorB, minX, MALL_SKY, maxX, HATCH.minZ, ceilY, cream);
+  addCeiling(floorB, minX, HATCH.minZ, HATCH.minX, maxZ, ceilY, cream);
+  addCeiling(floorB, HATCH.maxX, HATCH.minZ, maxX, maxZ, ceilY, cream);
   addCeiling(floorB, minX, -MALL_SKY, -MALL_SKY, MALL_SKY, ceilY, cream);
   addCeiling(floorB, MALL_SKY, -MALL_SKY, maxX, MALL_SKY, ceilY, cream);
   addCeiling(floorB, -MALL_SKY, -MALL_SKY, MALL_SKY, MALL_SKY, ceilY + 0.55, new THREE.Color("#fffdf8"));
@@ -366,6 +395,7 @@ function buildMallInterior(): VenueInterior {
   addConcourseProps(wallB, trimB, blockers, gold, leaf, stone);
   addDirectory(wallB, trimB, blockers, gold, marble);
   addSnackHuts(group, wallB, trimB, blockers, disposables, gold);
+  addMallRoof(floorB, wallB, trimB, glassB, blockers, wall, gold, ceilY);
 
   for (const bay of allMallBays()) {
     const midX = (bay.minX + bay.maxX) / 2;
@@ -427,6 +457,7 @@ function buildMallInterior(): VenueInterior {
       }
     },
     rideAt: mallRideAt,
+    ladderAt: mallLadderAt,
     dispose: () => {
       for (const item of disposables) item.dispose();
     },
@@ -447,7 +478,23 @@ function mallRampY(lane: EscLane, x: number, z: number) {
   );
 }
 
+function onMallRoof(x: number, z: number) {
+  if (Math.max(Math.abs(x), Math.abs(z)) < MALL_SKY + 0.2) return false;
+  return !(x > HATCH.minX && x < HATCH.maxX && z > HATCH.minZ);
+}
+
+function mallLadderAt(x: number, z: number, feetY: number): Ladder | null {
+  if (x < HATCH.minX || x > HATCH.maxX || z < HATCH.minZ || z > HATCH.maxZ) return null;
+  if (feetY < MALL_L3 - 0.3 || feetY > MALL_ROOF + 0.3) return null;
+  return {
+    bottom: MALL_L3,
+    top: MALL_ROOF,
+    exit: { x: (HATCH.minX + HATCH.maxX) / 2, z: HATCH.minZ - 1.1, yaw: 0 },
+  };
+}
+
 function mallGroundAt(x: number, z: number, feetY = 0) {
+  if (feetY > MALL_ROOF - 1.25 && onMallRoof(x, z)) return MALL_ROOF;
   for (const lane of ESC_LANES) {
     const rampY = mallRampY(lane, x, z);
     if (rampY == null) continue;
@@ -536,7 +583,7 @@ function addAtrium(
     trimB.box(x - 0.52, z - 0.52, x + 0.52, z + 0.52, MALL_L2 - 0.12, MALL_L2 + 0.18, gold);
     trimB.box(x - 0.52, z - 0.52, x + 0.52, z + 0.52, MALL_L3 - 0.12, MALL_L3 + 0.18, gold);
     trimB.box(x - 0.52, z - 0.52, x + 0.52, z + 0.52, ceilY - 0.22, ceilY, gold);
-    blockers.push({ minX: x - 0.42, maxX: x + 0.42, minZ: z - 0.42, maxZ: z + 0.42 });
+    blockers.push({ minX: x - 0.42, maxX: x + 0.42, minZ: z - 0.42, maxZ: z + 0.42, maxY: MALL_CEIL });
   }
 }
 
@@ -1092,6 +1139,14 @@ function addMallStores(
       partition(wallB, blockers, bay.maxX, bay.minZ, bay.maxX + 0.28, bay.maxZ, y0, y1, wall);
       partition(wallB, blockers, bay.minX - 0.28, bay.minZ, bay.minX, bay.maxZ, y0, y1, wall);
     }
+    if ("freestanding" in bay && bay.freestanding) {
+      if (bay.front === "z+") partition(wallB, blockers, bay.minX - 0.28, bay.minZ - 0.28, bay.maxX + 0.28, bay.minZ, y0, y1, wall);
+      else if (bay.front === "z-") partition(wallB, blockers, bay.minX - 0.28, bay.maxZ, bay.maxX + 0.28, bay.maxZ + 0.28, y0, y1, wall);
+      else if (bay.front === "x+") partition(wallB, blockers, bay.minX - 0.28, bay.minZ - 0.28, bay.minX, bay.maxZ + 0.28, y0, y1, wall);
+      else partition(wallB, blockers, bay.maxX, bay.minZ - 0.28, bay.maxX + 0.28, bay.maxZ + 0.28, y0, y1, wall);
+      wallB.box(bay.minX - 0.28, bay.minZ - 0.28, bay.maxX + 0.28, bay.maxZ + 0.28, y1, y1 + 0.25, wall);
+      trimB.box(bay.minX - 0.36, bay.minZ - 0.36, bay.maxX + 0.36, bay.maxZ + 0.36, y1 + 0.25, y1 + 0.37, lintel);
+    }
   }
   // Remaining mid-east L1 strip (estate took the west mid corridor).
   partition(wallB, blockers, MALL_SHOP, -2.6, 61.4, 2.6, 0, MALL_STORE_H, wall);
@@ -1182,13 +1237,14 @@ function furnishMallStores(wallB: MeshBuilder, trimB: MeshBuilder, blockers: Blo
     const cloth = new THREE.Color(bay.color);
     const midX = (bay.minX + bay.maxX) / 2;
     const midZ = (bay.minZ + bay.maxZ) / 2;
+    const span = Math.min(6.4, (bay.maxX - bay.minX) / 2 - 1);
     if (bay.front === "z+") {
-      rackRow(trimB, blockers, midX - 6.4, midZ - 4.2, midX - 0.4, bay.y0, cloth, gold);
-      rackRow(trimB, blockers, midX + 0.4, midZ - 4.2, midX + 6.4, bay.y0, cloth, gold);
+      rackRow(trimB, blockers, midX - span, midZ - 4.2, midX - 0.4, bay.y0, cloth, gold);
+      rackRow(trimB, blockers, midX + 0.4, midZ - 4.2, midX + span, bay.y0, cloth, gold);
       mannequin(wallB, trimB, blockers, midX, midZ + 2.4, bay.y0, cloth, gold);
     } else if (bay.front === "z-") {
-      rackRow(trimB, blockers, midX - 6.4, midZ + 1.6, midX - 0.4, bay.y0, cloth, gold);
-      rackRow(trimB, blockers, midX + 0.4, midZ + 1.6, midX + 6.4, bay.y0, cloth, gold);
+      rackRow(trimB, blockers, midX - span, midZ + 1.6, midX - 0.4, bay.y0, cloth, gold);
+      rackRow(trimB, blockers, midX + 0.4, midZ + 1.6, midX + span, bay.y0, cloth, gold);
       mannequin(wallB, trimB, blockers, midX, midZ - 2.2, bay.y0, cloth, gold);
     } else {
       const x0 = Math.min(bay.minX, bay.maxX) + 2.2;
@@ -1280,7 +1336,7 @@ function addConcourseProps(
     [0.0, -32.8],
   ]) {
     wallB.box(x, z, x + 0.7, z + 0.7, 0, MALL_CEIL, stone);
-    blockers.push({ minX: x, maxX: x + 0.7, minZ: z, maxZ: z + 0.7 });
+    blockers.push({ minX: x, maxX: x + 0.7, minZ: z, maxZ: z + 0.7, maxY: MALL_CEIL });
   }
 }
 
@@ -1604,6 +1660,100 @@ function furnish(
     blockers.push({ minX: 3.4, maxX: 9.6, minZ: 1.6, maxZ: 5.8 });
     wallB.box(5.6, 6.4, 9.8, 9.6, 0, 1.05, furn);
     blockers.push({ minX: 5.6, maxX: 9.8, minZ: 6.4, maxZ: 9.6 });
+  }
+}
+
+function addMallRoof(
+  floorB: MeshBuilder,
+  wallB: MeshBuilder,
+  trimB: MeshBuilder,
+  glassB: MeshBuilder,
+  blockers: Blocker[],
+  wall: THREE.Color,
+  gold: THREE.Color,
+  ceilY: number,
+) {
+  const y = MALL_ROOF;
+  const t = 0.55;
+  const lo = MALL_MIN;
+  const hi = MALL_MAX;
+  const inLo = lo + t;
+  const inHi = hi - t;
+  const s = MALL_SKY + 0.2;
+  const deck = new THREE.Color("#9a9d9b");
+  const steel = new THREE.Color("#6f767c");
+  const wood = new THREE.Color("#8a6a44");
+
+  floorB.ground(inLo, inLo, inHi, -s, y, deck);
+  floorB.ground(inLo, -s, -s, s, y, deck);
+  floorB.ground(s, -s, inHi, s, y, deck);
+  floorB.ground(inLo, s, inHi, HATCH.minZ, y, deck);
+  floorB.ground(inLo, HATCH.minZ, HATCH.minX, inHi, y, deck);
+  floorB.ground(HATCH.maxX, HATCH.minZ, inHi, inHi, y, deck);
+
+  const top = y + 1.05;
+  wallB.box(lo, lo, hi, lo + t, ceilY, top, wall);
+  wallB.box(lo, hi - t, hi, hi, ceilY, top, wall);
+  wallB.box(lo, lo, lo + t, hi, ceilY, top, wall);
+  wallB.box(hi - t, lo, hi, hi, ceilY, top, wall);
+  trimB.box(lo - 0.05, lo - 0.05, hi + 0.05, lo + t + 0.05, top, top + 0.1, gold);
+  trimB.box(lo - 0.05, hi - t - 0.05, hi + 0.05, hi + 0.05, top, top + 0.1, gold);
+  trimB.box(lo - 0.05, lo - 0.05, lo + t + 0.05, hi + 0.05, top, top + 0.1, gold);
+  trimB.box(hi - t - 0.05, lo - 0.05, hi + 0.05, hi + 0.05, top, top + 0.1, gold);
+  blockers.push({ minX: -MALL_DOOR - 0.2, maxX: MALL_DOOR + 0.2, minZ: hi - t, maxZ: hi, minY: y - 0.2 });
+
+  glassRail(wallB, trimB, glassB, blockers, -s - 0.2, s, s + 0.2, s + 0.2, y, gold);
+  glassRail(wallB, trimB, glassB, blockers, -s - 0.2, -s - 0.2, s + 0.2, -s, y, gold);
+  glassRail(wallB, trimB, glassB, blockers, -s - 0.2, -s, -s, s, y, gold);
+  glassRail(wallB, trimB, glassB, blockers, s, -s, s + 0.2, s, y, gold);
+
+  for (const [x0, z0, x1, z1, h] of [
+    [-44, 30, -37, 36, 2.3],
+    [36, -44, 43, -38, 2.3],
+    [-50, -50, -46, -44, 1.6],
+    [44, 34, 48, 38, 1.6],
+  ]) {
+    wallB.box(x0, z0, x1, z1, y, y + h, steel);
+    trimB.box(x0 + 0.4, z0 + 0.4, x1 - 0.4, z1 - 0.4, y + h, y + h + 0.12, gold);
+    blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, minY: y - 0.2, maxY: y + h + 0.2 });
+  }
+
+  // Hatch shaft through the ceiling slab, plus side rails guiding you onto the rungs.
+  wallB.box(HATCH.minX - 0.2, HATCH.minZ, HATCH.minX, HATCH.maxZ, ceilY, y, wall);
+  wallB.box(HATCH.maxX, HATCH.minZ, HATCH.maxX + 0.2, HATCH.maxZ, ceilY, y, wall);
+  wallB.box(HATCH.minX - 0.2, HATCH.minZ - 0.2, HATCH.maxX + 0.2, HATCH.minZ, ceilY, y, wall);
+  for (const [x0, x1] of [
+    [HATCH.minX - 0.2, HATCH.minX],
+    [HATCH.maxX, HATCH.maxX + 0.2],
+  ]) {
+    trimB.box(x0, HATCH.minZ - 0.2, x1, HATCH.maxZ, y + 0.95, y + 1.08, steel);
+    trimB.box(x0, HATCH.minZ - 0.2, x1, HATCH.minZ, y, y + 0.95, steel);
+    blockers.push({ minX: x0, maxX: x1, minZ: HATCH.minZ - 0.2, maxZ: HATCH.maxZ, minY: y - 0.2, maxY: y + 1.1 });
+  }
+
+  const rail0 = HATCH.minX + 0.45;
+  const rail1 = HATCH.maxX - 0.45;
+  const lz0 = HATCH.maxZ - 0.4;
+  const lz1 = HATCH.maxZ - 0.3;
+  trimB.box(rail0 - 0.06, lz0, rail0 + 0.06, lz1, MALL_L3, y + 1.15, steel);
+  trimB.box(rail1 - 0.06, lz0, rail1 + 0.06, lz1, MALL_L3, y + 1.15, steel);
+  for (let ry = MALL_L3 + 0.3; ry < y + 1.1; ry += 0.3) {
+    trimB.box(rail0, lz0 + 0.02, rail1, lz1 - 0.02, ry, ry + 0.05, steel);
+  }
+  for (let ry = MALL_L3 + 1.2; ry < y; ry += 2.4) {
+    trimB.box(rail0 - 0.04, lz1, rail0 + 0.04, HATCH.maxZ, ry, ry + 0.08, steel);
+    trimB.box(rail1 - 0.04, lz1, rail1 + 0.04, HATCH.maxZ, ry, ry + 0.08, steel);
+  }
+
+  // Screen and crates hiding the ladder from the level 3 concourse.
+  partition(wallB, blockers, 54.6, 57.8, 59.4, 58.08, MALL_L3, MALL_L3 + 3.2, wall);
+  for (const [x0, z0, b, h] of [
+    [53.2, 58.5, 0, 1.1],
+    [53.2, 59.8, 0, 0.9],
+    [53.35, 58.65, 1.1, 0.85],
+  ]) {
+    trimB.box(x0, z0, x0 + 1.15, z0 + 1.15, MALL_L3 + b, MALL_L3 + b + h, wood);
+    blockers.push({ minX: x0, maxX: x0 + 1.15, minZ: z0, maxZ: z0 + 1.15, minY: MALL_L3 - 0.2, maxY: MALL_L3 + b + h });
   }
 }
 

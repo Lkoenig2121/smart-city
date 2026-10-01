@@ -55,6 +55,7 @@ export class VenueWorld {
       this.interior.blockers,
       this.interior.groundAt,
       this.interior.bounds,
+      this.interior.ladderAt,
     );
     this.controls.spawn(
       this.interior.spawn.x,

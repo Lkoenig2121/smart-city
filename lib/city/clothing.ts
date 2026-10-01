@@ -19,7 +19,23 @@ export type ClothStore =
   | "music"
   | "sport"
   | "toys"
-  | "ballpark";
+  | "ballpark"
+  | "denim"
+  | "hats"
+  | "optics"
+  | "bags"
+  | "shoes"
+  | "suits"
+  | "swim"
+  | "vintage"
+  | "knit"
+  | "street"
+  | "yoga"
+  | "rain"
+  | "watch"
+  | "formal"
+  | "skate"
+  | "western";
 export type ClothCollection =
   | "everyday"
   | "athletic"
@@ -73,7 +89,125 @@ export const STORES: { id: ClothStore; name: string; blurb: string }[] = [
   { id: "sport", name: "Court Sport", blurb: "Jerseys, shorts, and court shoes." },
   { id: "toys", name: "Sky Toys", blurb: "Kids packs, caps, and play layers." },
   { id: "ballpark", name: "Team Store", blurb: "Caps, jerseys, and game-day gear." },
+  { id: "denim", name: "Indigo & Co", blurb: "Jeans, jackets, and denim caps." },
+  { id: "hats", name: "Cap & Crown", blurb: "Fedoras, flat caps, and bucket hats." },
+  { id: "optics", name: "Clear View Optics", blurb: "Frames and sunglasses." },
+  { id: "bags", name: "Carry Goods", blurb: "Messengers, totes, and duffels." },
+  { id: "shoes", name: "Step Shoe Co", blurb: "Boots, loafers, and slip-ons." },
+  { id: "suits", name: "Tailor Row", blurb: "Suits, trousers, and ties." },
+  { id: "swim", name: "Harbor Surf", blurb: "Board shorts and beach gear." },
+  { id: "vintage", name: "Second Spin Vintage", blurb: "Retro finds and thrift classics." },
+  { id: "knit", name: "Wool & Loom", blurb: "Sweaters, scarves, and gloves." },
+  { id: "street", name: "Block Streetwear", blurb: "Hoodies, joggers, and high-tops." },
+  { id: "yoga", name: "Flow Studio", blurb: "Yoga and lounge layers." },
+  { id: "rain", name: "Drizzle Rainwear", blurb: "Slickers, rain hats, and boots." },
+  { id: "watch", name: "Tick Tock Watches", blurb: "Dive, field, and smart watches." },
+  { id: "formal", name: "Evening Hall", blurb: "Tuxedos, gowns, and patent shoes." },
+  { id: "skate", name: "Ramp Skate Shop", blurb: "Skate tees, shorts, and shoes." },
+  { id: "western", name: "Dustfall Outfitters", blurb: "Cowboy hats, pearl snaps, and boots." },
 ];
+
+type Piece = [id: string, name: string, description: string, price: number, slot: ClothSlot, color: string, accent: string];
+
+const MALL_PIECES: Partial<Record<ClothStore, Piece[]>> = {
+  denim: [
+    ["jeans-selvedge", "Selvedge Jeans", "Raw indigo that fades to you.", 120, "lower", "#22345a", "#c9a44c"],
+    ["jacket-trucker", "Trucker Jacket", "A classic denim layer.", 150, "upper", "#3d5a80", "#e8dcc8"],
+    ["cap-denim", "Denim Cap", "Washed indigo six-panel.", 30, "head", "#3d5a80", "#f4f1ea"],
+  ],
+  hats: [
+    ["hat-fedora", "Wool Fedora", "A pinched crown for the plaza.", 85, "head", "#4a3a2e", "#1a1206"],
+    ["hat-flat", "Flat Cap", "Tweed for the morning commute.", 45, "head", "#7a6a52", "#3a2418"],
+    ["hat-bucket", "Bucket Hat", "Soft brim for sunny docks.", 32, "head", "#e8dcc8", "#2f5d4a"],
+  ],
+  optics: [
+    ["shades-aviator", "Aviator Shades", "Gold rims, smoked lenses.", 95, "head", "#c9a44c", "#1a1206"],
+    ["specs-round", "Round Frames", "Tortoiseshell readers.", 70, "head", "#6a3a22", "#e8dcc8"],
+    ["shades-sport", "Sport Wraps", "Mirrored lenses for running.", 60, "head", "#1a1206", "#2aa3a0"],
+  ],
+  bags: [
+    ["bag-messenger", "Leather Messenger", "Holds a laptop and lunch.", 140, "accessory", "#6a4a2a", "#c9a44c"],
+    ["tote-canvas", "Canvas Tote", "Market-day essential.", 35, "accessory", "#e8dcc8", "#2f5d4a"],
+    ["bag-duffel", "Weekender Duffel", "Packs for a hotel stay.", 110, "accessory", "#2f3a4a", "#c9a44c"],
+  ],
+  shoes: [
+    ["boot-chelsea", "Chelsea Boots", "Elastic sides, suede finish.", 160, "feet", "#5a3a22", "#1a1206"],
+    ["shoe-loafer", "Penny Loafers", "Polished slip-ons for the office.", 130, "feet", "#3a2418", "#c9a44c"],
+    ["shoe-slipon", "Canvas Slip-ons", "Checkerboard weekend shoes.", 45, "feet", "#f4f1ea", "#1a1206"],
+  ],
+  suits: [
+    ["suit-jacket", "Grey Suit Jacket", "Two buttons, notch lapel.", 380, "upper", "#5a6070", "#1a1206"],
+    ["suit-trouser", "Suit Trousers", "Matching grey wool.", 180, "lower", "#5a6070", "#c9a44c"],
+    ["tie-silk", "Silk Tie", "A deep burgundy knot.", 60, "accessory", "#7a2f3a", "#c9a44c"],
+  ],
+  swim: [
+    ["short-board", "Board Shorts", "Quick-dry with a palm print.", 48, "lower", "#2aa3a0", "#f4f1ea"],
+    ["top-rash", "Rash Guard", "Sun-proof long sleeves.", 55, "upper", "#1d2d4f", "#2aa3a0"],
+    ["sandal-flip", "Flip Flops", "Boardwalk ready.", 18, "feet", "#e67e22", "#1a1206"],
+  ],
+  vintage: [
+    ["jacket-retro", "Retro Windbreaker", "Color-blocked nineties shell.", 68, "upper", "#7a2f8a", "#2aa3a0"],
+    ["pant-cord", "Corduroy Pants", "Wide wale, rust brown.", 52, "lower", "#8a4a22", "#e8dcc8"],
+    ["shoe-bowling", "Bowling Shoes", "Two-tone and a little worn.", 58, "feet", "#c0392b", "#f4f1ea"],
+  ],
+  knit: [
+    ["sweater-cable", "Cable Sweater", "Chunky cream wool.", 95, "upper", "#e8dcc8", "#8a6a4a"],
+    ["scarf-plaid", "Plaid Scarf", "Red tartan for windy days.", 40, "accessory", "#a8322a", "#1d2d4f"],
+    ["gloves-knit", "Knit Gloves", "Touchscreen fingertips.", 28, "accessory", "#3d5a80", "#e8dcc8"],
+  ],
+  street: [
+    ["hoodie-graphic", "Graphic Hoodie", "Oversized with a city print.", 78, "upper", "#1a1206", "#e67e22"],
+    ["jogger-cargo", "Cargo Joggers", "Pockets on pockets.", 70, "lower", "#4a5040", "#1a1206"],
+    ["kicks-hightop", "High-top Sneakers", "Padded collars, bold laces.", 110, "feet", "#f4f1ea", "#c0392b"],
+  ],
+  yoga: [
+    ["legging-studio", "Studio Leggings", "Four-way stretch.", 65, "lower", "#2c3036", "#7eb3e0"],
+    ["tank-train", "Training Tank", "Breathable mesh back.", 38, "upper", "#7eb3e0", "#f4f1ea"],
+    ["slide-studio", "Studio Slides", "Soft foam after class.", 30, "feet", "#e8c4d0", "#2c3036"],
+  ],
+  rain: [
+    ["coat-slicker", "Rain Slicker", "Bright yellow and fully sealed.", 110, "upper", "#e8c32a", "#1a1206"],
+    ["boot-rain", "Rain Boots", "Puddle-proof rubber.", 75, "feet", "#2f5d4a", "#e8c32a"],
+    ["hat-rain", "Rain Hat", "A sou'wester brim.", 28, "head", "#e8c32a", "#1a1206"],
+  ],
+  watch: [
+    ["watch-dive", "Dive Watch", "Rotating bezel, 200 m rated.", 260, "accessory", "#1d2d4f", "#c9cfd6"],
+    ["watch-field", "Field Watch", "Canvas strap, easy-read dial.", 140, "accessory", "#4a5040", "#e8dcc8"],
+    ["watch-smart", "Smart Watch", "Steps, calls, and the time.", 90, "accessory", "#1a1206", "#2aa3a0"],
+  ],
+  formal: [
+    ["tux-velvet", "Velvet Tux Jacket", "Midnight velvet, satin lapels.", 520, "upper", "#1a1f3a", "#c9a44c"],
+    ["gown-satin", "Satin Gown", "Floor-length emerald satin.", 480, "upper", "#1f6b4a", "#c9a44c"],
+    ["shoe-patent", "Patent Shoes", "Mirror-shine evening shoes.", 220, "feet", "#0f0f12", "#c9a44c"],
+  ],
+  skate: [
+    ["tee-skate", "Skate Tee", "Faded deck-logo print.", 30, "upper", "#c45c4a", "#f4f1ea"],
+    ["short-skate", "Skate Shorts", "Loose fit, reinforced seat.", 40, "lower", "#4a5160", "#e8dcc8"],
+    ["shoe-skate", "Skate Shoes", "Suede toe caps for ollies.", 80, "feet", "#2c3036", "#e8dcc8"],
+  ],
+  western: [
+    ["hat-cowboy", "Cowboy Hat", "Felt crown, desert ready.", 90, "head", "#8a6a4a", "#3a2418"],
+    ["shirt-snap", "Pearl Snap Shirt", "Western yokes and pearl buttons.", 70, "upper", "#b8d0e0", "#f4f1ea"],
+    ["boot-western", "Western Boots", "Stitched leather with a riding heel.", 190, "feet", "#6a3a22", "#c9a44c"],
+  ],
+};
+
+const MALL_ADDITIONS: ClothingItem[] = (Object.entries(MALL_PIECES) as Array<[ClothStore, Piece[]]>).flatMap(
+  ([store, pieces]) =>
+    pieces.map(([id, name, description, price, slot, color, accent]) => ({
+      id,
+      name,
+      description,
+      price,
+      slot,
+      category: slot === "head" || slot === "accessory" ? ("accessories" as const) : ("clothing" as const),
+      store,
+      collection: "everyday" as const,
+      level: 1,
+      color,
+      accent,
+    })),
+);
 
 const CREAM = "#f4f1ea";
 
@@ -176,6 +310,7 @@ export const CLOTHING: ClothingItem[] = [
   { id: "pin-legend", name: "Founder's Pin", description: "A tiny gold river.", price: 900, slot: "accessory", category: "accessories", store: "gallery", collection: "legendary", level: 100, color: "#c9a44c", accent: "#f4f1ea", bonus: { stat: "salary", amount: 0.05 } },
 
   ...TEAM_MERCH,
+  ...MALL_ADDITIONS,
 ];
 
 export const STARTER_CLOTHING = ["tee-harbor", "jeans-indigo", "kicks-river"];
