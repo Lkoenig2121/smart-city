@@ -1337,11 +1337,8 @@ export function StreetView({
         interior.zone === "lobby"
           ? world.nearDesk()
           : interior.zone === "pool"
-            ? barMenuRef.current ||
-              (world.nearDesk() && !deskDismissedRef.current)
+            ? barMenuRef.current
             : false;
-      if (interior.zone === "pool" && !world.nearDesk())
-        deskDismissedRef.current = false;
       atDeskRef.current = desk;
       setAtDesk((prev) => (prev === desk ? prev : desk));
       if (desk && document.pointerLockElement === canvas)
