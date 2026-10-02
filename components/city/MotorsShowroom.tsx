@@ -1,10 +1,13 @@
 "use client";
 
 import {
+  TIER_NAMES,
   VEHICLE_CATALOG,
   categoryLabel,
   grantOwnedVehicle,
+  highestOwnedTier,
   vehicleById,
+  vehicleLockReason,
   vehiclePurchaseDescription,
   type VehicleCatalogItem,
 } from "@/lib/city/vehicles";
@@ -20,7 +23,7 @@ interface Props {
 }
 
 export function MotorsShowroom({ player, clock, onPlayer, onClose }: Props) {
-  const catalog = useMemo(() => VEHICLE_CATALOG, []);
+  const catalog = useMemo(() => [...VEHICLE_CATALOG].sort((a, b) => a.tier - b.tier || a.price - b.price), []);
   const [picked, setPicked] = useState(catalog[0]?.id ?? "riv-sedan");
   const [color, setColor] = useState(catalog[0]?.colors[0] ?? "#1f4d8c");
   const [note, setNote] = useState<string | null>(null);
@@ -29,6 +32,8 @@ export function MotorsShowroom({ player, clock, onPlayer, onClose }: Props) {
 
   const ownedCount = player.ownedVehicles.filter((car) => car.catalogId === item.id).length;
   const canAfford = player.wallet >= item.price;
+  const locked = vehicleLockReason(player, item.id);
+  const topTier = highestOwnedTier(player);
 
   const select = (next: VehicleCatalogItem) => {
     setPicked(next.id);
@@ -37,6 +42,10 @@ export function MotorsShowroom({ player, clock, onPlayer, onClose }: Props) {
   };
 
   const purchase = () => {
+    if (locked) {
+      setNote(locked);
+      return;
+    }
     const spent = spendWallet(item.price, clock, vehiclePurchaseDescription(item.id, clock));
     if (typeof spent === "string") {
       setNote(spent);
@@ -50,7 +59,11 @@ export function MotorsShowroom({ player, clock, onPlayer, onClose }: Props) {
     writePlayer(granted);
     awardXp(80, `buy-car:${item.id}`, "exploration");
     onPlayer(granted);
-    setNote(`${item.name} is yours — it's waiting on the lot outside.`);
+    setNote(
+      item.tier > topTier && item.tier < 5
+        ? `${item.name} is yours! ${TIER_NAMES[item.tier + 1]}s are now unlocked. Press C outside to drive.`
+        : `${item.name} is yours! Press C outside to drive.`,
+    );
   };
 
   return (
@@ -72,23 +85,37 @@ export function MotorsShowroom({ player, clock, onPlayer, onClose }: Props) {
         </header>
         <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 md:grid-cols-[minmax(0,14rem)_1fr]">
           <div className="min-h-0 space-y-1.5 overflow-y-auto">
-            {catalog.map((piece) => (
-              <button
-                key={piece.id}
-                type="button"
-                onClick={() => select(piece)}
-                className={`w-full rounded-xl border px-3 py-2 text-left ${
-                  piece.id === item.id
-                    ? "border-sky-300/50 bg-sky-400/15"
-                    : "border-white/10 bg-black/25 hover:border-white/25"
-                }`}
-              >
-                <p className="text-sm font-semibold text-white">{piece.name}</p>
-                <p className="text-[0.65rem] text-slate-400">
-                  {categoryLabel(piece.category)} · {formatDollars(piece.price)}
-                </p>
-              </button>
-            ))}
+            {catalog.map((piece, i) => {
+              const pieceLocked = vehicleLockReason(player, piece.id);
+              const owns = player.ownedVehicles.some((car) => car.catalogId === piece.id);
+              return (
+                <div key={piece.id}>
+                  {i > 0 && catalog[i - 1].tier !== piece.tier ? (
+                    <p className="py-0.5 text-center text-xs text-slate-600">↓</p>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => select(piece)}
+                    className={`w-full rounded-xl border px-3 py-2 text-left ${
+                      piece.id === item.id
+                        ? "border-sky-300/50 bg-sky-400/15"
+                        : "border-white/10 bg-black/25 hover:border-white/25"
+                    } ${pieceLocked ? "opacity-55" : ""}`}
+                  >
+                    <p className="text-[0.6rem] uppercase tracking-wider text-sky-300/80">
+                      Tier {piece.tier} · {TIER_NAMES[piece.tier]}
+                    </p>
+                    <p className="text-sm font-semibold text-white">
+                      {pieceLocked ? "🔒 " : owns ? "✓ " : ""}
+                      {piece.name}
+                    </p>
+                    <p className="text-[0.65rem] text-slate-400">
+                      {categoryLabel(piece.category)} · {formatDollars(piece.price)}
+                    </p>
+                  </button>
+                </div>
+              );
+            })}
           </div>
           <div className="space-y-3">
             <div
@@ -126,18 +153,18 @@ export function MotorsShowroom({ player, clock, onPlayer, onClose }: Props) {
             <p className="text-lg font-semibold text-amber-200">{formatDollars(item.price)}</p>
             <button
               type="button"
-              disabled={!canAfford}
+              disabled={!canAfford || Boolean(locked)}
               onClick={purchase}
               className="rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-semibold text-[#0b1420] disabled:opacity-40"
             >
-              {canAfford ? "Purchase" : "Not enough cash"}
+              {locked ? `🔒 ${locked}` : canAfford ? "Purchase" : "Not enough cash"}
             </button>
             {ownedCount > 0 ? (
               <p className="text-xs text-emerald-200">You already own {ownedCount} of this model.</p>
             ) : null}
             {note ? <p className="text-sm text-sky-200">{note}</p> : null}
             <p className="text-[0.65rem] text-slate-500">
-              Purchased cars park on the Motors lot. Press E beside yours to drive.
+              Each tier unlocks the next. Press C anywhere outside to drive · customize at Mike&apos;s Foreign Car Repair.
             </p>
           </div>
         </div>

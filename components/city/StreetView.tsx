@@ -111,6 +111,7 @@ import {
 import { CharacterMenu, type CharacterTab } from "./CharacterMenu";
 import { ClothingShop } from "./ClothingShop";
 import { MotorsShowroom } from "./MotorsShowroom";
+import { MikesGarage } from "./MikesGarage";
 import { LodgingDesk } from "./LodgingDesk";
 import { PoolBar } from "./PoolBar";
 import { OfficeComputer } from "./OfficeComputer";
@@ -266,6 +267,17 @@ export function StreetView({
   const [driving, setDriving] = useState(false);
   const [policeLights, setPoliceLights] = useState(false);
   const motorsOpenRef = useRef(false);
+  const [garageOpen, setGarageOpen] = useState(false);
+  const garageOpenRef = useRef(false);
+  /** Set when the garage screen opened because the car pulled into Mike's bay. */
+  const garageDriveInRef = useRef(false);
+  const [garageDriveIn, setGarageDriveIn] = useState(false);
+  const closeGarage = () => {
+    garageOpenRef.current = false;
+    garageDriveInRef.current = false;
+    setGarageOpen(false);
+    setGarageDriveIn(false);
+  };
   const drivingRef = useRef(false);
   const [barMenu, setBarMenu] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
@@ -369,6 +381,7 @@ export function StreetView({
     barMenu ||
     phoneOpen ||
     motorsOpen ||
+    garageOpen ||
     sleeping ||
     atComputer ||
     atOfficeComputer ||
@@ -392,6 +405,7 @@ export function StreetView({
     barMenuRef.current = barMenu;
     phoneOpenRef.current = phoneOpen;
     motorsOpenRef.current = motorsOpen;
+    garageOpenRef.current = garageOpen;
     drivingRef.current = driving;
   }, [
     characterMenu,
@@ -401,6 +415,7 @@ export function StreetView({
     barMenu,
     phoneOpen,
     motorsOpen,
+    garageOpen,
     driving,
   ]);
 
@@ -503,11 +518,25 @@ export function StreetView({
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat) return;
       if (isTypingTarget(event.target)) return;
+      if (
+        garageOpenRef.current &&
+        garageDriveInRef.current &&
+        (event.code === "KeyS" || event.code === "ArrowDown")
+      ) {
+        // The held key also reaches the car once the screen closes, so it reverses out.
+        closeGarage();
+        return;
+      }
       if (event.code === "Escape") {
         if (motorsOpenRef.current) {
           event.preventDefault();
           motorsOpenRef.current = false;
           setMotorsOpen(false);
+          return;
+        }
+        if (garageOpenRef.current) {
+          event.preventDefault();
+          closeGarage();
           return;
         }
         if (phoneOpenRef.current) {
@@ -960,6 +989,12 @@ export function StreetView({
         setPolicePrompt(near && prompt ? prompt.label : null);
       }
       world.render(dt);
+      if (world.consumeGarageEntry() && drivingRef.current && !garageOpenRef.current) {
+        garageOpenRef.current = true;
+        garageDriveInRef.current = true;
+        setGarageDriveIn(true);
+        setGarageOpen(true);
+      }
       positionRef.current = world.tilePosition;
       if (world.isDriving && activeCar) {
         const sped = world.driveMph();
@@ -2025,7 +2060,8 @@ export function StreetView({
       !mallFurnish &&
       !mallSnack &&
       !phoneOpen &&
-      !motorsOpen ? (
+      !motorsOpen &&
+      !garageOpen ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
           <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
             {driving ? (
@@ -2454,6 +2490,11 @@ export function StreetView({
             setMotorsOpen(true);
             setAtDesk(false);
           }}
+          onOpenGarage={() => {
+            garageOpenRef.current = true;
+            setGarageOpen(true);
+            setAtDesk(false);
+          }}
           onOpenDispatch={() => {
             setAtDesk(false);
             openPhone(null, "police");
@@ -2472,6 +2513,25 @@ export function StreetView({
             motorsOpenRef.current = false;
             setMotorsOpen(false);
           }}
+        />
+      ) : null}
+
+      {garageOpen ? (
+        <MikesGarage
+          player={player}
+          clock={state.clock}
+          onPlayer={(next) => {
+            setPlayer(next);
+          }}
+          onClose={closeGarage}
+          onBackOut={
+            garageDriveIn
+              ? () => {
+                  closeGarage();
+                  worldRef.current?.backOutCar();
+                }
+              : undefined
+          }
         />
       ) : null}
 

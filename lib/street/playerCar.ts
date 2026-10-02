@@ -1,54 +1,148 @@
 import * as THREE from "three";
-import type { OwnedVehicle } from "@/lib/city/vehicles";
+import { INTERIORS, WHEELS, type OwnedVehicle, type VehicleCategory } from "@/lib/city/vehicles";
 import { TILE } from "./buildCity";
 
-/** Simple parked/driven car mesh for the player fleet. */
+/** Body proportions per class: width, body height, length, cabin height, cabin length, ride height. */
+const SHAPES: Record<VehicleCategory, { w: number; h: number; l: number; ch: number; cl: number; ride: number }> = {
+  compact: { w: 1.75, h: 0.55, l: 3.6, ch: 0.6, cl: 2.0, ride: 0.28 },
+  sedan: { w: 1.9, h: 0.55, l: 4.3, ch: 0.55, cl: 2.2, ride: 0.28 },
+  suv: { w: 2.0, h: 0.75, l: 4.5, ch: 0.7, cl: 2.6, ride: 0.42 },
+  sports: { w: 1.95, h: 0.45, l: 4.3, ch: 0.42, cl: 1.7, ride: 0.2 },
+  luxury: { w: 2.0, h: 0.6, l: 4.8, ch: 0.55, cl: 2.4, ride: 0.3 },
+  supercar: { w: 2.05, h: 0.4, l: 4.5, ch: 0.36, cl: 1.5, ride: 0.16 },
+};
+
+/** Changes whenever a garage visit should change how the car looks. */
+export function carLookKey(car: OwnedVehicle) {
+  return [car.catalogId, car.color, car.wheels, car.interior, car.licensePlate, [...car.accessories].sort().join("+")].join("|");
+}
+
+function plateTexture(text: string) {
+  const el = document.createElement("canvas");
+  el.width = 256;
+  el.height = 128;
+  const ctx = el.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = "#f4f1ea";
+    ctx.fillRect(0, 0, 256, 128);
+    ctx.strokeStyle = "#1f3a5c";
+    ctx.lineWidth = 8;
+    ctx.strokeRect(6, 6, 244, 116);
+    ctx.fillStyle = "#1f3a5c";
+    ctx.font = "bold 64px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, 128, 70, 230);
+  }
+  const tex = new THREE.CanvasTexture(el);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** Parked/driven car mesh for the player fleet, dressed with its garage mods. */
 export function makePlayerCarMesh(car: OwnedVehicle) {
   const group = new THREE.Group();
   group.name = `owned-car-${car.id}`;
+  const s = SHAPES[car.category] ?? SHAPES.sedan;
+  const tint = car.accessories.includes("tint");
+  const wheel = WHEELS.find((w) => w.id === car.wheels) ?? WHEELS[0];
+  const seat = INTERIORS.find((i) => i.id === car.interior) ?? INTERIORS[0];
 
-  const bodyMat = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(car.color),
-    roughness: 0.42,
-    metalness: 0.35,
-  });
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    group.add(mesh);
+    return mesh;
+  };
+
+  const bodyMat = new THREE.MeshStandardMaterial({ color: car.color, roughness: 0.38, metalness: 0.4 });
   const dark = new THREE.MeshStandardMaterial({ color: "#1a1c20", roughness: 0.8, metalness: 0.2 });
   const glass = new THREE.MeshStandardMaterial({
-    color: "#9ec5e8",
+    color: tint ? "#1b2530" : "#9ec5e8",
     roughness: 0.15,
     metalness: 0.4,
     transparent: true,
-    opacity: 0.55,
+    opacity: tint ? 0.82 : 0.5,
   });
+  const bodyY = s.ride + s.h / 2 + 0.12;
+  const deck = bodyY + s.h / 2;
+  add(new THREE.BoxGeometry(s.w, s.h, s.l), bodyMat, 0, bodyY, 0);
+  add(new THREE.BoxGeometry(s.w - 0.2, s.ch, s.cl), glass, 0, deck + s.ch / 2, -0.15);
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.55, 4.2), bodyMat);
-  body.position.y = 0.55;
-  body.castShadow = true;
-  group.add(body);
+  const seatMat = new THREE.MeshStandardMaterial({ color: seat.color, roughness: 0.7 });
+  for (const x of [-s.w / 4, s.w / 4]) {
+    add(new THREE.BoxGeometry(0.5, 0.18, 0.55), seatMat, x, deck + 0.02, -0.25);
+    add(new THREE.BoxGeometry(0.5, Math.max(0.3, s.ch - 0.1), 0.14), seatMat, x, deck + s.ch / 2, 0.05);
+  }
 
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.55, 2.1), glass);
-  cabin.position.set(0, 1.05, -0.15);
-  cabin.castShadow = true;
-  group.add(cabin);
-
-  const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.28, 10);
-  wheelGeo.rotateZ(Math.PI / 2);
+  const r = s.ride + 0.12;
+  const tireGeo = new THREE.CylinderGeometry(r, r, 0.3, 14);
+  tireGeo.rotateZ(Math.PI / 2);
+  const rimGeo = new THREE.CylinderGeometry(r * 0.62, r * 0.62, 0.32, 10);
+  rimGeo.rotateZ(Math.PI / 2);
+  const rimMat = new THREE.MeshStandardMaterial({
+    color: wheel.color,
+    roughness: wheel.id === "stock" ? 0.8 : 0.2,
+    metalness: wheel.id === "stock" ? 0.2 : 0.85,
+  });
+  const wx = s.w / 2 - 0.08;
+  const wz = s.l / 2 - 0.75;
   for (const [x, z] of [
-    [-0.85, 1.25],
-    [0.85, 1.25],
-    [-0.85, -1.25],
-    [0.85, -1.25],
-  ] as const) {
-    const wheel = new THREE.Mesh(wheelGeo, dark);
-    wheel.position.set(x, 0.38, z);
-    wheel.castShadow = true;
-    group.add(wheel);
+    [-wx, wz],
+    [wx, wz],
+    [-wx, -wz],
+    [wx, -wz],
+  ]) {
+    add(tireGeo, dark, x, r, z);
+    add(rimGeo, rimMat, x, r, z);
+  }
+
+  const plateTex = plateTexture(car.licensePlate);
+  const plateMat = new THREE.MeshStandardMaterial({ map: plateTex, roughness: 0.5 });
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.26), plateMat);
+  plate.position.set(0, bodyY, s.l / 2 + 0.01);
+  group.add(plate);
+
+  if (car.accessories.includes("spoiler")) {
+    const z = s.l / 2 - 0.3;
+    for (const x of [-0.55, 0.55]) add(new THREE.BoxGeometry(0.08, 0.28, 0.12), dark, x, deck + 0.14, z);
+    add(new THREE.BoxGeometry(s.w - 0.1, 0.06, 0.42), dark, 0, deck + 0.3, z);
+  }
+  if (car.accessories.includes("rack")) {
+    const top = deck + s.ch;
+    for (const z of [-0.8, 0.5]) add(new THREE.BoxGeometry(s.w - 0.3, 0.06, 0.08), dark, 0, top + 0.06, z - 0.15);
+    for (const x of [-(s.w - 0.4) / 2, (s.w - 0.4) / 2]) add(new THREE.BoxGeometry(0.06, 0.06, 1.5), dark, x, top + 0.1, -0.3);
+  }
+  if (car.accessories.includes("stripes")) {
+    const stripe = new THREE.MeshStandardMaterial({ color: "#f4f1ea", roughness: 0.4 });
+    for (const x of [-0.22, 0.22]) add(new THREE.BoxGeometry(0.2, 0.01, s.l + 0.01), stripe, x, deck + 0.005, 0);
+  }
+  if (car.accessories.includes("underglow")) {
+    const glow = new THREE.MeshBasicMaterial({ color: "#38e1ff", transparent: true, opacity: 0.75 });
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(s.w + 0.5, s.l + 0.4), glow);
+    pad.rotation.x = -Math.PI / 2;
+    pad.position.y = 0.03;
+    group.add(pad);
   }
 
   group.add(buildDutySiren());
 
   group.userData.vehicleId = car.id;
+  group.userData.lookKey = carLookKey(car);
   return group;
+}
+
+export function disposeCarMesh(mesh: THREE.Object3D) {
+  mesh.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    obj.geometry.dispose();
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const mat of mats) {
+      (mat as THREE.MeshStandardMaterial).map?.dispose();
+      mat.dispose();
+    }
+  });
 }
 
 /** Roof light bar — hidden unless the player is on a police shift. */

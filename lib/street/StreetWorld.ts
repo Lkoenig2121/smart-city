@@ -3,7 +3,8 @@ import type { Building, CityState } from "@/lib/city/types";
 import { findStadium, stadiumIsOpen } from "@/lib/city/stadium";
 import { stadiumFireworksOn } from "@/lib/city/fireworks";
 import { lodgingUse } from "@/lib/city/lodging";
-import { isEnterableVenue } from "@/lib/city/venues";
+import { GARAGE_NAME, isEnterableVenue, venueRole } from "@/lib/city/venues";
+import { GarageDoor } from "./garageDoor";
 import { isMountainTerrain } from "@/lib/city/terrainElevation";
 import { lightingFor, type Lighting } from "@/lib/renderer/palette";
 import { AgentLayer } from "./agents";
@@ -25,7 +26,7 @@ import { buildStreetPerson, disposeObject3D } from "./streetPerson";
 import { driveStats } from "@/lib/city/vehicles";
 import { findPath, nearestRoad } from "@/lib/simulation/traffic/pathfinding";
 import { DriveControls } from "./driveControls";
-import { makePlayerCarMesh, updateDutySiren } from "./playerCar";
+import { carLookKey, disposeCarMesh, makePlayerCarMesh, updateDutySiren } from "./playerCar";
 
 /** Field of view at rest, and how far it narrows mid-hop. */
 const BASE_FOV = 72;
@@ -172,6 +173,27 @@ export class StreetWorld {
     this.scene.add(this.navArrows);
     this.ownedCarRoot.name = "owned-cars";
     this.scene.add(this.ownedCarRoot);
+
+    const garage = [...state.buildings.values()].find((b) => venueRole(b) === "garage");
+    if (garage) {
+      this.garageDoor = new GarageDoor(garage, garage.name || GARAGE_NAME, state.tiles);
+      this.city.group.add(this.garageDoor.group);
+    }
+  }
+
+  private garageDoor: GarageDoor | null = null;
+  private garageEntered = false;
+
+  /** Nudge the car back out of a service bay. */
+  backOutCar() {
+    this.drive?.pushReverse(5);
+  }
+
+  /** True once per drive-in at Mike's garage door. */
+  consumeGarageEntry() {
+    const hit = this.garageEntered;
+    this.garageEntered = false;
+    return hit;
   }
 
   get isDriving() {
@@ -191,14 +213,15 @@ export class StreetWorld {
     for (const car of cars) {
       seen.add(car.id);
       let mesh = this.ownedCarMeshes.get(car.id);
+      if (mesh && mesh.userData.lookKey !== carLookKey(car)) {
+        mesh.removeFromParent();
+        disposeCarMesh(mesh);
+        mesh = undefined;
+      }
       if (!mesh) {
         mesh = makePlayerCarMesh(car);
         this.ownedCarMeshes.set(car.id, mesh);
         this.ownedCarRoot.add(mesh);
-      }
-      const body = mesh.children[0] as THREE.Mesh | undefined;
-      if (body && body.material instanceof THREE.MeshStandardMaterial) {
-        body.material.color.set(car.color);
       }
       // Cars only exist while you're in them: C summons one under you and it vanishes on exit.
       if (car.id !== this.drivingId) mesh.visible = false;
@@ -914,6 +937,11 @@ export class StreetWorld {
       this.controls.update(dt);
       this.controls.applyTo(this.camera);
     }
+    const car = this.drive ? { x: this.drive.position.x, z: this.drive.position.z, yaw: this.drive.yaw } : null;
+    if (this.garageDoor?.update(dt, car)) {
+      this.garageEntered = true;
+      this.drive?.halt();
+    }
     this.heldView.update(dt);
     this.dutyView.update(dt);
     if (this.policeOnDuty && this.policeLightsOn) {
@@ -1196,6 +1224,7 @@ export class StreetWorld {
     this.fireworks.group.removeFromParent();
     this.fireworks.dispose();
     this.valet.dispose();
+    this.garageDoor?.dispose();
     this.navArrows.geometry.dispose();
     this.navMat.dispose();
     this.city.dispose();

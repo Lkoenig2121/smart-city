@@ -8,6 +8,7 @@ import type { Blocker } from "./buildCity";
 import type { Ladder } from "./interiorControls";
 import { MeshBuilder } from "./meshBuilder";
 import { buildOfficeTower, type OfficeElevator } from "./officeInterior";
+import { MikeNpc } from "./mikeNpc";
 
 export interface VenueInterior {
   group: THREE.Group;
@@ -47,6 +48,7 @@ const PALETTE: Record<VenueRole, Palette> = {
   bank: { floor: "#e8dcc8", wall: "#f4efe6", trim: "#2f5d4a", accent: "#c9a44c", furniture: "#3a322c" },
   mall: { floor: "#eceae4", wall: "#f5f4f0", trim: "#d5d1c9", accent: "#8a96a3", furniture: "#c8c3bb" },
   dealership: { floor: "#3a4048", wall: "#dce3ea", trim: "#1f4d8c", accent: "#c9a44c", furniture: "#5d7384" },
+  garage: { floor: "#8c8f91", wall: "#e2ddd0", trim: "#1f3a5c", accent: "#c0392b", furniture: "#6b4a32" },
   house: { floor: "#c4a882", wall: "#f3d7b5", trim: "#6d4c41", accent: "#4d5b3f", furniture: "#8b3d2e" },
   apartment: { floor: "#b7c3c9", wall: "#e6ddd2", trim: "#5c5348", accent: "#3d5a80", furniture: "#6e6256" },
 };
@@ -143,12 +145,19 @@ export function buildVenueInterior(building: Building, getState?: () => CityStat
   blockers.push({ minX, maxX: -2.2, minZ: maxZ - 0.45, maxZ });
   blockers.push({ minX: 2.2, maxX, minZ: maxZ - 0.45, maxZ });
 
-  trimB.box(-6.4, minZ + 0.45, 6.4, -5.4, 0, 1.12, trim);
-  wallB.box(-6.1, minZ + 0.6, 6.1, -5.55, 1.12, 1.24, accent);
-  blockers.push({ minX: -6.4, maxX: 6.4, minZ: minZ + 0.45, maxZ: -5.4 });
+  // Mike's counter is a slim service desk so he has room to stand behind it.
+  const counterBack = role === "garage" ? -6.5 : minZ + 0.45;
+  trimB.box(-6.4, counterBack, 6.4, -5.4, 0, 1.12, trim);
+  wallB.box(-6.1, counterBack + 0.15, 6.1, -5.55, 1.12, 1.24, accent);
+  blockers.push({ minX: -6.4, maxX: 6.4, minZ: counterBack, maxZ: -5.4 });
 
   furnish(role, wallB, trimB, blockers, furn, accent, trim);
   if (pizzeria) addPizzaKitchen(group, wallB, trimB, disposables, building.name, minZ);
+  const mike = role === "garage" ? new MikeNpc() : null;
+  if (mike) {
+    group.add(mike.group);
+    disposables.push(mike);
+  }
 
   assemble(group, floorB, wallB, trimB, disposables);
 
@@ -164,6 +173,7 @@ export function buildVenueInterior(building: Building, getState?: () => CityStat
       ? (x, z) => (orderAt(x, z) ? { id: "pizzeria", name: building.name, items: [...PIZZERIA_MENU] } : null)
       : undefined,
     nearExit: (x, z) => z > 9.6 && Math.abs(x) < 2.6,
+    update: mike ? (dt) => mike.update(dt) : undefined,
     dispose: () => {
       for (const item of disposables) item.dispose();
     },
@@ -1652,6 +1662,48 @@ function furnish(
     }
     trimB.box(5.8, 0.8, 10.2, 8.4, 0, 2.6, accent);
     blockers.push({ minX: 5.8, maxX: 10.2, minZ: 0.8, maxZ: 8.4 });
+  } else if (role === "garage") {
+    const steel = new THREE.Color("#5d646b");
+    const tire = new THREE.Color("#18191b");
+    const paint = new THREE.Color("#b3262e");
+    const glass = new THREE.Color("#7f9fb8");
+    const oil = new THREE.Color("#3a3d40");
+    // Two-post lift with a red coupe raised overhead.
+    trimB.box(-9.6, -0.8, -2.4, 6.6, 0.01, 0.03, oil);
+    for (const x of [-9.4, -2.8]) {
+      wallB.box(x - 0.2, 2.6, x + 0.2, 3.1, 0, 3.6, accent);
+      blockers.push({ minX: x - 0.2, maxX: x + 0.2, minZ: 2.6, maxZ: 3.1 });
+      trimB.box(x - 0.15, 0.4, x + 0.15, 5.3, 1.75, 1.85, steel);
+    }
+    trimB.box(-7.8, 0.8, -4.4, 5.0, 1.95, 2.55, paint);
+    trimB.box(-7.5, 1.6, -4.7, 3.6, 2.55, 3.05, glass);
+    for (const [x, z] of [
+      [-8.0, 1.5],
+      [-4.5, 1.5],
+      [-8.0, 4.3],
+      [-4.5, 4.3],
+    ]) {
+      trimB.box(x - 0.15, z - 0.38, x + 0.15, z + 0.38, 1.85, 2.4, tire);
+    }
+    // Rolling tool chests along the east wall.
+    for (const z of [0.6, 3.2]) {
+      wallB.box(9.4, z, 10.5, z + 2.1, 0, 1.25, accent);
+      trimB.box(9.36, z + 0.1, 9.42, z + 2.0, 0.3, 1.15, steel);
+      blockers.push({ minX: 9.4, maxX: 10.5, minZ: z, maxZ: z + 2.1 });
+    }
+    // Tire stacks by the bay door.
+    for (const [x, z, n] of [
+      [6.4, 7.2, 4],
+      [7.6, 7.2, 3],
+      [6.4, 8.4, 2],
+    ]) {
+      for (let i = 0; i < n; i++) trimB.box(x - 0.4, z - 0.4, x + 0.4, z + 0.4, i * 0.3, i * 0.3 + 0.27, tire);
+      blockers.push({ minX: x - 0.4, maxX: x + 0.4, minZ: z - 0.4, maxZ: z + 0.4 });
+    }
+    // Workbench with a vise.
+    trimB.box(-10.5, -4.8, -9.6, -1.4, 0, 0.95, furn);
+    trimB.box(-10.3, -2.2, -9.8, -1.8, 0.95, 1.25, steel);
+    blockers.push({ minX: -10.5, maxX: -9.6, minZ: -4.8, maxZ: -1.4 });
   } else {
     wallB.box(-10.2, 1.2, -4.4, 7.8, 0, 0.48, furn);
     wallB.box(-10.2, 1.2, -9.4, 4.2, 0.48, 1.15, furn);

@@ -1,7 +1,7 @@
 import { createBuilding, footprintFor } from "@/lib/simulation/buildings/buildings";
 import { markLodging } from "./lodging";
 import { SUBWAY_STATIONS, markSubwayStation } from "./subway";
-import { markDealership, markMall, markNotableVenues, markPizzeria } from "./venues";
+import { markDealership, markMall, markNotableVenues, markPizzeria, placeGarageNearMotors } from "./venues";
 import {
   RIVER_W,
   riverXAt,
@@ -404,6 +404,7 @@ export function generateCity(seed = 20260903): CityState {
     }
   }
 
+  placeGarageNearMotors(buildings);
   markNotableVenues(buildings);
 
   const citizens = spawnCitizens(buildings, rand);

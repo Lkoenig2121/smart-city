@@ -13,10 +13,12 @@ export type VenueRole =
   | "bank"
   | "mall"
   | "dealership"
+  | "garage"
   | "house"
   | "apartment";
 
 const ROLES: VenueRole[] = [
+  "garage",
   "hospital",
   "school",
   "city_hall",
@@ -133,6 +135,36 @@ export function markDealership(building: Building, name = "Riverside Motors") {
   building.floors = Math.max(building.floors, 2);
 }
 
+export const GARAGE_NAME = "Mike's Foreign Car Repair";
+
+export function markGarage(building: Building, name = GARAGE_NAME) {
+  markVenue(building, "garage", name);
+  building.wallColor = "#d9d4c7";
+  building.roofColor = "#1f3a5c";
+  building.accentColor = "#e8b923";
+  building.stats.jobs = Math.max(building.stats.jobs, 8);
+  building.stats.employees = Math.max(building.stats.employees, 6);
+}
+
+/** Converts the plain shop closest to Riverside Motors into Mike's garage. */
+export function placeGarageNearMotors(buildings: Map<string, Building>) {
+  if ([...buildings.values()].some((b) => venueRole(b) === "garage")) return;
+  const motors = [...buildings.values()].find((b) => venueRole(b) === "dealership");
+  const ax = motors ? motors.origin.x + motors.width / 2 : 22;
+  const ay = motors ? motors.origin.y + motors.depth / 2 : 8;
+  let best: Building | null = null;
+  let bestD = Infinity;
+  for (const b of buildings.values()) {
+    if (b.kind !== "shop" || b.stats.extra?.waterfront || venueRole(b) || isPizzeria(b)) continue;
+    const d = Math.hypot(b.origin.x + b.width / 2 - ax, b.origin.y + b.depth / 2 - ay);
+    if (d < bestD) {
+      bestD = d;
+      best = b;
+    }
+  }
+  if (best) markGarage(best);
+}
+
 export const MALL_FOOTPRINT = { w: 8, d: 8 };
 export const MALL_COST = 480_000;
 export const MALL_BUILD_SECONDS = 24;
@@ -240,6 +272,8 @@ export function venueLabel(role: VenueRole) {
       return "Mall";
     case "dealership":
       return "Dealership";
+    case "garage":
+      return "Auto Repair";
     case "house":
       return "Home";
     case "apartment":
@@ -271,6 +305,8 @@ export function venueEnterHint(role: VenueRole) {
       return "Enter the mall";
     case "dealership":
       return "Browse vehicles";
+    case "garage":
+      return "Repair & customize your car";
     case "house":
       return "Visit this home";
     case "apartment":
@@ -285,7 +321,7 @@ export function markNotableVenues(buildings: Map<string, Building>) {
   );
   const reserved = (b: Building) => {
     const role = venueRole(b);
-    return role === "mall" || role === "dealership" || role === "bank" || isPizzeria(b);
+    return role === "mall" || role === "dealership" || role === "garage" || role === "bank" || isPizzeria(b);
   };
   const shops = list.filter(
     (b) => b.kind === "shop" && !b.stats.extra?.waterfront && !reserved(b),

@@ -75,6 +75,20 @@ export class DriveControls {
     this.camPitch = 0.14;
   }
 
+  /** Kill all motion, e.g. when the car rolls into a service bay. */
+  halt() {
+    this.vx = 0;
+    this.vz = 0;
+    this.speed = 0;
+  }
+
+  /** Roll straight backwards at `speed` (world units / s). */
+  pushReverse(speed: number) {
+    this.vx = Math.sin(this.yaw) * speed;
+    this.vz = Math.cos(this.yaw) * speed;
+    this.speed = -speed;
+  }
+
   update(dt: number, fuelEmpty = false) {
     if (!this.enabled) return;
     const forward = this.keys.has("KeyW", "ArrowUp") ? 1 : 0;

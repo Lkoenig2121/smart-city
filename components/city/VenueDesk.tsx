@@ -39,6 +39,7 @@ interface Props {
   onPlayerChange?: (player: PlayerState) => void;
   onOpenWorkstation?: () => void;
   onOpenMotors?: () => void;
+  onOpenGarage?: () => void;
   onOpenDispatch?: () => void;
   onClose?: () => void;
 }
@@ -50,6 +51,7 @@ export function VenueDesk({
   onPlayerChange,
   onOpenWorkstation,
   onOpenMotors,
+  onOpenGarage,
   onOpenDispatch,
   onClose,
 }: Props) {
@@ -63,6 +65,8 @@ export function VenueDesk({
       <MallDesk building={building} />
     ) : role === "dealership" ? (
       <MotorsDesk building={building} onOpenMotors={onOpenMotors} />
+    ) : role === "garage" ? (
+      <GarageDesk building={building} onOpenGarage={onOpenGarage} />
     ) : role === "police" ? (
       <PoliceDesk
         building={building}
@@ -362,6 +366,26 @@ function MotorsDesk({
   );
 }
 
+function GarageDesk({ building, onOpenGarage }: { building: Building; onOpenGarage?: () => void }) {
+  return (
+    <div className="rounded-2xl border border-amber-300/35 bg-[#16130d]/92 p-5 text-center shadow-2xl backdrop-blur">
+      <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">Auto Repair</p>
+      <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
+      <p className="mt-2 text-sm text-slate-300">
+        &ldquo;Paint, wheels, tunes, interiors, plates. You name it, I bolt it on.&rdquo; — Mike
+      </p>
+      <button
+        type="button"
+        onClick={() => onOpenGarage?.()}
+        className="mt-4 w-full rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-semibold text-[#1a1206]"
+      >
+        Open the service bay
+      </button>
+      <p className="mt-3 text-[0.65rem] text-slate-500">Walk back to the doors and press E to leave</p>
+    </div>
+  );
+}
+
 function PoliceDesk({
   building,
   state,
@@ -615,6 +639,13 @@ function deskCopy(role: VenueRole, building: Building, state: CityState) {
         stat: null,
         action: "Ask about inventory",
         actionNote: "Browse the floor for compact through luxury models.",
+      };
+    case "garage":
+      return {
+        body: "Air tools rattle in the bay. Mike looks up from under a raised coupe.",
+        stat: null,
+        action: "Ask about service",
+        actionNote: "Repairs, paint, wheels, tuning — bring your car by.",
       };
   }
 }
