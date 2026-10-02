@@ -871,6 +871,31 @@ function volumeHeight(building: Building) {
   }
 }
 
+/** Stacked setbacks of a skyscraper / tower, each stage narrower than the one below. */
+export function towerStages(building: Building) {
+  const floors = Math.max(1, building.floors);
+  const count = building.kind === "tower" ? 4 : 3;
+  let x0 = building.origin.x * TILE + WALL_INSET;
+  let z0 = building.origin.y * TILE + WALL_INSET;
+  let x1 = (building.origin.x + building.width) * TILE - WALL_INSET;
+  let z1 = (building.origin.y + building.depth) * TILE - WALL_INSET;
+  let base = 0;
+  const stages: Array<{ x0: number; z0: number; x1: number; z1: number; base: number; top: number }> = [];
+  for (let i = 0; i < count; i++) {
+    const share = i === count - 1 ? 1 : 0.42 - i * 0.06;
+    const remaining = floors * FLOOR_H - base;
+    const top = base + Math.max(FLOOR_H * 2, remaining * share);
+    stages.push({ x0, z0, x1, z1, base, top });
+    base = top;
+    const inset = (Math.min(x1 - x0, z1 - z0) * 0.16) / 2;
+    x0 += inset;
+    z0 += inset;
+    x1 -= inset;
+    z1 -= inset;
+  }
+  return stages;
+}
+
 function addBuilding(
   building: Building,
   wallsFor: (style: FacadeStyle) => MeshBuilder,
@@ -909,36 +934,23 @@ function addBuilding(
 
     case "skyscraper":
     case "tower": {
-      // Stacked setbacks, each stage narrower than the one below.
-      const stages = building.kind === "tower" ? 4 : 3;
-      let bx0 = x0;
-      let bz0 = z0;
-      let bx1 = x1;
-      let bz1 = z1;
-      let base = 0;
-
-      for (let i = 0; i < stages; i++) {
-        const share = i === stages - 1 ? 1 : 0.42 - i * 0.06;
-        const remaining = floors * FLOOR_H - base;
-        const h = base + Math.max(FLOOR_H * 2, remaining * share);
-        walls.walls(bx0, bz0, bx1, bz1, base, h, wall, BAY_W, FLOOR_H);
+      const stages = towerStages(building);
+      for (const { x0: bx0, z0: bz0, x1: bx1, z1: bz1, base, top } of stages) {
+        walls.walls(bx0, bz0, bx1, bz1, base, top, wall, BAY_W, FLOOR_H);
         // Banding at each setback catches the light.
-        trimB.box(bx0 - 0.2, bz0 - 0.2, bx1 + 0.2, bz1 + 0.2, h - 0.5, h, accent);
-        addFacadeBalconies(building, balconyB, bx0, bz0, bx1, bz1, base, h, accent);
-        base = h;
-        const inset = (Math.min(bx1 - bx0, bz1 - bz0) * 0.16) / 2;
-        bx0 += inset;
-        bz0 += inset;
-        bx1 -= inset;
-        bz1 -= inset;
+        trimB.box(bx0 - 0.2, bz0 - 0.2, bx1 + 0.2, bz1 + 0.2, top - 0.5, top, accent);
+        addFacadeBalconies(building, balconyB, bx0, bz0, bx1, bz1, base, top, accent);
       }
 
-      roofB.ground(bx0, bz0, bx1, bz1, base, roof);
-      // Crown and mast.
-      const mx = (bx0 + bx1) / 2;
-      const mz = (bz0 + bz1) / 2;
-      trimB.box(mx - 0.35, mz - 0.35, mx + 0.35, mz + 0.35, base, base + 14, accent);
+      const crown = stages[stages.length - 1];
+      roofB.ground(crown.x0, crown.z0, crown.x1, crown.z1, crown.top, roof);
       const lodging = lodgingUse(building);
+      // Hotels and residences keep a flat crown for the roof-deck pool.
+      if (!lodging) {
+        const mx = (crown.x0 + crown.x1) / 2;
+        const mz = (crown.z0 + crown.z1) / 2;
+        trimB.box(mx - 0.35, mz - 0.35, mx + 0.35, mz + 0.35, crown.top, crown.top + 14, accent);
+      }
       if (lodging) {
         const gold = new THREE.Color(lodging === "hotel" ? "#c9a44c" : "#8a5a3a");
         trimB.box(x0 + 4.2, z1 - 0.2, x1 - 4.2, z1 + 1.6, 3.2, 3.55, gold);

@@ -4,13 +4,15 @@ import { formatClock } from "@/lib/simulation/city/cityTick";
 import { findLodgingRoom, lodgingUse, type LodgingZone } from "@/lib/city/lodging";
 import { stadiumFireworksOn } from "@/lib/city/fireworks";
 import { cityThemeFor } from "@/lib/city/world/cities";
-import { TILE } from "./buildCity";
+import { TILE, towerStages } from "./buildCity";
 import { InteriorControls } from "./interiorControls";
 import { buildLodgingInterior, type LodgingInterior } from "./lodgingInterior";
 import { lodgingWindowDir } from "./StreetWorld";
 import { StreetFireworks } from "./streetFireworks";
 import { HeldItemView } from "./heldItem";
 import { FLOOR_H } from "./textures";
+
+const POOL_DEPTH = 1;
 
 /**
  * First-person hotel / apartment interiors: lobby with a front-desk screen,
@@ -43,6 +45,7 @@ export class LodgingWorld {
     building: Building,
     zone: LodgingZone,
     roomId?: string | null,
+    realCity = false,
   ) {
     this.building = building;
     this.zone = zone;
@@ -58,10 +61,11 @@ export class LodgingWorld {
     this.renderer.toneMappingExposure = zone === "pool" ? 1.18 : 1.08;
     this.renderer.shadowMap.enabled = true;
 
-    this.camera = new THREE.PerspectiveCamera(74, 1, 0.1, zone === "lobby" ? 80 : 900);
+    const roofView = zone === "pool" && realCity;
+    this.camera = new THREE.PerspectiveCamera(74, 1, 0.1, zone === "lobby" ? 80 : roofView ? 1400 : 900);
     this.scene.add(this.camera);
     this.heldView.attach(this.camera);
-    this.interior = buildLodgingInterior(building, zone, state, room);
+    this.interior = buildLodgingInterior(building, zone, state, room, roofView);
     this.scene.add(this.interior.group);
 
     this.controls = new InteriorControls(
@@ -100,7 +104,11 @@ export class LodgingWorld {
       const daySky = theme.daySky;
       const nightSky = theme.nightSky;
       this.scene.background = new THREE.Color(night ? nightSky : daySky);
-      this.scene.fog = new THREE.Fog(night ? theme.fogNight : theme.fogDay, 48, 210);
+      this.scene.fog = new THREE.Fog(
+        night ? theme.fogNight : theme.fogDay,
+        roofView ? 160 : 48,
+        roofView ? 1100 : 210,
+      );
       if (theme.desertAccent) {
         this.hemi.color.set(0xffe6c2);
         this.hemi.groundColor.set(0xc4a574);
@@ -132,6 +140,10 @@ export class LodgingWorld {
   }
 
   attachCity(city: THREE.Group, floor: number) {
+    if (this.zone === "pool") {
+      this.attachRoofCity(city);
+      return;
+    }
     const anchor = this.interior.windowAnchor;
     if (!anchor) return;
     this.detachCity();
@@ -155,8 +167,23 @@ export class LodgingWorld {
     this.borrowedCity = city;
   }
 
+  /** Sets the live streets at true scale under the deck, centred on this tower's crown. */
+  private attachRoofCity(city: THREE.Group) {
+    this.detachCity();
+    const stages = towerStages(this.building);
+    const crown = stages[stages.length - 1];
+    const midX = (crown.x0 + crown.x1) / 2;
+    const midZ = (crown.z0 + crown.z1) / 2;
+    // Sink the crown just below the pool basin so its roof never shows through the deck.
+    city.position.set(-midX, -(crown.top + POOL_DEPTH), -midZ);
+    city.rotation.set(0, 0, 0);
+    this.scene.add(city);
+    this.borrowedCity = city;
+  }
+
   detachCity() {
     const city = this.borrowedCity;
+    if (!this.cityHolder && city?.parent === this.scene) this.scene.remove(city);
     if (this.cityHolder && city) this.cityHolder.remove(city);
     if (this.cityHolder) this.scene.remove(this.cityHolder);
     this.cityHolder = null;

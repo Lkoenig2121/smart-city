@@ -1169,7 +1169,9 @@ export function StreetView({
 
     const street = worldRef.current;
     const city =
-      interior.zone === "room" ? (street?.borrowCity() ?? null) : null;
+      interior.zone === "room" || interior.zone === "pool"
+        ? (street?.borrowCity() ?? null)
+        : null;
     let world: LodgingWorld;
     try {
       world = new LodgingWorld(
@@ -1178,6 +1180,7 @@ export function StreetView({
         building,
         interior.zone,
         interior.roomId,
+        city !== null,
       );
       if (city) {
         world.attachCity(

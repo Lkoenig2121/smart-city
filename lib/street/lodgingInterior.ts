@@ -50,9 +50,10 @@ export function buildLodgingInterior(
   zone: LodgingZone,
   state: CityState,
   room: LodgingRoom | null = null,
+  realCity = false,
 ): LodgingInterior {
   if (zone === "room") return buildRoom(building, state, room);
-  if (zone === "pool") return buildPool(building, state);
+  if (zone === "pool") return buildPool(building, state, realCity);
   return buildLobby(building);
 }
 
@@ -1348,7 +1349,7 @@ function addPoolGuests(
   return { guests, walkers };
 }
 
-function buildPool(building: Building, state: CityState): LodgingInterior {
+function buildPool(building: Building, state: CityState, realCity: boolean): LodgingInterior {
   const group = new THREE.Group();
   const blockers: Blocker[] = [];
   const disposables: Array<{ dispose: () => void }> = [];
@@ -1478,14 +1479,16 @@ function buildPool(building: Building, state: CityState): LodgingInterior {
   trimB.box(9.3, -8.1, 10.2, -7.2, 0.04, 1.05, white);
   trimB.box(12.6, -4.8, 13.5, -3.9, 0.04, 1.05, inkColor());
 
-  const roofFloor = Math.max(8, building.floors);
-  addCityView(floorB, wallB, trimB, building, state, {
-    edgeZ: maxZ,
-    toward: 1,
-    floor: roofFloor,
-  });
-  addCityFlank(floorB, wallB, trimB, building, state, maxX, 1, roofFloor);
-  addCityFlank(floorB, wallB, trimB, building, state, minX, -1, roofFloor);
+  if (!realCity) {
+    const roofFloor = Math.max(8, building.floors);
+    addCityView(floorB, wallB, trimB, building, state, {
+      edgeZ: maxZ,
+      toward: 1,
+      floor: roofFloor,
+    });
+    addCityFlank(floorB, wallB, trimB, building, state, maxX, 1, roofFloor);
+    addCityFlank(floorB, wallB, trimB, building, state, minX, -1, roofFloor);
+  }
 
   assemble(group, floorB, wallB, trimB, disposables);
   const { guests, walkers } = addPoolGuests(group, blockers, disposables);
