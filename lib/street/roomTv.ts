@@ -28,14 +28,26 @@ const CHANNELS = [
   { id: 4, name: "WX 4", title: "FORECAST" },
 ] as const;
 
-/** Flat hotel TV on the dresser, with a canvas that cycles live channels. */
+export interface TvOptions {
+  scale?: number;
+  hasConsole?: boolean;
+  /** Stand: `y` is the tabletop. Wall / pole: `y` is the screen centre above the floor. */
+  mount?: "stand" | "wall" | "pole";
+  at?: { x: number; y: number; z: number; yaw?: number };
+}
+
+/** Flat TV with a canvas that cycles live channels — on the dresser by default. */
 export function addRoomTelevision(
   group: THREE.Group,
   disposables: Array<{ dispose: () => void }>,
-  options: { scale?: number; hasConsole?: boolean } = {},
+  options: TvOptions = {},
 ): RoomTv {
   const tv = new THREE.Group();
   tv.name = "television";
+  const mount = options.mount ?? "stand";
+  const at = options.at ?? { x: 4.58, y: 0.85, z: -3.42 };
+  tv.position.set(at.x, mount === "stand" ? at.y : 0, at.z);
+  tv.rotation.y = at.yaw ?? 0;
   const scale = Math.max(0.85, Math.min(2.2, options.scale ?? 1));
   const hasConsole = Boolean(options.hasConsole);
   let nuketownMode = false;
@@ -71,15 +83,24 @@ export function addRoomTelevision(
   const screenH = 1.28 * scale;
   const bezel = 0.055;
   const chin = 0.09;
-  const cx = 4.58;
-  const cz = -3.42;
-  const deskY = 0.85;
+  const cx = 0;
+  const cz = 0;
+  const centerY = mount === "stand" ? 0.915 : at.y;
+  const logoY = centerY - screenH / 2 - chin / 2 + 0.005;
 
-  box(silver, 0.72, 0.04, 0.28, cx, deskY + 0.03, cz + 0.02);
-  box(silver, 0.08, 0.18, 0.08, cx, deskY + 0.13, cz);
-  box(black, screenW + bezel * 2, screenH + bezel + chin, 0.07, cx, deskY + 0.86, cz);
-  box(ink, screenW + 0.02, screenH + 0.02, 0.02, cx, deskY + 0.9, cz + 0.028);
-  box(silver, 0.22, 0.018, 0.03, cx, deskY + 0.24, cz + 0.04);
+  if (mount === "stand") {
+    box(silver, 0.72, 0.04, 0.28, cx, 0.03, cz + 0.02);
+    box(silver, 0.08, 0.18, 0.08, cx, 0.13, cz);
+  } else if (mount === "wall") {
+    box(black, Math.min(1.2, screenW * 0.4), 0.42, 0.1, cx, centerY, cz - 0.08);
+  } else {
+    box(silver, 0.5, 0.08, 0.5, cx, 0.04, cz - 0.2);
+    box(silver, 0.14, centerY, 0.14, cx, centerY / 2, cz - 0.2);
+    box(black, 0.6, 0.36, 0.12, cx, centerY, cz - 0.1);
+  }
+  box(black, screenW + bezel * 2, screenH + bezel + chin, 0.07, cx, centerY - 0.055, cz);
+  box(ink, screenW + 0.02, screenH + 0.02, 0.02, cx, centerY - 0.015, cz + 0.028);
+  box(silver, 0.22, 0.018, 0.03, cx, logoY, cz + 0.04);
 
   const ledGeo = new THREE.BoxGeometry(0.03, 0.012, 0.012);
   const ledMat = new THREE.MeshStandardMaterial({
@@ -89,7 +110,7 @@ export function addRoomTelevision(
     roughness: 0.2,
   });
   const led = new THREE.Mesh(ledGeo, ledMat);
-  led.position.set(cx + screenW / 2 - 0.12, deskY + 0.24, cz + 0.042);
+  led.position.set(cx + screenW / 2 - 0.12, logoY, cz + 0.042);
   tv.add(led);
   disposables.push(ledGeo, ledMat);
 
@@ -117,14 +138,14 @@ export function addRoomTelevision(
   });
   const screenGeo = new THREE.PlaneGeometry(screenW, screenH);
   const screen = new THREE.Mesh(screenGeo, screenMat);
-  screen.position.set(cx, deskY + 0.915, cz + 0.042);
+  screen.position.set(cx, centerY, cz + 0.042);
   screen.receiveShadow = false;
   tv.add(screen);
   disposables.push(screenGeo, screenMat);
   if (texture) disposables.push(texture);
 
   const glow = new THREE.PointLight(0x9ec8ff, 2.4, 6.5, 2);
-  glow.position.set(cx, deskY + 0.95, cz + 0.55);
+  glow.position.set(cx, centerY + 0.035, cz + 0.55);
   tv.add(glow);
 
   group.add(tv);

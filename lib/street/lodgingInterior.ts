@@ -1491,6 +1491,33 @@ function buildPool(building: Building, state: CityState, realCity: boolean): Lod
   }
 
   assemble(group, floorB, wallB, trimB, disposables);
+
+  // Big screen on the tower wall over the pool, plus weatherproof pole TVs by each lounge.
+  const screens = [
+    addRoomTelevision(group, disposables, { mount: "wall", scale: 2.2, at: { x: 0, y: 4.3, z: minZ + 0.92 } }),
+    addRoomTelevision(group, disposables, {
+      mount: "pole",
+      scale: 1.1,
+      at: { x: minX + 0.9, y: 2.6, z: 4, yaw: Math.PI / 2 },
+    }),
+    addRoomTelevision(group, disposables, {
+      mount: "pole",
+      scale: 1.1,
+      at: { x: maxX - 0.9, y: 2.6, z: 4, yaw: -Math.PI / 2 },
+    }),
+  ];
+  blockers.push({ minX: minX + 0.45, maxX: minX + 1.0, minZ: 3.75, maxZ: 4.25 });
+  blockers.push({ minX: maxX - 1.0, maxX: maxX - 0.45, minZ: 3.75, maxZ: 4.25 });
+  const tv: RoomTv = {
+    update: (dt, s) => {
+      for (const screen of screens) screen.update(dt, s);
+    },
+    hasConsole: () => false,
+    isNuketown: () => false,
+    toggleNuketown: () => false,
+    dispose: () => undefined,
+  };
+
   const { guests, walkers } = addPoolGuests(group, blockers, disposables);
   let guestTime = 0;
 
@@ -1540,7 +1567,7 @@ function buildPool(building: Building, state: CityState, realCity: boolean): Lod
     spawn: { x: 0, z: -8.2, yaw: Math.PI, pitch: -0.08 },
     bounds: { minX, maxX, minZ, maxZ },
     deskMat: null,
-    tv: null,
+    tv,
     groundAt: (x, z) => {
       if (x > px0 && x < px1 && z > deepZ0 && z < deepZ1) return -0.62;
       if (x > px0 && x < px1 && z > shelfZ0 && z < shelfZ1) return 0.12;
