@@ -37,9 +37,13 @@ import {
   acceptPoliceCall,
   availablePoliceCalls,
   cancelPoliceCall,
+  lockedPoliceCalls,
   nextPoliceRank,
+  POLICE_CALL_CATALOG,
   onPoliceDuty,
   policeRank,
+  policeRankLabel,
+  receivePoliceMission,
 } from "@/lib/city/police";
 import { characterProgress } from "@/lib/city/progression";
 import { forecastFor, weatherEmoji } from "@/lib/simulation/weather/weather";
@@ -227,7 +231,14 @@ export function PlayerPhone({
               ) : app === "vehicles" ? (
                 <VehiclesView player={player} onPlayer={onPlayer} onWaypoint={waypoint} onNote={setNote} note={note} />
               ) : app === "police" ? (
-                <PoliceView player={player} onPlayer={onPlayer} onNote={setNote} note={note} onChanged={onChanged} />
+                <PoliceView
+                  state={state}
+                  player={player}
+                  onPlayer={onPlayer}
+                  onNote={setNote}
+                  note={note}
+                  onChanged={onChanged}
+                />
               ) : app === "world" ? (
                 <WorldView
                   player={player}
@@ -624,12 +635,14 @@ function JobsView({
 }
 
 function PoliceView({
+  state,
   player,
   onPlayer,
   onNote,
   note,
   onChanged,
 }: {
+  state: CityState;
   player: PlayerState;
   onPlayer: (player: PlayerState) => void;
   onNote: (note: string | null) => void;
@@ -641,7 +654,19 @@ function PoliceView({
   const rank = policeRank(career?.xp ?? 0);
   const next = nextPoliceRank(career?.xp ?? 0);
   const calls = availablePoliceCalls(player);
+  const locked = lockedPoliceCalls(player);
   const active = player.policeCall;
+  const take = (result: PlayerState | string) => {
+    if (typeof result === "string") {
+      onNote(result);
+      return;
+    }
+    onPlayer(result);
+    onChanged?.();
+    const call = result.policeCall;
+    const needsCruiser = POLICE_CALL_CATALOG.some((def) => def.kind === call?.kind && def.needsCruiser);
+    onNote(call ? `Dispatch · ${call.title}. GPS set${needsCruiser ? " — take the cruiser (C)" : ""}.` : null);
+  };
 
   return (
     <div className="pt-2">
@@ -672,9 +697,12 @@ function PoliceView({
             Shift earnings {formatDollars(player.policeShift.earnings)} · {player.policeShift.callsCompleted} calls
           </p>
         ) : null}
-        {career?.unlockedVehicles.includes("police_cruiser") ? (
-          <p className="mt-1 text-xs text-amber-200">Patrol cruiser unlocked (garage coming soon).</p>
-        ) : null}
+        <p className="mt-1 text-xs text-amber-200">
+          {rank.id === "cadet"
+            ? "Department car: Police Cruiser · Interceptor at Patrol Officer"
+            : "Department car: Police Interceptor"}
+          {duty ? " · press C on the street" : ""}
+        </p>
       </div>
 
       {active ? (
@@ -711,12 +739,27 @@ function PoliceView({
 
       <p className="mt-4 text-[0.65rem] uppercase tracking-[0.16em] text-white/40">Dispatch</p>
       {!duty ? (
-        <p className="mt-2 text-sm text-white/65">Go on duty at the station to accept calls.</p>
+        <p className="mt-2 text-sm text-white/65">
+          Clock in at the police station desk, take a mission, follow the GPS in your cruiser, then return to
+          the desk for pay and XP.
+        </p>
       ) : (
         <div className="mt-1 space-y-2">
+          {!active ? (
+            <button
+              type="button"
+              onClick={() => take(receivePoliceMission(state))}
+              className="w-full rounded-xl bg-sky-400 px-3 py-2 text-sm font-semibold text-[#0a1220]"
+            >
+              📻 Receive next mission
+            </button>
+          ) : null}
           {calls.map((call) => (
             <div key={call.kind} className="rounded-2xl bg-white/5 px-3 py-3">
-              <p className="text-sm font-semibold">{call.title}</p>
+              <p className="text-sm font-semibold">
+                {call.title}
+                {call.needsCruiser ? <span className="ml-1 text-xs text-sky-200">🚓</span> : null}
+              </p>
               <p className="text-xs text-white/55">{call.locationLabel}</p>
               <p className="mt-1 text-xs text-white/70">{call.blurb}</p>
               <p className="mt-1 text-xs text-amber-100">
@@ -725,19 +768,18 @@ function PoliceView({
               <button
                 type="button"
                 disabled={Boolean(active)}
-                onClick={() => {
-                  const nextPlayer = acceptPoliceCall(call.kind);
-                  if (typeof nextPlayer === "string") onNote(nextPlayer);
-                  else {
-                    onPlayer(nextPlayer);
-                    onChanged?.();
-                    onNote(`Assignment accepted · ${call.title}`);
-                  }
-                }}
+                onClick={() => take(acceptPoliceCall(call.kind, state))}
                 className="mt-2 rounded-lg bg-sky-400 px-3 py-1.5 text-xs font-semibold text-[#0a1220] disabled:opacity-40"
               >
                 Accept
               </button>
+            </div>
+          ))}
+          {locked.map((call) => (
+            <div key={call.kind} className="rounded-2xl bg-white/[0.03] px-3 py-3 opacity-60">
+              <p className="text-sm font-semibold">🔒 {call.title}</p>
+              <p className="mt-1 text-xs text-white/60">{call.blurb}</p>
+              <p className="mt-1 text-xs text-sky-200">Unlocks at {policeRankLabel(call.minRank)}</p>
             </div>
           ))}
         </div>

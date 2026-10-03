@@ -24,6 +24,7 @@ import {
   finishPoliceCall,
   onPoliceDuty,
   policeRank,
+  receivePoliceMission,
   startPoliceShift,
   type PoliceShiftSummary,
 } from "@/lib/city/police";
@@ -413,7 +414,18 @@ function PoliceDesk({
       return;
     }
     setSummary(null);
-    setNote("Uniform equipped. Check dispatch for available calls.");
+    setNote("Clocked in · uniform on. Take a mission, then press C outside for your cruiser.");
+    onPlayerChange?.(next);
+  };
+
+  const receive = () => {
+    const next = receivePoliceMission(state);
+    if (typeof next === "string") {
+      setNote(next);
+      return;
+    }
+    const call = next.policeCall;
+    setNote(call ? `Dispatch: ${call.title} — GPS is set. Head out and press C for the cruiser.` : null);
     onPlayerChange?.(next);
   };
 
@@ -446,11 +458,25 @@ function PoliceDesk({
   };
 
   const pendingFinish = live.policeCall?.phase === "completed";
+  const step = !onDuty ? 0 : !live.policeCall ? 1 : pendingFinish ? 3 : 2;
+  const steps = ["Clock in", "Receive mission", "Drive & complete", "Get paid", "Clock out"];
 
   return (
     <div className="rounded-2xl border border-sky-400/35 bg-[#0e1520]/94 p-5 text-center shadow-2xl backdrop-blur">
       <p className="text-[0.65rem] uppercase tracking-[0.28em] text-sky-300">Duty Officer</p>
       <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-1 text-[0.6rem] uppercase tracking-wide">
+        {steps.map((label, i) => (
+          <span
+            key={label}
+            className={`rounded-full px-2 py-0.5 ${
+              i === step ? "bg-sky-400 text-[#0a1220]" : i < step ? "bg-sky-400/20 text-sky-200" : "bg-white/5 text-slate-500"
+            }`}
+          >
+            {label}
+          </span>
+        ))}
+      </div>
       <p className="mt-2 text-sm text-slate-300">
         {onDuty
           ? pendingFinish
@@ -486,14 +512,27 @@ function PoliceDesk({
             >
               Finish · collect {formatDollars(live.policeCall?.reward ?? 0)}
             </button>
+          ) : live.policeCall ? (
+            <p className="rounded-xl border border-sky-400/25 bg-sky-500/10 px-3 py-2 text-sm text-sky-100">
+              On a call · {live.policeCall.title}. Follow the GPS — the duty HUD shows what to do next.
+            </p>
           ) : (
-            <button
-              type="button"
-              onClick={() => onOpenDispatch?.()}
-              className="w-full rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-semibold text-[#0a1220]"
-            >
-              Open dispatch ({calls.length} calls)
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={receive}
+                className="w-full rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-semibold text-[#0a1220]"
+              >
+                Receive mission
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenDispatch?.()}
+                className="w-full rounded-xl border border-sky-400/40 bg-sky-500/10 px-4 py-2.5 text-sm font-semibold text-sky-100"
+              >
+                Choose from dispatch ({calls.length} open)
+              </button>
+            </>
           )}
           <button
             type="button"

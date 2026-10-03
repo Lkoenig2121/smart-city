@@ -53,10 +53,15 @@ import {
 } from "@/lib/city/player";
 import {
   advancePoliceCall,
+  applyPoliceSceneEvent,
   finishPoliceCall,
+  isPoliceCruiser,
   nearPoliceCallObjective,
   onPoliceDuty,
+  POLICE_PROMPT_PHASES,
   policeCallPrompt,
+  policeCruiser,
+  policeObjective,
   policeRank,
   reportPoliceCallDone,
   syncPoliceCallArrival,
@@ -286,6 +291,7 @@ export function StreetView({
   const [phoneThread, setPhoneThread] = useState<string | null>(null);
   const [policePrompt, setPolicePrompt] = useState<string | null>(null);
   const [policeNote, setPoliceNote] = useState<string | null>(null);
+  const [policeObjectiveText, setPoliceObjective] = useState<string | null>(null);
   const [waypoint, setWaypoint] = useState<PhoneWaypoint | null>(
     () => readPhone().waypoint,
   );
@@ -892,9 +898,9 @@ export function StreetView({
           return true;
         }
         if (drivingRef.current) {
+          const id = world.drivingVehicleId;
           const parked = world.stopDriving();
-          const id = activeOwnedVehicle(readPlayer())?.id;
-          if (parked && id) {
+          if (parked && id && !isPoliceCruiser(id)) {
             const next = applyParkVehicle(
               readPlayer(),
               id,
@@ -910,7 +916,9 @@ export function StreetView({
           return true;
         }
         if (event.code === "KeyC") {
-          const car = activeOwnedVehicle(readPlayer());
+          const me = readPlayer();
+          // On shift, C calls up the department cruiser instead of your own car.
+          const car = onPoliceDuty(me) ? policeCruiser(me) : activeOwnedVehicle(me);
           if (!car || world.hiking) return false;
           world.summonCar(car);
           drivingRef.current = true;
@@ -933,7 +941,14 @@ export function StreetView({
       world.setWaypoint(waypointRef.current);
       const live = readPlayer();
       const activeCar = activeOwnedVehicle(live);
-      world.syncOwnedCars(live.ownedVehicles);
+      world.syncOwnedCars(
+        live.policeShift ? [...live.ownedVehicles, policeCruiser(live)] : live.ownedVehicles,
+      );
+      if (!live.policeShift && world.inPoliceCruiser) {
+        world.stopDriving();
+        drivingRef.current = false;
+        setDriving(false);
+      }
       if (world.isDriving && activeCar) {
         world.setDriveFuelEmpty(false);
       } else {
@@ -977,18 +992,38 @@ export function StreetView({
         const arrived = syncPoliceCallArrival(pos.x, pos.y);
         if (arrived) setPlayer(arrived);
         const callNow = readPlayer().policeCall;
+        world.setPoliceMission(callNow);
         const prompt = callNow ? policeCallPrompt(callNow, { x: pos.x, y: pos.y }) : null;
         const near =
           callNow &&
+          !world.isDriving &&
           nearPoliceCallObjective(callNow, pos.x, pos.y) &&
-          (callNow.phase === "arrived" ||
-            callNow.phase === "inspecting" ||
-            callNow.phase === "placing_cones" ||
-            callNow.phase === "clearing" ||
-            callNow.phase === "resolving");
+          POLICE_PROMPT_PHASES.includes(callNow.phase);
         setPolicePrompt(near && prompt ? prompt.label : null);
       }
       world.render(dt);
+      for (const event of world.consumePoliceEvents()) {
+        const result = applyPoliceSceneEvent(state, event);
+        if (!result) continue;
+        setPlayer(result.player);
+        setPoliceNote(result.note);
+        setWaypoint(readPhone().waypoint);
+        refreshPhoneChrome(result.player);
+        if (result.failed) {
+          world.setPoliceMission(null);
+          world.setPoliceLights(false);
+          setPoliceLights(false);
+        }
+      }
+      if (live.policeShift) {
+        const objective = policeObjective(readPlayer().policeCall, {
+          inCruiser: world.inPoliceCruiser,
+          driving: world.isDriving,
+          lights: world.policeLightsEnabled,
+          sceneNote: world.policeMissionNote,
+        });
+        setPoliceObjective((prev) => (prev === objective ? prev : objective));
+      }
       if (world.consumeGarageEntry() && drivingRef.current && !garageOpenRef.current) {
         garageOpenRef.current = true;
         garageDriveInRef.current = true;
@@ -996,7 +1031,7 @@ export function StreetView({
         setGarageOpen(true);
       }
       positionRef.current = world.tilePosition;
-      if (world.isDriving && activeCar) {
+      if (world.isDriving && activeCar && world.drivingVehicleId === activeCar.id) {
         const sped = world.driveMph();
         const next = applyDriveTick(
           live,
@@ -1927,11 +1962,22 @@ export function StreetView({
                 <p className="mt-1 text-[0.7rem] text-amber-100">
                   {player.policeCall.phase === "completed"
                     ? `Ready to Finish · ${player.policeCall.title} · ${formatDollars(player.policeCall.reward)}`
-                    : `Active · ${player.policeCall.title} · ${player.policeCall.phase.replaceAll("_", " ")}`}
+                    : `${player.policeCall.title} · ${formatDollars(player.policeCall.reward)} · +${player.policeCall.xp} XP`}
                 </p>
-              ) : (
-                <p className="mt-1 text-[0.7rem] text-white/55">No active call · open Police on phone</p>
-              )}
+              ) : null}
+              {!inside && policeObjectiveText ? (
+                <p className="mt-1 max-w-[17rem] text-[0.72rem] font-medium text-white">
+                  ▸ {policeObjectiveText}
+                </p>
+              ) : null}
+              {!inside && policeNote && !policePrompt ? (
+                <p className="mt-0.5 max-w-[17rem] text-[0.65rem] text-sky-200/80">Radio · {policeNote}</p>
+              ) : null}
+              {!inside ? (
+                <p className="mt-1 text-[0.6rem] text-white/40">
+                  C cruiser · L lights · M phone → Police
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>

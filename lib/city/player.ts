@@ -79,7 +79,18 @@ export interface ActiveShift {
   taskEarnings: number;
 }
 
-export type PoliceCallKind = "traffic_incident" | "lost_resident" | "suspicious_activity";
+export const POLICE_CALL_KINDS = [
+  "traffic_incident",
+  "lost_resident",
+  "suspicious_activity",
+  "traffic_stop",
+  "stolen_vehicle",
+  "vip_escort",
+  "patrol",
+  "pursuit",
+] as const;
+
+export type PoliceCallKind = (typeof POLICE_CALL_KINDS)[number];
 
 export type PoliceCallPhase =
   | "accepted"
@@ -89,6 +100,10 @@ export type PoliceCallPhase =
   | "placing_cones"
   | "clearing"
   | "resolving"
+  | "pursuing"
+  | "stopped"
+  | "escorting"
+  | "patrolling"
   | "completed";
 
 export interface PoliceCareer {
@@ -122,6 +137,17 @@ export interface PoliceCall {
   destTileX?: number;
   destTileY?: number;
   residentName?: string;
+  /** Patrol route on road tiles, and how many have been driven through. */
+  checkpoints?: Array<{ x: number; y: number }>;
+  checkpoint?: number;
+  /** Where a stolen car really sits — `tileX/Y` is only the last sighting. */
+  targetTileX?: number;
+  targetTileY?: number;
+  plate?: string;
+  vehicleColor?: string;
+  vehicleModel?: string;
+  vipName?: string;
+  destLabel?: string;
   reward: number;
   xp: number;
   acceptedAt: number;
@@ -661,13 +687,8 @@ function parsePoliceShift(value: unknown): PoliceShift | null {
 function parsePoliceCall(value: unknown): PoliceCall | null {
   if (!value || typeof value !== "object") return null;
   const raw = value as Partial<PoliceCall>;
-  if (
-    raw.kind !== "traffic_incident" &&
-    raw.kind !== "lost_resident" &&
-    raw.kind !== "suspicious_activity"
-  ) {
-    return null;
-  }
+  if (!POLICE_CALL_KINDS.includes(raw.kind as PoliceCallKind)) return null;
+  const kind = raw.kind as PoliceCallKind;
   if (typeof raw.id !== "string" || typeof raw.title !== "string") return null;
   if (typeof raw.locationLabel !== "string") return null;
   const tileX = Number(raw.tileX);
@@ -678,9 +699,26 @@ function parsePoliceCall(value: unknown): PoliceCall | null {
   const destTileX = Number(raw.destTileX);
   const destTileY = Number(raw.destTileY);
   const phase = typeof raw.phase === "string" ? (raw.phase as PoliceCallPhase) : "accepted";
+  const targetTileX = Number(raw.targetTileX);
+  const targetTileY = Number(raw.targetTileY);
+  const checkpoint = Number(raw.checkpoint);
+  const text = (value: unknown) => (typeof value === "string" ? value : undefined);
   return {
     id: raw.id,
-    kind: raw.kind,
+    kind,
+    checkpoints: Array.isArray(raw.checkpoints)
+      ? raw.checkpoints
+          .filter((p): p is { x: number; y: number } => Boolean(p) && Number.isFinite(p.x) && Number.isFinite(p.y))
+          .map((p) => ({ x: p.x, y: p.y }))
+      : undefined,
+    checkpoint: Number.isFinite(checkpoint) ? checkpoint : undefined,
+    targetTileX: Number.isFinite(targetTileX) ? targetTileX : undefined,
+    targetTileY: Number.isFinite(targetTileY) ? targetTileY : undefined,
+    plate: text(raw.plate),
+    vehicleColor: text(raw.vehicleColor),
+    vehicleModel: text(raw.vehicleModel),
+    vipName: text(raw.vipName),
+    destLabel: text(raw.destLabel),
     phase,
     title: raw.title,
     locationLabel: raw.locationLabel,

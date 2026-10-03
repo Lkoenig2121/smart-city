@@ -21,7 +21,9 @@ import { DutyUniformView } from "./dutyUniform";
 import type { PhoneWaypoint } from "@/lib/city/phone";
 import type { OwnedVehicle } from "@/lib/city/vehicles";
 import { TRAFFIC_INCIDENT_SITE, LOST_RESIDENT_MEETUP, SUSPICIOUS_ACTIVITY_SITE } from "@/lib/city/police";
-import type { PoliceCallPhase } from "@/lib/city/player";
+import { POLICE_CRUISER_ID, type PoliceSceneEvent } from "@/lib/city/police";
+import type { PoliceCall, PoliceCallPhase } from "@/lib/city/player";
+import { PoliceMissionScene } from "./policeMissionScene";
 import { buildStreetPerson, disposeObject3D } from "./streetPerson";
 import { driveStats } from "@/lib/city/vehicles";
 import { findPath, nearestRoad } from "@/lib/simulation/traffic/pathfinding";
@@ -95,6 +97,9 @@ export class StreetWorld {
   private ownedCarRoot = new THREE.Group();
   private policeOnDuty = false;
   private policeLightsOn = false;
+  private missionScene: PoliceMissionScene;
+  private missionCall: PoliceCall | null = null;
+  private missionEvents: PoliceSceneEvent[] = [];
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -128,6 +133,8 @@ export class StreetWorld {
     this.city.group.add(this.fireworks.group);
     this.valet = new ValetLine(state, (x, z) => this.controls.groundAt(x, z));
     this.city.group.add(this.valet.group);
+    this.missionScene = new PoliceMissionScene(state, (x, z) => this.controls.groundAt(x, z));
+    this.scene.add(this.missionScene.group);
 
     // The sun casts across a moving box centred on the player.
     this.sun.castShadow = true;
@@ -717,6 +724,27 @@ export class StreetWorld {
     }
   }
 
+  /** Mirror the active police call into street props (NPC cars, checkpoints). */
+  setPoliceMission(call: PoliceCall | null) {
+    this.missionCall = call;
+    this.missionScene.sync(call);
+  }
+
+  /** Street happenings since the last call — apply with `applyPoliceSceneEvent`. */
+  consumePoliceEvents() {
+    const events = this.missionEvents;
+    this.missionEvents = [];
+    return events;
+  }
+
+  get policeMissionNote() {
+    return this.missionScene.note;
+  }
+
+  get inPoliceCruiser() {
+    return this.drivingId === POLICE_CRUISER_ID && Boolean(this.drive);
+  }
+
   /**
    * Spawn or update the traffic-incident prop scene inside the downtown plaza square.
    * Pass null to clear after the call is completed.
@@ -950,6 +978,16 @@ export class StreetWorld {
       }
     }
     this.updateEscortNpc(dt);
+    const me = this.drive?.position ?? this.controls.position;
+    this.missionEvents.push(
+      ...this.missionScene.update(dt, this.missionCall, {
+        x: me.x,
+        z: me.z,
+        driving: this.isDriving,
+        inCruiser: this.inPoliceCruiser,
+        lights: this.policeOnDuty && this.policeLightsOn,
+      }),
+    );
 
     // Narrow the lens slightly as a hop travels, the way Street View pushes in
     // between panoramas. Skipped in free-walk mode, where it would feel odd.
@@ -1218,6 +1256,7 @@ export class StreetWorld {
     this.clearPoliceIncident();
     this.clearSuspiciousActivity();
     this.clearEscortNpc();
+    this.missionScene.dispose();
     this.agents.dispose();
     this.glow.dispose();
     this.weatherFx.dispose();

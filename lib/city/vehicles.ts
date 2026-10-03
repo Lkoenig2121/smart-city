@@ -449,8 +449,14 @@ export function applyDriveTick(
   return player;
 }
 
+/** Department cars aren't on the lot, so their tune lives here. */
+const POLICE_TUNES: Record<string, { topSpeed: number; accel: number }> = {
+  "police-cruiser": { topSpeed: 40, accel: 28 },
+  "police-interceptor": { topSpeed: 50, accel: 36 },
+};
+
 export function driveStats(car: OwnedVehicle) {
-  const catalog = vehicleById(car.catalogId);
+  const catalog = vehicleById(car.catalogId) ?? POLICE_TUNES[car.catalogId];
   const boost = 1 + car.upgrades.performance * 0.12;
   const grip = 1 + Math.max(0, WHEELS.findIndex((w) => w.id === car.wheels)) * 0.03;
   const aero = car.accessories.includes("spoiler") ? 1.04 : 1;

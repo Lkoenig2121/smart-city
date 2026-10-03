@@ -126,11 +126,55 @@ export function makePlayerCarMesh(car: OwnedVehicle) {
     group.add(pad);
   }
 
+  if (car.garageLocation === "police") {
+    addPoliceLivery(group, s, bodyY, deck);
+    group.userData.police = true;
+  }
+
   group.add(buildDutySiren());
 
   group.userData.vehicleId = car.id;
   group.userData.lookKey = carLookKey(car);
   return group;
+}
+
+/** Black-and-white department paint: dark doors and hood, POLICE lettering, push bar. */
+function addPoliceLivery(
+  group: THREE.Group,
+  s: { w: number; h: number; l: number },
+  bodyY: number,
+  deck: number,
+) {
+  const black = new THREE.MeshStandardMaterial({ color: "#111317", roughness: 0.4, metalness: 0.35 });
+  const doors = new THREE.Mesh(new THREE.BoxGeometry(s.w + 0.02, s.h * 0.62, s.l * 0.46), black);
+  doors.position.set(0, bodyY - s.h * 0.12, -0.1);
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(s.w - 0.1, 0.02, s.l * 0.26), black);
+  hood.position.set(0, deck + 0.01, -s.l / 2 + s.l * 0.14);
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(s.w * 0.7, 0.32, 0.14), black);
+  bar.position.set(0, bodyY - 0.05, -s.l / 2 - 0.12);
+  group.add(doors, hood, bar);
+
+  const el = document.createElement("canvas");
+  el.width = 256;
+  el.height = 64;
+  const ctx = el.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = "#f4f4f2";
+    ctx.font = "900 46px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("POLICE", 128, 34);
+  }
+  const tex = new THREE.CanvasTexture(el);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const label = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
+  const geo = new THREE.PlaneGeometry(1.5, 0.38);
+  for (const side of [-1, 1]) {
+    const decal = new THREE.Mesh(geo, label);
+    decal.position.set(side * (s.w / 2 + 0.02), bodyY - s.h * 0.1, -0.1);
+    decal.rotation.y = side * Math.PI / 2;
+    group.add(decal);
+  }
 }
 
 export function disposeCarMesh(mesh: THREE.Object3D) {
@@ -197,16 +241,16 @@ export function updateDutySiren(mesh: THREE.Object3D, time: number, on: boolean)
     siren = buildDutySiren();
     mesh.add(siren);
   }
-  siren.visible = on;
-  if (!on) return;
-  const flash = time * 8;
-  const redOn = Math.sin(flash) > 0;
+  // Department cars always carry the bar; it just stays dark until the lights are on.
+  siren.visible = on || Boolean(mesh.userData.police);
+  if (!siren.visible) return;
+  const redOn = Math.sin(time * 8) > 0;
   const red = siren.getObjectByName("siren-red") as THREE.Mesh | undefined;
   const blue = siren.getObjectByName("siren-blue") as THREE.Mesh | undefined;
   if (red?.material instanceof THREE.MeshStandardMaterial) {
-    red.material.emissiveIntensity = redOn ? 2.8 : 0.25;
+    red.material.emissiveIntensity = !on ? 0.08 : redOn ? 2.8 : 0.25;
   }
   if (blue?.material instanceof THREE.MeshStandardMaterial) {
-    blue.material.emissiveIntensity = redOn ? 0.25 : 2.8;
+    blue.material.emissiveIntensity = !on ? 0.08 : redOn ? 0.25 : 2.8;
   }
 }
