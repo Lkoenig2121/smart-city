@@ -26,13 +26,18 @@ export interface StaffSpot {
   yaw: number;
   /** Seat height when the person sits here. */
   seat?: number;
+  /**
+   * Lie on a bed: body pitched back, feet at the root, head toward local -z.
+   * Value is the mattress height.
+   */
+  lie?: number;
   /** Brings an office chair along (for desks that have none modelled). */
   chair?: boolean;
   /** The player's own desk: kept empty on the player's floor. */
   desk?: boolean;
-  /** "staff" come and go with office hours; "day"/"night" swap at the reception desk. */
-  role?: "staff" | "day" | "night";
-  uniform?: "guard";
+  /** "staff" come and go with office hours; "day"/"night" swap at the reception desk; "always" stays put. */
+  role?: "staff" | "day" | "night" | "always";
+  uniform?: "guard" | "scrubs" | "coat" | "gown";
 }
 
 export interface WalkGraph {
@@ -172,6 +177,25 @@ function sitPose(rig: Rig, seat: number) {
   }
 }
 
+/** Flat on a mattress: root stays at the foot of the bed, head toward local -z. */
+function liePose(rig: Rig, mattress: number) {
+  standPose(rig, -0.35);
+  rig.body.rotation.x = -Math.PI / 2;
+  rig.body.position.set(0, mattress + 0.18, 0.05);
+  for (let i = 0; i < 2; i++) {
+    rig.arms[i].rotation.x = -0.2;
+    rig.arms[i].rotation.z = i === 0 ? 0.25 : -0.25;
+  }
+}
+
+function lookForUniform(base: Look, uniform: StaffSpot["uniform"] | undefined): Look {
+  if (uniform === "guard") return { ...base, shirt: "#1f2a44", pants: "#1a1f2b" };
+  if (uniform === "scrubs") return { ...base, shirt: "#5dade2", pants: "#2e86ab" };
+  if (uniform === "coat") return { ...base, shirt: "#f4f6f8", pants: "#2f3640" };
+  if (uniform === "gown") return { ...base, shirt: "#e8f0f4", pants: "#e8f0f4" };
+  return base;
+}
+
 function turnToward(current: number, target: number, amount: number) {
   let delta = target - current;
   while (delta > Math.PI) delta -= Math.PI * 2;
@@ -223,11 +247,12 @@ export class OfficeCrowd {
     });
 
     for (const spot of spec.spots) {
-      const look = spot.uniform === "guard" ? { ...civilian(), shirt: "#1f2a44", pants: "#1a1f2b" } : civilian();
+      const look = lookForUniform(civilian(), spot.uniform);
       const rig = buildRig(kit, look, spot.chair ? "chair" : null);
       rig.root.position.set(spot.x, 0, spot.z);
       rig.root.rotation.y = spot.yaw;
-      if (spot.seat !== undefined) sitPose(rig, spot.seat);
+      if (spot.lie !== undefined) liePose(rig, spot.lie);
+      else if (spot.seat !== undefined) sitPose(rig, spot.seat);
       else standPose(rig);
       rig.root.visible = false;
       parent.add(rig.root);
@@ -271,11 +296,13 @@ export class OfficeCrowd {
       const spot = actor.spot!;
       const role = spot.role ?? "staff";
       actor.rig.root.visible =
-        role === "night"
-          ? afterHours
-          : role === "day"
-            ? !afterHours
-            : hash2(seed, i, 11) < busy && !(hideDesk && spot.desk);
+        role === "always"
+          ? !(hideDesk && spot.desk)
+          : role === "night"
+            ? afterHours
+            : role === "day"
+              ? !afterHours
+              : hash2(seed, i, 11) < busy && !(hideDesk && spot.desk);
     });
     this.walkers.forEach((actor, i) => {
       actor.rig.root.visible = hash2(seed, i, 29) < busy;
@@ -291,7 +318,10 @@ export class OfficeCrowd {
       if (!actor.rig.root.visible) continue;
       const { rig, spot } = actor;
       const t = this.time + actor.offset;
-      if (spot!.seat !== undefined) {
+      if (spot!.lie !== undefined) {
+        rig.arms[0].rotation.x = -0.2 + Math.sin(t * 0.6) * 0.03;
+        rig.arms[1].rotation.x = -0.2 + Math.sin(t * 0.6 + 1.1) * 0.03;
+      } else if (spot!.seat !== undefined) {
         const typing = spot!.chair ? -0.95 : -0.25;
         rig.arms[0].rotation.x = typing + Math.sin(t * 9) * 0.05;
         rig.arms[1].rotation.x = typing + Math.sin(t * 9 + 1.7) * 0.05;

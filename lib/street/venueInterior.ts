@@ -7,6 +7,7 @@ import { venueRole, type VenueRole } from "@/lib/city/venues";
 import type { Blocker } from "./buildCity";
 import type { Ladder } from "./interiorControls";
 import { MeshBuilder } from "./meshBuilder";
+import { buildHospital } from "./hospitalInterior";
 import { buildOfficeTower, type OfficeElevator } from "./officeInterior";
 import { MikeNpc } from "./mikeNpc";
 
@@ -21,6 +22,10 @@ export interface VenueInterior {
   nearStore?: (x: number, z: number, feetY?: number) => ClothStore | null;
   nearFurnish?: (x: number, z: number, feetY?: number) => FurnishStore | null;
   nearSnack?: (x: number, z: number, feetY?: number) => { id: string; name: string; items: string[] } | null;
+  /** Standing beside the assigned patient bed (doctor career). */
+  nearPatient?: (x: number, z: number) => boolean;
+  /** Lights the glowing case marker above the assigned bed. */
+  setCase?: (doctorCase: import("@/lib/city/player").DoctorCase | null) => void;
   update?: (dt: number) => void;
   rideAt?: (x: number, z: number, feetY?: number) => { x: number; z: number } | null;
   ladderAt?: (x: number, z: number, feetY: number) => Ladder | null;
@@ -111,6 +116,7 @@ export function buildVenueInterior(building: Building, getState?: () => CityStat
   const role = venueRole(building) ?? "office";
   if (role === "mall") return buildMallInterior();
   if (role === "office") return buildOfficeTower(building, getState);
+  if (role === "hospital") return buildHospital(building, getState);
   const pizzeria = building.stats.extra?.cuisine === "pizzeria";
   const pal = pizzeria ? PIZZERIA_PALETTE : PALETTE[role];
   const group = new THREE.Group();

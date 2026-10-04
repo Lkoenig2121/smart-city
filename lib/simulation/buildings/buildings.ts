@@ -324,7 +324,7 @@ export function createBuilding(
       wallColor = "#f4efe6";
       roofColor = "#d7e4ea";
       accentColor = "#c0392b";
-      floors = 4;
+      floors = 10;
       break;
     case "school":
       wallColor = "#d9b48a";

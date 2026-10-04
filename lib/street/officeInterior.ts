@@ -7,13 +7,13 @@ import { MeshBuilder } from "./meshBuilder";
 import { FLOOR_H } from "./textures";
 import type { VenueInterior } from "./venueInterior";
 
-const MIN_X = -11;
-const MAX_X = 11;
-const MIN_Z = -9;
-const MAX_Z = 12;
-const CEIL = 4.6;
-const WALL_T = 0.45;
-const DOOR_X = 3.2;
+export const MIN_X = -11;
+export const MAX_X = 11;
+export const MIN_Z = -9;
+export const MAX_Z = 12;
+export const CEIL = 4.6;
+export const WALL_T = 0.45;
+export const DOOR_X = 3.2;
 const MAX_FLOORS = 20;
 const MIN_FLOORS = 6;
 const SILL = 1.0;
@@ -25,12 +25,18 @@ const WIN_X1 = MAX_X - 3;
 /** The rooftop deck sits this far above the tower's modelled roof so parapets and plant boxes stay underneath. */
 export const OFFICE_ROOF_DECK = 1.75;
 
-type Bucket = Array<{ dispose: () => void }>;
+export type Bucket = Array<{ dispose: () => void }>;
 
 export interface OfficeElevator {
   /** Button labels, bottom to top: Lobby, 2, 3 … Roof. */
   floors: string[];
+  /** Longer names for the panel (optional; hospital departments). */
+  floorNames?: string[];
   deskFloor: number;
+  /** Hint under the elevator panel (e.g. "Case · ER bed 3"). */
+  markLabel?: () => string | null;
+  /** Floor index to highlight for the active case. */
+  markFloor?: () => number | null;
   current: () => number;
   isRoof: (index: number) => boolean;
   near: (x: number, z: number) => boolean;
@@ -43,13 +49,13 @@ export interface OfficeElevator {
   view: (index: number) => { height: number; lift: number } | null;
 }
 
-interface Layout {
+export interface Layout {
   group: THREE.Group;
   blockers: Blocker[];
   doorZ: number;
 }
 
-interface Sign {
+export interface Sign {
   mesh: THREE.Mesh;
   draw: (title: string, subtitle?: string) => void;
 }
@@ -200,7 +206,7 @@ const ROOF_CROWD: CrowdSpec = {
   },
 };
 
-const c = (hex: string) => new THREE.Color(hex);
+export const c = (hex: string) => new THREE.Color(hex);
 
 /** Multi-floor office tower: lobby, open-plan work floors, and a rooftop conference and break deck. */
 export function buildOfficeTower(building: Building, getState: () => CityState | null = () => null): VenueInterior {
@@ -308,11 +314,11 @@ export function buildOfficeTower(building: Building, getState: () => CityState |
   };
 }
 
-function builders() {
+export function builders() {
   return { floorB: new MeshBuilder(), wallB: new MeshBuilder(), trimB: new MeshBuilder() };
 }
 
-function shell(
+export function shell(
   floorB: MeshBuilder,
   wallB: MeshBuilder,
   blockers: Blocker[],
@@ -365,7 +371,7 @@ function shell(
 }
 
 /** Clear panes and mullions filling the window openings that `shell(..., glazed)` leaves. */
-function windows(group: THREE.Group, wallB: MeshBuilder, bucket: Bucket) {
+export function windows(group: THREE.Group, wallB: MeshBuilder, bucket: Bucket) {
   const glassB = new MeshBuilder();
   const glass = c("#bcdcee");
   const mullion = c("#5d6670");
@@ -407,7 +413,7 @@ function windows(group: THREE.Group, wallB: MeshBuilder, bucket: Bucket) {
 }
 
 /** Twin elevator doors on a wall face that looks toward +z. */
-function elevatorDoors(wallB: MeshBuilder, trimB: MeshBuilder, faceZ: number) {
+export function elevatorDoors(wallB: MeshBuilder, trimB: MeshBuilder, faceZ: number) {
   const gold = c("#c9a44c");
   const steel = c("#b9c3cc");
   const lamp = c("#ffb347");
@@ -421,13 +427,13 @@ function elevatorDoors(wallB: MeshBuilder, trimB: MeshBuilder, faceZ: number) {
   trimB.box(-0.07, faceZ + 0.1, 0.07, faceZ + 0.15, 1.34, 1.46, lamp);
 }
 
-function plant(wallB: MeshBuilder, blockers: Blocker[], x: number, z: number) {
+export function plant(wallB: MeshBuilder, blockers: Blocker[], x: number, z: number) {
   wallB.box(x - 0.4, z - 0.4, x + 0.4, z + 0.4, 0, 0.6, c("#3a3a3a"));
   wallB.box(x - 0.5, z - 0.5, x + 0.5, z + 0.5, 0.6, 1.8, c("#3f7a4a"));
   blockers.push({ minX: x - 0.5, maxX: x + 0.5, minZ: z - 0.5, maxZ: z + 0.5 });
 }
 
-function makeSign(bucket: Bucket, width: number, height: number, bg: string, fg: string): Sign {
+export function makeSign(bucket: Bucket, width: number, height: number, bg: string, fg: string): Sign {
   const el = document.createElement("canvas");
   el.width = 512;
   el.height = Math.max(64, Math.round((512 * height) / width));
@@ -682,7 +688,7 @@ function buildRoof(building: Building, bucket: Bucket, screen: ConferenceScreen)
   return { group, blockers, doorZ: faceZ };
 }
 
-function assemble(group: THREE.Group, floorB: MeshBuilder, wallB: MeshBuilder, trimB: MeshBuilder, bucket: Bucket) {
+export function assemble(group: THREE.Group, floorB: MeshBuilder, wallB: MeshBuilder, trimB: MeshBuilder, bucket: Bucket) {
   const add = (builder: MeshBuilder, material: THREE.MeshStandardMaterial) => {
     if (builder.empty) {
       material.dispose();

@@ -229,6 +229,7 @@ export class StreetWorld {
         mesh = makePlayerCarMesh(car);
         this.ownedCarMeshes.set(car.id, mesh);
         this.ownedCarRoot.add(mesh);
+        updateDutySiren(mesh, this.time, this.policeOnDuty && this.policeLightsOn);
       }
       // Cars only exist while you're in them: C summons one under you and it vanishes on exit.
       if (car.id !== this.drivingId) mesh.visible = false;

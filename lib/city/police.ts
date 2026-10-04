@@ -269,6 +269,7 @@ export function startPoliceShift(building: Building, state: CityState): PlayerSt
   if (!isPoliceStation(building)) return "Start your shift at a police station.";
   const player = readPlayer();
   if (player.shift) return "Clock out of your office job first.";
+  if (player.doctorShift) return "Clock out of the hospital first.";
   if (player.policeShift) return "You are already on a police shift.";
   if (player.policeCall) return "Clear your active call before starting a new shift.";
 

@@ -28,6 +28,15 @@ import {
   startPoliceShift,
   type PoliceShiftSummary,
 } from "@/lib/city/police";
+import {
+  doctorRank,
+  endDoctorShift,
+  nextDoctorRank,
+  onDoctorDuty,
+  pageNextPatient,
+  startDoctorShift,
+  type DoctorShiftSummary,
+} from "@/lib/city/doctor";
 import { venueLabel, venueRole, type VenueRole } from "@/lib/city/venues";
 import type { Building, CityState } from "@/lib/city/types";
 import { formatMoney } from "@/lib/simulation/buildings/buildings";
@@ -76,6 +85,8 @@ export function VenueDesk({
         onPlayerChange={onPlayerChange}
         onOpenDispatch={onOpenDispatch}
       />
+    ) : role === "hospital" ? (
+      <HospitalDesk building={building} state={state} player={player} onPlayerChange={onPlayerChange} />
     ) : (
       <FlavorDesk building={building} state={state} role={role} />
     );
@@ -554,6 +565,148 @@ function PoliceDesk({
       ) : null}
       {note ? <p className="mt-3 text-sm text-sky-200">{note}</p> : null}
       <p className="mt-3 text-[0.65rem] text-slate-500">Walk back to the doors and press E to leave</p>
+    </div>
+  );
+}
+
+function HospitalDesk({
+  building,
+  state,
+  player,
+  onPlayerChange,
+}: {
+  building: Building;
+  state: CityState;
+  player?: PlayerState;
+  onPlayerChange?: (player: PlayerState) => void;
+}) {
+  const [note, setNote] = useState<string | null>(null);
+  const [summary, setSummary] = useState<DoctorShiftSummary | null>(null);
+  const live = player ?? readPlayer();
+  const onDuty = onDoctorDuty(live);
+  const rank = doctorRank(live.doctorCareer?.xp ?? 0);
+  const next = nextDoctorRank(live.doctorCareer?.xp ?? 0);
+  const currentCase = live.doctorCase;
+
+  const start = () => {
+    const nextPlayer = startDoctorShift(building, state);
+    if (typeof nextPlayer === "string") {
+      setNote(nextPlayer);
+      return;
+    }
+    setSummary(null);
+    setNote("Clocked in. Page a patient, ride the elevator to their floor, press E at the bed.");
+    onPlayerChange?.(nextPlayer);
+  };
+
+  const page = () => {
+    const nextPlayer = pageNextPatient();
+    if (typeof nextPlayer === "string") {
+      setNote(nextPlayer);
+      return;
+    }
+    const assigned = nextPlayer.doctorCase;
+    setNote(
+      assigned
+        ? `${assigned.patientName} · ${assigned.bedLabel}. Elevator → treat at bedside.`
+        : null,
+    );
+    onPlayerChange?.(nextPlayer);
+  };
+
+  const end = () => {
+    const nextPlayer = endDoctorShift(state);
+    if (typeof nextPlayer === "string") {
+      setNote(nextPlayer);
+      return;
+    }
+    setSummary(nextPlayer.summary);
+    setNote("Shift ended.");
+    onPlayerChange?.(nextPlayer.player);
+  };
+
+  const step = !onDuty ? 0 : !currentCase ? 1 : 2;
+  const steps = ["Clock in", "Page patient", "Treat at bedside", "Clock out"];
+
+  return (
+    <div className="rounded-2xl border border-teal-300/35 bg-[#0d181a]/94 p-5 text-center shadow-2xl backdrop-blur">
+      <p className="text-[0.65rem] uppercase tracking-[0.28em] text-teal-300">Hospital Reception</p>
+      <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-1 text-[0.6rem] uppercase tracking-wide">
+        {steps.map((label, i) => (
+          <span
+            key={label}
+            className={`rounded-full px-2 py-0.5 ${
+              i === step ? "bg-teal-400 text-[#0a181a]" : i < step ? "bg-teal-400/20 text-teal-200" : "bg-white/5 text-slate-500"
+            }`}
+          >
+            {label}
+          </span>
+        ))}
+      </div>
+      <p className="mt-2 text-sm text-slate-300">
+        {onDuty
+          ? currentCase
+            ? `${currentCase.patientName} is waiting on ${currentCase.floorName}. Ride the elevator and press E at the glowing bed.`
+            : `On duty as ${rank.label}. Page the next patient when you're ready.`
+          : "Clock in to work as a doctor — diagnose and treat patients across the wards."}
+      </p>
+      {live.doctorCareer ? (
+        <p className="mt-2 text-sm font-semibold text-teal-200">
+          {rank.label} · {live.doctorCareer.patientsTreated} patients · {formatDollars(live.doctorCareer.totalEarnings)} earned
+        </p>
+      ) : null}
+      {next ? (
+        <p className="mt-1 text-xs text-slate-400">
+          Next rank {next.label} at {next.xp} XP ({Math.max(0, next.xp - (live.doctorCareer?.xp ?? 0))} to go)
+        </p>
+      ) : null}
+      {rank.payMult > 1 ? (
+        <p className="mt-1 text-xs text-emerald-200">Case pay ×{Number(rank.payMult.toFixed(2))} at this rank</p>
+      ) : null}
+      {!onDuty ? (
+        <button
+          type="button"
+          onClick={start}
+          className="mt-4 w-full rounded-xl bg-teal-400 px-4 py-2.5 text-sm font-semibold text-[#0a181a]"
+        >
+          Clock in as doctor
+        </button>
+      ) : (
+        <div className="mt-4 grid gap-2">
+          {currentCase ? (
+            <p className="rounded-xl border border-teal-400/25 bg-teal-500/10 px-3 py-2 text-sm text-teal-100">
+              Active case · {currentCase.patientName} · {currentCase.bedLabel} · {formatDollars(currentCase.reward)}
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={page}
+              className="w-full rounded-xl bg-teal-400 px-4 py-2.5 text-sm font-semibold text-[#0a181a]"
+            >
+              Page next patient
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={end}
+            className="w-full rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white"
+          >
+            Clock out
+          </button>
+        </div>
+      )}
+      {summary ? (
+        <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-3 text-left text-sm text-slate-200">
+          <p className="font-semibold text-white">Hospital shift complete</p>
+          <p className="mt-1">Rank: {summary.rankLabel}</p>
+          <p>Patients treated: {summary.patients}</p>
+          <p>Money earned: {formatDollars(summary.moneyEarned)}</p>
+          <p>Doctor XP: +{summary.xpEarned}</p>
+        </div>
+      ) : null}
+      {note ? <p className="mt-3 text-sm text-teal-200">{note}</p> : null}
+      <p className="mt-3 text-[0.65rem] text-slate-500">Elevator: Lobby · ER · Imaging · Surgery · wards · Roof helipad</p>
     </div>
   );
 }

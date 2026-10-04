@@ -66,6 +66,7 @@ import {
   reportPoliceCallDone,
   syncPoliceCallArrival,
 } from "@/lib/city/police";
+import { doctorRank, onDoctorDuty } from "@/lib/city/doctor";
 import { consumeHeld } from "@/lib/city/bag";
 import { LeaguePanel } from "./LeaguePanel";
 import { characterStats } from "@/lib/city/character";
@@ -126,6 +127,7 @@ import { RoomComputer } from "./RoomComputer";
 import { StreetMinimap } from "./StreetMinimap";
 import { SubwayBoard } from "./SubwayBoard";
 import { VenueDesk } from "./VenueDesk";
+import { PatientChart } from "./PatientChart";
 import {
   activeOwnedVehicle,
   applyDriveTick,
@@ -257,13 +259,19 @@ export function StreetView({
   );
   const [mallHut, setMallHut] = useState<string | null>(null);
   const [elevatorNear, setElevatorNear] = useState(false);
+  const [patientNear, setPatientNear] = useState(false);
   const [elevatorMenu, setElevatorMenu] = useState<{
     floors: string[];
+    floorNames?: string[];
     current: number;
     desk: number;
+    markLabel?: string | null;
+    markFloor?: number | null;
   } | null>(null);
   const elevatorMenuRef = useRef(false);
   const [elevatorFade, setElevatorFade] = useState(false);
+  const [patientChart, setPatientChart] = useState(false);
+  const patientChartRef = useRef(false);
   const [mallSnack, setMallSnack] = useState<{
     name: string;
     items: string[];
@@ -573,6 +581,12 @@ export function StreetView({
           event.preventDefault();
           mallSnackRef.current = null;
           setMallSnack(null);
+          return;
+        }
+        if (patientChartRef.current) {
+          event.preventDefault();
+          patientChartRef.current = false;
+          setPatientChart(false);
           return;
         }
         if (characterMenuRef.current) {
@@ -1436,7 +1450,9 @@ export function StreetView({
 
     const street = worldRef.current;
     const city =
-      venueRole(building) === "mall" || venueRole(building) === "office"
+      venueRole(building) === "mall" ||
+      venueRole(building) === "office" ||
+      venueRole(building) === "hospital"
         ? (street?.borrowCity() ?? null)
         : null;
     let world: VenueWorld;
@@ -1497,11 +1513,19 @@ export function StreetView({
           mallShopRef.current ||
           mallFurnishRef.current ||
           mallSnackRef.current ||
-          elevatorMenuRef.current
+          elevatorMenuRef.current ||
+          patientChartRef.current
         )
           return true;
         if (world.nearExit()) leaveStreet();
-        else if (world.nearElevator()) {
+        else if (world.nearPatient()) {
+          if (readPlayer().doctorCase) {
+            patientChartRef.current = true;
+            setPatientChart(true);
+            if (document.pointerLockElement === canvas)
+              document.exitPointerLock();
+          }
+        } else if (world.nearElevator()) {
           const menu = world.elevatorMenu();
           if (menu) {
             elevatorMenuRef.current = true;
@@ -1548,6 +1572,7 @@ export function StreetView({
       tickRef.current(dt);
       if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
       world.setPoliceDuty(Boolean(readPlayer().policeShift));
+      world.setDoctorCase(readPlayer().doctorCase);
       world.render(dt);
       const desk = world.nearDesk();
       if (!desk) deskDismissedRef.current = false;
@@ -1557,7 +1582,8 @@ export function StreetView({
         !mallShopRef.current &&
         !mallFurnishRef.current &&
         !mallSnackRef.current &&
-        !characterMenuRef.current;
+        !characterMenuRef.current &&
+        !patientChartRef.current;
       atDeskRef.current = showDesk;
       setAtDesk((prev) => (prev === showDesk ? prev : showDesk));
       if (showDesk && document.pointerLockElement === canvas)
@@ -1572,6 +1598,8 @@ export function StreetView({
       );
       const lift = world.nearElevator();
       setElevatorNear((prev) => (prev === lift ? prev : lift));
+      const bedside = world.nearPatient();
+      setPatientNear((prev) => (prev === bedside ? prev : bedside));
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
@@ -1594,6 +1622,9 @@ export function StreetView({
       elevatorMenuRef.current = false;
       setElevatorMenu(null);
       setElevatorNear(false);
+      patientChartRef.current = false;
+      setPatientChart(false);
+      setPatientNear(false);
     };
   }, [active, interior, state]);
 
@@ -1713,7 +1744,8 @@ export function StreetView({
       mallShop ||
       mallFurnish ||
       mallSnack ||
-      phoneOpen
+      phoneOpen ||
+      patientChart
     )
       return;
     const canvas = inside ? canvasRef.current : outdoorCanvasRef.current;
@@ -1734,7 +1766,8 @@ export function StreetView({
       mallShop ||
       mallFurnish ||
       mallSnack ||
-      phoneOpen
+      phoneOpen ||
+      patientChart
     )
       return;
 
@@ -1946,6 +1979,30 @@ export function StreetView({
               />
             </div>
           ) : null}
+          {onDoctorDuty(player) ? (
+            <div className="pointer-events-auto rounded-xl border border-teal-400/30 bg-[#0d181a]/9 px-3.5 py-2 text-teal-50 backdrop-blur">
+              <p className="text-[0.6rem] uppercase tracking-[0.2em] text-teal-300">
+                On duty · Doctor
+              </p>
+              <p className="text-sm font-semibold">
+                {doctorRank(player.doctorCareer?.xp ?? 0).label}
+              </p>
+              <p className="text-[0.7rem] text-teal-100/85">
+                Patients {player.doctorShift?.patients ?? 0} · Earnings{" "}
+                {formatDollars(player.doctorShift?.earnings ?? 0)}
+              </p>
+              {player.doctorCase ? (
+                <p className="mt-1 text-[0.7rem] text-amber-100">
+                  {player.doctorCase.patientName} · {player.doctorCase.bedLabel} ·{" "}
+                  {formatDollars(player.doctorCase.reward)}
+                </p>
+              ) : (
+                <p className="mt-1 text-[0.7rem] text-teal-100/70">
+                  Page a patient at Lobby reception
+                </p>
+              )}
+            </div>
+          ) : null}
           {onPoliceDuty(player) ? (
             <div className="pointer-events-auto rounded-xl border border-sky-400/30 bg-[#0e1520]/9 px-3.5 py-2 text-sky-50 backdrop-blur">
               <p className="text-[0.6rem] uppercase tracking-[0.2em] text-sky-300">
@@ -2107,7 +2164,8 @@ export function StreetView({
       !mallSnack &&
       !phoneOpen &&
       !motorsOpen &&
-      !garageOpen ? (
+      !garageOpen &&
+      !patientChart ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
           <div className="max-w-xs rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
             {driving ? (
@@ -2513,7 +2571,8 @@ export function StreetView({
       {atDesk &&
       venueBuilding &&
       interior?.kind === "venue" &&
-      !atOfficeComputer ? (
+      !atOfficeComputer &&
+      !patientChart ? (
         <VenueDesk
           building={venueBuilding}
           state={state}
@@ -2522,6 +2581,7 @@ export function StreetView({
             setPlayer(next);
             worldRef.current?.setPoliceDuty(Boolean(next.policeShift));
             venueRef.current?.setPoliceDuty(Boolean(next.policeShift));
+            venueRef.current?.setDoctorCase(next.doctorCase);
           }}
           onClose={() => {
             deskDismissedRef.current = true;
@@ -2544,6 +2604,21 @@ export function StreetView({
           onOpenDispatch={() => {
             setAtDesk(false);
             openPhone(null, "police");
+          }}
+        />
+      ) : null}
+
+      {patientChart && player.doctorCase && interior?.kind === "venue" ? (
+        <PatientChart
+          doctorCase={player.doctorCase}
+          state={state}
+          onPlayerChange={(next) => {
+            setPlayer(next);
+            venueRef.current?.setDoctorCase(next.doctorCase);
+          }}
+          onClose={() => {
+            patientChartRef.current = false;
+            setPatientChart(false);
           }}
         />
       ) : null}
@@ -3035,7 +3110,28 @@ export function StreetView({
         />
       ) : null}
 
-      {interior?.kind === "venue" && elevatorNear && !elevatorMenu && !elevatorFade && !characterMenu ? (
+      {interior?.kind === "venue" &&
+      patientNear &&
+      player.doctorCase &&
+      !patientChart &&
+      !elevatorMenu &&
+      !characterMenu ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-xl border border-teal-300/35 bg-black/60 px-4 py-2 text-center backdrop-blur">
+            <p className="text-xs text-teal-100">
+              {player.doctorCase.patientName} · press{" "}
+              <span className="font-semibold text-white">E</span> to open the chart
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {interior?.kind === "venue" &&
+      elevatorNear &&
+      !elevatorMenu &&
+      !elevatorFade &&
+      !characterMenu &&
+      !patientNear ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
@@ -3049,18 +3145,20 @@ export function StreetView({
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40">
           <div className="w-80 rounded-2xl border border-white/15 bg-slate-950/95 p-5 shadow-2xl">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
-              {venueBuilding?.name ?? "Office"} · elevator
+              {venueBuilding?.name ?? "Building"} · elevator
             </p>
             <p className="mt-1 text-lg font-semibold text-white">Choose a floor</p>
             <div className="mt-4 grid grid-cols-4 gap-2">
               {[...elevatorMenu.floors].map((label, index) => ({ label, index })).reverse().map(({ label, index }) => {
                 const here = index === elevatorMenu.current;
-                const wide = label === "Roof" || label === "Lobby";
+                const wide = label === "Roof" || label === "Lobby" || label.length > 5;
+                const name = elevatorMenu.floorNames?.[index];
                 return (
                   <button
-                    key={label}
+                    key={`${index}-${label}`}
                     type="button"
                     disabled={here}
+                    title={name}
                     onClick={() => rideElevator(index)}
                     className={`relative rounded-xl border px-2 py-2 text-sm font-semibold tabular-nums ${
                       wide ? "col-span-2" : ""
@@ -3074,13 +3172,30 @@ export function StreetView({
                     {index === elevatorMenu.desk ? (
                       <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-amber-400" />
                     ) : null}
+                    {elevatorMenu.markFloor === index ? (
+                      <span className="absolute -left-1 -top-1 h-2.5 w-2.5 rounded-full bg-rose-400" />
+                    ) : null}
                   </button>
                 );
               })}
             </div>
             <p className="mt-3 text-xs text-slate-400">
-              <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />
-              Your desk · floor {elevatorMenu.floors[elevatorMenu.desk]} · roof has the conference and break deck
+              {elevatorMenu.markLabel ? (
+                <>
+                  <span className="mr-1 inline-block h-2 w-2 rounded-full bg-rose-400" />
+                  {elevatorMenu.markLabel}
+                </>
+              ) : venueBuilding && venueRole(venueBuilding) === "hospital" ? (
+                <>
+                  <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />
+                  Reception · Lobby · roof has the helipad
+                </>
+              ) : (
+                <>
+                  <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />
+                  Your desk · floor {elevatorMenu.floors[elevatorMenu.desk]} · roof has the conference and break deck
+                </>
+              )}
             </p>
             <button
               type="button"

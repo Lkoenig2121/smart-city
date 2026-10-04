@@ -960,8 +960,7 @@ function addBuilding(
     }
 
     case "apartment":
-    case "office":
-    case "hospital": {
+    case "office": {
       const h = floors * FLOOR_H;
       walls.walls(x0, z0, x1, z1, 0, h, wall, BAY_W, FLOOR_H);
       roofB.ground(x0, z0, x1, z1, h, roof);
@@ -971,6 +970,31 @@ function addBuilding(
       // Ground-floor entrance canopy.
       trimB.box(x0 + 1, z1 - 0.1, x0 + 5, z1 + 1.4, 3.1, 3.4, accent);
       addFacadeBalconies(building, balconyB, x0, z0, x1, z1, FLOOR_H, h, accent);
+      break;
+    }
+
+    case "hospital": {
+      const storeys = Math.max(floors, 10);
+      const h = storeys * FLOOR_H;
+      walls.walls(x0, z0, x1, z1, 0, h, wall, BAY_W, FLOOR_H);
+      roofB.ground(x0, z0, x1, z1, h, roof);
+      trimB.walls(x0, z0, x1, z1, h, h + 0.85, accent);
+      // Entrance canopy with a red cross above the doors.
+      const mx = (x0 + x1) / 2;
+      trimB.box(mx - 4.5, z1 - 0.1, mx + 4.5, z1 + 2.2, 3.15, 3.55, accent);
+      const crossY0 = h * 0.55;
+      const crossY1 = crossY0 + 4.2;
+      trimB.box(mx - 0.55, z1 - 0.18, mx + 0.55, z1 + 0.22, crossY0, crossY1, accent);
+      trimB.box(mx - 1.9, z1 - 0.18, mx + 1.9, z1 + 0.22, crossY0 + 1.5, crossY0 + 2.7, accent);
+      // Roof helipad pad + H.
+      const padX0 = mx - 5.5;
+      const padX1 = mx + 5.5;
+      const padZ0 = (z0 + z1) / 2 - 5;
+      const padZ1 = (z0 + z1) / 2 + 5;
+      roofB.ground(padX0, padZ0, padX1, padZ1, h + 0.06, new THREE.Color("#2a3038"));
+      const white = new THREE.Color("#f4f4f2");
+      trimB.box(mx - 3.6, (z0 + z1) / 2 - 0.28, mx + 3.6, (z0 + z1) / 2 + 0.28, h + 0.06, h + 0.14, white);
+      trimB.box(mx - 0.28, (z0 + z1) / 2 - 3.2, mx + 0.28, (z0 + z1) / 2 + 3.2, h + 0.06, h + 0.14, white);
       break;
     }
 

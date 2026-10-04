@@ -176,7 +176,23 @@ export class VenueWorld {
   elevatorMenu() {
     const elevator = this.interior.elevator;
     if (!elevator) return null;
-    return { floors: elevator.floors, current: elevator.current(), desk: elevator.deskFloor };
+    const mark = elevator.markLabel?.() ?? null;
+    return {
+      floors: elevator.floors,
+      floorNames: elevator.floorNames,
+      current: elevator.current(),
+      desk: elevator.deskFloor,
+      markLabel: mark,
+      markFloor: elevator.markFloor?.() ?? null,
+    };
+  }
+
+  nearPatient() {
+    return this.interior.nearPatient?.(this.controls.position.x, this.controls.position.z) ?? false;
+  }
+
+  setDoctorCase(doctorCase: import("@/lib/city/player").DoctorCase | null) {
+    this.interior.setCase?.(doctorCase);
   }
 
   /** Lines the borrowed streets up under the office floor the player is on, or hides them. */

@@ -153,6 +153,38 @@ export interface PoliceCall {
   acceptedAt: number;
 }
 
+export interface DoctorCareer {
+  xp: number;
+  patientsTreated: number;
+  /** Right diagnosis and right treatment. */
+  perfectCases: number;
+  totalEarnings: number;
+}
+
+export interface DoctorShift {
+  hospitalId: string;
+  hospitalName: string;
+  dayKey: string;
+  startMinute: number;
+  patients: number;
+  earnings: number;
+  xpEarned: number;
+}
+
+export interface DoctorCase {
+  id: string;
+  conditionId: string;
+  patientName: string;
+  age: number;
+  /** Elevator stop and bed index inside the hospital. */
+  floor: number;
+  bed: number;
+  floorName: string;
+  bedLabel: string;
+  reward: number;
+  xp: number;
+}
+
 export interface PlayerState {
   wallet: number;
   bank: number;
@@ -162,6 +194,9 @@ export interface PlayerState {
   policeCareer: PoliceCareer | null;
   policeShift: PoliceShift | null;
   policeCall: PoliceCall | null;
+  doctorCareer: DoctorCareer | null;
+  doctorShift: DoctorShift | null;
+  doctorCase: DoctorCase | null;
   lastInterestDay: string | null;
   life: LifeState;
   ownedVehicles: OwnedVehicle[];
@@ -190,6 +225,9 @@ export function emptyPlayer(): PlayerState {
     policeCareer: null,
     policeShift: null,
     policeCall: null,
+    doctorCareer: null,
+    doctorShift: null,
+    doctorCase: null,
     lastInterestDay: null,
     life: emptyLife(),
     ownedVehicles: [],
@@ -276,6 +314,7 @@ export function quitJob(): PlayerState | string {
 export function startOfficeShift(building: Building, state: CityState): PlayerState | string {
   const player = readPlayer();
   if (player.policeShift) return "End your police shift before clocking into the office.";
+  if (player.doctorShift) return "Clock out of the hospital before clocking into the office.";
   if (venueRole(building) !== "office") return "This is not an office.";
   if (player.career && player.career.id !== "office_worker") {
     return `Quit your job at ${player.career.employerName} first.`;
@@ -571,6 +610,28 @@ function parsePlayer(value: unknown): PlayerState {
     policeCareer: parsePoliceCareer(raw.policeCareer),
     policeShift: parsePoliceShift(raw.policeShift),
     policeCall: parsePoliceCall(raw.policeCall),
+    doctorCareer: parseShape<DoctorCareer>(raw.doctorCareer, { xp: 0, patientsTreated: 0, perfectCases: 0, totalEarnings: 0 }),
+    doctorShift: parseShape<DoctorShift>(raw.doctorShift, {
+      hospitalId: "",
+      hospitalName: "",
+      dayKey: "",
+      startMinute: 0,
+      patients: 0,
+      earnings: 0,
+      xpEarned: 0,
+    }, ["hospitalId"]),
+    doctorCase: parseShape<DoctorCase>(raw.doctorCase, {
+      id: "",
+      conditionId: "",
+      patientName: "",
+      age: 30,
+      floor: 1,
+      bed: 0,
+      floorName: "",
+      bedLabel: "",
+      reward: 0,
+      xp: 0,
+    }, ["id", "conditionId"]),
     lastInterestDay: typeof raw.lastInterestDay === "string" ? raw.lastInterestDay : null,
     life: parseLife(raw.life),
     ownedVehicles: parseOwnedVehicles(raw.ownedVehicles),
@@ -642,6 +703,20 @@ function parseShift(value: unknown): ActiveShift | null {
       : [],
     taskEarnings: Number.isFinite(taskEarnings) && taskEarnings >= 0 ? taskEarnings : 0,
   };
+}
+
+/** Copies fields matching the defaults' types; null if missing or a `required` string is empty. */
+function parseShape<T extends object>(value: unknown, defaults: T, required: Array<keyof T> = []): T | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const out = { ...defaults } as Record<string, unknown>;
+  for (const [key, fallback] of Object.entries(defaults)) {
+    const v = raw[key];
+    if (typeof fallback === "number") out[key] = Number.isFinite(Number(v)) ? Number(v) : fallback;
+    else if (typeof fallback === "string") out[key] = typeof v === "string" ? v : fallback;
+  }
+  for (const key of required) if (!out[key as string]) return null;
+  return out as T;
 }
 
 function parsePoliceCareer(value: unknown): PoliceCareer | null {
