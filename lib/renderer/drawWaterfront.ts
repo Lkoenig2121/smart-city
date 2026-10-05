@@ -22,8 +22,8 @@ export function drawWaterfrontDecor(
   time: number,
   cityId?: string,
 ) {
-  if (cityId === "dustfall") {
-    const ferris = ferrisWorldTile("dustfall");
+  if (cityId === "dustfall" || cityId === "mountain") {
+    const ferris = ferrisWorldTile(cityId);
     if (x === Math.floor(ferris.x) && y === Math.floor(ferris.y)) {
       drawFerris(ctx, x, y, light, time);
     }

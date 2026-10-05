@@ -97,6 +97,8 @@ import { FurnitureShop } from "./FurnitureShop";
 import { RoomCustomize } from "./RoomCustomize";
 import type { MoveMode } from "@/lib/street/controls";
 import { StreetWorld } from "@/lib/street/StreetWorld";
+import { AirfieldWorld } from "@/lib/street/AirfieldWorld";
+import { MOUNTAIN_TUNNEL_TILE } from "@/lib/street/mountainTunnel";
 import { StadiumWorld } from "@/lib/street/StadiumWorld";
 import { LodgingWorld } from "@/lib/street/LodgingWorld";
 import { SubwayWorld } from "@/lib/street/SubwayWorld";
@@ -141,7 +143,8 @@ type Interior =
   | { kind: "stadium" }
   | { kind: "lodging"; buildingId: string; zone: LodgingZone; roomId?: string }
   | { kind: "subway"; stationId: string; arrived?: boolean }
-  | { kind: "venue"; buildingId: string };
+  | { kind: "venue"; buildingId: string }
+  | { kind: "airfield" };
 
 interface Props {
   state: CityState;
@@ -174,6 +177,7 @@ export function StreetView({
   const lodgingRef = useRef<LodgingWorld | null>(null);
   const subwayRef = useRef<SubwayWorld | null>(null);
   const venueRef = useRef<VenueWorld | null>(null);
+  const airfieldRef = useRef<AirfieldWorld | null>(null);
   const positionRef = useRef<{ x: number; y: number; yaw: number } | null>(
     null,
   );
@@ -223,6 +227,9 @@ export function StreetView({
     null,
   );
   const [hiking, setHiking] = useState(false);
+  const [atTunnel, setAtTunnel] = useState(false);
+  const [onAirfield, setOnAirfield] = useState(false);
+  const [atTunnelMouth, setAtTunnelMouth] = useState(false);
   const [subwayDoor, setSubwayDoor] = useState<Building | null>(null);
   const [atDesk, setAtDesk] = useState(false);
   const [atSubwayExit, setAtSubwayExit] = useState(false);
@@ -508,6 +515,7 @@ export function StreetView({
     apply(lodgingRef.current?.controls);
     apply(subwayRef.current?.controls);
     apply(venueRef.current?.controls);
+    apply(airfieldRef.current?.controls);
     if (paused && document.pointerLockElement) document.exitPointerLock();
   }, [busyUi, interior]);
 
@@ -525,6 +533,7 @@ export function StreetView({
     if (lodgingRef.current) lodgingRef.current.controls.boost = indoor;
     if (subwayRef.current) subwayRef.current.controls.boost = indoor;
     if (venueRef.current) venueRef.current.controls.boost = indoor;
+    if (airfieldRef.current) airfieldRef.current.controls.boost = indoor;
     const held = player.life.held;
     const sips = player.life.heldSips ?? 0;
     if (!sippingRef.current) {
@@ -533,6 +542,7 @@ export function StreetView({
       lodgingRef.current?.setHeld(held, sips);
       subwayRef.current?.setHeld(held, sips);
       venueRef.current?.setHeld(held, sips);
+      airfieldRef.current?.setHeld(held, sips);
     }
   }, [player, interior]);
 
@@ -776,6 +786,7 @@ export function StreetView({
       lodgingRef.current?.playSip();
       subwayRef.current?.playSip();
       venueRef.current?.playSip();
+      airfieldRef.current?.playSip();
       const result = consumeHeld();
       window.clearTimeout(sipTimerRef.current);
       sipTimerRef.current = window.setTimeout(() => {
@@ -877,6 +888,11 @@ export function StreetView({
           setInterior({ kind: "subway", stationId: id });
           setPlayer(discoverPlace(`subway:${id}`));
         }
+        return true;
+      }
+      if (target.kind === "tunnel") {
+        setInterior({ kind: "airfield" });
+        setPlayer(discoverPlace("mountain-airfield", 24));
         return true;
       }
       if (target.kind === "stadium") {
@@ -1105,6 +1121,8 @@ export function StreetView({
           : null;
       setMountainTrail((prev) => (prev === trail ? prev : trail));
       setHiking((prev) => (prev === world.hiking ? prev : world.hiking));
+      const tunnel = world.nearMountainTunnel();
+      setAtTunnel((prev) => (prev === tunnel ? prev : tunnel));
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
@@ -1222,6 +1240,84 @@ export function StreetView({
       setMallSnack(null);
       setMallShop(null);
       setMallHut(null);
+    };
+  }, [active, interior, state]);
+
+  useEffect(() => {
+    if (!active || interior?.kind !== "airfield") return;
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+
+    let world: AirfieldWorld;
+    try {
+      world = new AirfieldWorld(canvas, state);
+    } catch (error) {
+      setFailed(
+        error instanceof Error ? error.message : "WebGL is unavailable in this browser.",
+      );
+      setInterior(null);
+      return;
+    }
+    airfieldRef.current = world;
+    if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
+
+    const resize = () => {
+      const rect = wrap.getBoundingClientRect();
+      world.resize(rect.width, rect.height);
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(wrap);
+
+    const leave = () => {
+      setSpawn({ x: MOUNTAIN_TUNNEL_TILE.x + 1, y: MOUNTAIN_TUNNEL_TILE.y });
+      setInterior(null);
+      setOnAirfield(false);
+      setAtTunnelMouth(false);
+    };
+    const detachInput = attachPointerInput(canvas, world.controls, {
+      setLocked,
+      consumeKey: (event) => {
+        if (event.code !== "KeyE") return false;
+        if (!world.nearCityMouth()) return false;
+        event.preventDefault();
+        leave();
+        return true;
+      },
+    });
+
+    let frame = 0;
+    let last = performance.now();
+    let clockAcc = 0;
+    const loop = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      tickRef.current(dt);
+      if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
+      world.render(dt);
+      const field = world.onField();
+      const mouth = world.nearCityMouth();
+      setOnAirfield((prev) => (prev === field ? prev : field));
+      setAtTunnelMouth((prev) => (prev === mouth ? prev : mouth));
+      clockAcc += dt;
+      if (clockAcc > 0.25) {
+        clockAcc = 0;
+        setClock(formatClock(state));
+      }
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      detachInput();
+      if (document.pointerLockElement === canvas) document.exitPointerLock();
+      world.dispose();
+      airfieldRef.current = null;
+      setOnAirfield(false);
+      setAtTunnelMouth(false);
     };
   }, [active, interior, state]);
 
@@ -1927,7 +2023,11 @@ export function StreetView({
     setInterior({ kind: "stadium" });
   };
   const placeName =
-    interior?.kind === "stadium"
+    interior?.kind === "airfield"
+      ? onAirfield
+        ? "Airfield"
+        : "Tunnel"
+      : interior?.kind === "stadium"
       ? (stadiumBuilding?.name ?? ballclub.parkName)
       : lodgingBuilding
         ? interior?.kind === "lodging" && interior.zone === "pool"
@@ -2427,6 +2527,35 @@ export function StreetView({
             <p className="mt-1 text-sm text-slate-300">
               Press <span className="font-semibold text-white">Space</span> to{" "}
               {mountainTrail === "enter" ? "start hiking" : "return to town"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {atTunnel && !inside && !failed && !driving ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-2xl border border-white/15 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-slate-300">
+              West ridge
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">Narrow opening</p>
+            <p className="mt-1 text-sm text-slate-300">
+              <span className="font-semibold text-white">Click</span> or press{" "}
+              <span className="font-semibold text-white">E</span> to step inside
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {interior?.kind === "airfield" && atTunnelMouth && !failed ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-2xl border border-white/15 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-slate-300">
+              Tunnel
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">Back to town</p>
+            <p className="mt-1 text-sm text-slate-300">
+              Press <span className="font-semibold text-white">E</span> to return to Mountain City
             </p>
           </div>
         </div>

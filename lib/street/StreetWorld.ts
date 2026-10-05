@@ -9,6 +9,7 @@ import { isMountainTerrain } from "@/lib/city/terrainElevation";
 import { lightingFor, type Lighting } from "@/lib/renderer/palette";
 import { AgentLayer } from "./agents";
 import { buildCity, TILE, updateTrafficSignals, type CityMeshes } from "./buildCity";
+import { buildMountainTunnelMouth, nearMountainTunnel } from "./mountainTunnel";
 import { BuildingGlow } from "./buildingGlow";
 import { FLOOR_H } from "./textures";
 import { StreetControls, EYE_HEIGHT, type MoveMode } from "./controls";
@@ -123,6 +124,11 @@ export class StreetWorld {
     this.dutyView.attach(this.camera);
 
     this.city = buildCity(state);
+    if (state.id === "mountain") {
+      const mouth = buildMountainTunnelMouth();
+      this.city.group.add(mouth.group);
+      this.city.blockers.push(...mouth.blockers);
+    }
     this.scene.add(this.city.group);
     this.scene.add(this.glow.group);
 
@@ -481,11 +487,19 @@ export class StreetWorld {
    * Aimed / highlighted building the player can walk into (click or E).
    * Prefer this over separate door refs when handling a click.
    */
+  /** Standing at the unmarked opening in the west ridge. */
+  nearMountainTunnel() {
+    if (this.state.id !== "mountain" || this.isDriving || this.controls.hiking) return false;
+    return nearMountainTunnel(this.controls.position.x, this.controls.position.z);
+  }
+
   enterTarget():
     | { kind: "venue" | "lodging" | "subway"; building: Building }
     | { kind: "stadium" }
+    | { kind: "tunnel" }
     | null {
     if (this.isDriving) return null;
+    if (this.nearMountainTunnel()) return { kind: "tunnel" };
     if (this.nearStadiumGate()) return { kind: "stadium" };
     const lodging = this.nearLodgingEntrance();
     if (lodging) return { kind: "lodging", building: lodging };

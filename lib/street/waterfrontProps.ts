@@ -69,7 +69,7 @@ export function addWaterfrontDecor(
 
   addPromenadeTrim(state, trimB, lampHeadB, lamps, wood, woodDark, rail, bulb, pole);
   addDocks(trimB, wood, woodDark);
-  addFerrisPier(trimB, wood, woodDark);
+  if (state.id !== "mountain") addFerrisPier(trimB, wood, woodDark);
   addBeachUmbrellas(state, trimB, blockers, canvas, pole);
   addEastBoardwalk(state, trimB, wood);
   addShoreFoam(trimB);
@@ -77,7 +77,7 @@ export function addWaterfrontDecor(
   const boats = buildBoats(disposables);
   group.add(boats);
 
-  const { root, wheel } = buildFerris(disposables);
+  const { root, wheel } = buildFerris(disposables, state.id === "mountain" ? "mountain" : undefined);
   group.add(root);
 
   return {
@@ -291,7 +291,8 @@ function buildFerris(disposables: Array<{ dispose: () => void }>, cityId?: strin
   const root = new THREE.Group();
   const tile = ferrisWorldTile(cityId);
   // Dustfall sits on a sand pad (y≈0); Riverside ferris stands on the pier deck.
-  root.position.set(tile.x * TILE, cityId === "dustfall" ? 0.14 : 0.5, tile.y * TILE);
+  const deck = cityId === "dustfall" ? 0.14 : cityId === "mountain" ? 0 : 0.5;
+  root.position.set(tile.x * TILE, deck, tile.y * TILE);
 
   const steelMat = new THREE.MeshStandardMaterial({ color: "#c45c4a", roughness: 0.35, metalness: 0.45 });
   const darkMat = new THREE.MeshStandardMaterial({ color: "#3a3230", roughness: 0.5, metalness: 0.3 });

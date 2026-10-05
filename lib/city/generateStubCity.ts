@@ -314,6 +314,8 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
     for (let y = 36; y <= 39; y++) addRoad(tiles, 24, y, size);
     for (let x = 8; x <= 12; x++) addRoad(tiles, x, 24, size);
     for (let x = 36; x <= 39; x++) addRoad(tiles, x, 24, size);
+    // Dead-end lane into the west ridge, ending at the service tunnel.
+    for (let x = 8; x <= 12; x++) addRoad(tiles, x, 28, size);
   }
   connectRoads(tiles, size);
 

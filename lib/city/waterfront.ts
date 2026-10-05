@@ -53,8 +53,12 @@ export const FERRIS_Y = 28;
 /** Dustfall ferris — open sand east of the Nile, off the arterial. */
 export const DUSTFALL_FERRIS = { x: 14.15, y: 30.35 };
 
+/** Mountain City ferris — grass block north of Peak Hall, clear of the west-ridge tunnel. */
+export const MOUNTAIN_FERRIS = { x: 15.55, y: 16.2 };
+
 export function ferrisWorldTile(cityId?: string) {
   if (cityId === "dustfall") return { ...DUSTFALL_FERRIS };
+  if (cityId === "mountain") return { ...MOUNTAIN_FERRIS };
   return { x: riverXAt(FERRIS_Y) + 1.55, y: FERRIS_Y + 0.5 };
 }
 
@@ -180,8 +184,8 @@ export function isWaterfrontBuilding(building: Building) {
 }
 
 export function waterfrontPois(cityId?: string): { x: number; y: number; kind: "marina" | "beach" | "ferris" }[] {
-  if (cityId === "dustfall") {
-    const ferris = ferrisWorldTile("dustfall");
+  if (cityId === "dustfall" || cityId === "mountain") {
+    const ferris = ferrisWorldTile(cityId);
     return [{ x: ferris.x, y: ferris.y, kind: "ferris" }];
   }
   const ferris = ferrisWorldTile();
