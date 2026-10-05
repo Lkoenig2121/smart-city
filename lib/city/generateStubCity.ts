@@ -17,7 +17,9 @@ import type {
 } from "@/lib/city/types";
 import type { CityId } from "@/lib/city/world/cities";
 
-const SIZE = 32;
+const DEFAULT_SIZE = 32;
+/** Wider than the other stub maps so the valley can grow without pulling the peaks inward. */
+const MOUNTAIN_SIZE = 48;
 
 type StubSpec = {
   id: CityId;
@@ -68,25 +70,25 @@ function emptyTile(x: number, y: number, ground: StubSpec["ground"]): Tile {
   };
 }
 
-function inBounds(x: number, y: number) {
-  return x >= 0 && y >= 0 && x < SIZE && y < SIZE;
+function inBounds(x: number, y: number, size: number) {
+  return x >= 0 && y >= 0 && x < size && y < size;
 }
 
 function blockedTerrain(terrain: Tile["terrain"]) {
   return terrain === "water" || terrain === "rock" || terrain === "snow";
 }
 
-function addRoad(tiles: Tile[][], x: number, y: number) {
-  if (!inBounds(x, y)) return;
+function addRoad(tiles: Tile[][], x: number, y: number, size: number) {
+  if (!inBounds(x, y, size)) return;
   const tile = tiles[y][x];
   if (blockedTerrain(tile.terrain) || tile.buildingId) return;
   tile.road = { north: false, east: false, south: false, west: false };
   tile.tree = null;
 }
 
-function connectRoads(tiles: Tile[][]) {
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
+function connectRoads(tiles: Tile[][], size: number) {
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
       const tile = tiles[y][x];
       if (!tile.road) continue;
       tile.road = {
@@ -163,61 +165,74 @@ function peakHeight(cx: number, cy: number, x: number, y: number, radius: number
   return Math.max(0, 1 - d);
 }
 
-function paintMountainTerrain(tiles: Tile[][], rand: () => number) {
+function paintMountainTerrain(tiles: Tile[][], rand: () => number, size: number) {
+  const edge = size - 1;
+  const mid = size / 2;
   const peaks = [
-    { x: 3, y: 3, r: 11 },
-    { x: 16, y: 1, r: 9 },
-    { x: 28, y: 3, r: 10 },
-    { x: 1, y: 14, r: 8 },
-    { x: 30, y: 14, r: 8 },
-    { x: 4, y: 28, r: 9 },
-    { x: 16, y: 30, r: 8 },
-    { x: 28, y: 28, r: 9 },
-    { x: 8, y: 8, r: 6 },
-    { x: 24, y: 8, r: 6 },
-    { x: 8, y: 24, r: 5 },
-    { x: 24, y: 24, r: 5 },
+    { x: 1, y: 1, r: 16 },
+    { x: mid, y: 0, r: 14 },
+    { x: edge, y: 1, r: 16 },
+    { x: 0, y: mid, r: 14 },
+    { x: edge, y: mid, r: 14 },
+    { x: 1, y: edge, r: 16 },
+    { x: mid, y: edge, r: 14 },
+    { x: edge, y: edge, r: 16 },
+    { x: size * 0.28, y: 0, r: 12 },
+    { x: size * 0.72, y: 0, r: 12 },
+    { x: 0, y: size * 0.28, r: 12 },
+    { x: edge, y: size * 0.28, r: 12 },
+    { x: 0, y: size * 0.72, r: 12 },
+    { x: edge, y: size * 0.72, r: 12 },
+    { x: size * 0.28, y: edge, r: 12 },
+    { x: size * 0.72, y: edge, r: 12 },
   ];
 
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
       let h = 0;
       for (const peak of peaks) {
         h = Math.max(h, peakHeight(peak.x, peak.y, x, y, peak.r));
       }
-      // Soft noise so ridges aren't perfect circles.
-      h += (rand() - 0.5) * 0.1;
+      h += (rand() - 0.5) * 0.08;
       const tile = tiles[y][x];
-      if (h > 0.68) tile.terrain = "snow";
-      else if (h > 0.38) tile.terrain = "rock";
-      else if (h > 0.2) tile.terrain = "park";
+      if (h > 0.72) tile.terrain = "snow";
+      else if (h > 0.4) tile.terrain = "rock";
       else tile.terrain = "grass";
     }
   }
 
-  // Narrower valley bowl for the town core — keep ridges close.
-  for (let y = 12; y <= 20; y++) {
-    for (let x = 12; x <= 20; x++) {
+  // Peaks stay on the rim. Everything inside that band is the town: a park
+  // foothill, then grass and streets.
+  const rim = 8;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
       const tile = tiles[y][x];
-      if (tile.terrain === "snow" || tile.terrain === "rock") {
-        tile.terrain = rand() > 0.5 ? "park" : "grass";
+      const edgeDist = Math.min(x, y, edge - x, edge - y);
+      if (edgeDist < 2) {
+        tile.terrain = "snow";
+      } else if (edgeDist < rim) {
+        if (tile.terrain !== "snow") tile.terrain = "rock";
+      } else if (edgeDist === rim) {
+        tile.terrain = "park";
+      } else {
+        tile.terrain = "grass";
       }
     }
   }
 
-  // Alpine lake tucked against the west ridge.
-  for (let y = 13; y <= 17; y++) {
-    for (let x = 2; x <= 5; x++) {
+  // Alpine lake in the west ridge, outside the street grid.
+  for (let y = 18; y <= 24; y++) {
+    for (let x = 2; x <= 6; x++) {
       tiles[y][x].terrain = "water";
       tiles[y][x].tree = null;
     }
   }
 }
 
-function paintFutureTerrain(tiles: Tile[][], rand: () => number) {
+function paintFutureTerrain(tiles: Tile[][], rand: () => number, size: number) {
   // Dense commercial pads — dark lots and plazas, no big canal ring.
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
       tiles[y][x].terrain = rand() > 0.55 ? "lot" : "plaza";
     }
   }
@@ -255,13 +270,13 @@ function paintFutureTerrain(tiles: Tile[][], rand: () => number) {
   }
 }
 
-function paintCoastalTerrain(tiles: Tile[][]) {
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = SIZE - 5; x < SIZE; x++) {
+function paintCoastalTerrain(tiles: Tile[][], size: number) {
+  for (let y = 0; y < size; y++) {
+    for (let x = size - 5; x < size; x++) {
       tiles[y][x].terrain = "water";
     }
-    if (tiles[y][SIZE - 6]) tiles[y][SIZE - 6].terrain = "sand";
-    if (tiles[y][SIZE - 7]) tiles[y][SIZE - 7].terrain = "sand";
+    if (tiles[y][size - 6]) tiles[y][size - 6].terrain = "sand";
+    if (tiles[y][size - 7]) tiles[y][size - 7].terrain = "sand";
   }
 }
 
@@ -271,33 +286,36 @@ function paintCoastalTerrain(tiles: Tile[][]) {
  */
 export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityState {
   const spec = SPECS[kind];
+  const size = kind === "mountain" ? MOUNTAIN_SIZE : DEFAULT_SIZE;
   const rand = mulberry32(spec.seed);
-  const tiles: Tile[][] = Array.from({ length: SIZE }, (_, y) =>
-    Array.from({ length: SIZE }, (_, x) => emptyTile(x, y, spec.ground)),
+  const tiles: Tile[][] = Array.from({ length: size }, (_, y) =>
+    Array.from({ length: size }, (_, x) => emptyTile(x, y, spec.ground)),
   );
 
-  if (kind === "mountain") paintMountainTerrain(tiles, rand);
-  else if (kind === "coastal") paintCoastalTerrain(tiles);
-  else paintFutureTerrain(tiles, rand);
+  if (kind === "mountain") paintMountainTerrain(tiles, rand, size);
+  else if (kind === "coastal") paintCoastalTerrain(tiles, size);
+  else paintFutureTerrain(tiles, rand, size);
 
   const arterials =
-    kind === "future" ? [5, 11, 16, 21, 26] : kind === "mountain" ? [11, 16, 21] : [6, 14, 21];
+    kind === "future" ? [5, 11, 16, 21, 26] : kind === "mountain" ? [12, 18, 24, 30, 36] : [6, 14, 21];
 
   for (const a of arterials) {
-    for (let i = 0; i < SIZE; i++) {
-      addRoad(tiles, i, a);
-      addRoad(tiles, a, i);
+    for (let i = 0; i < size; i++) {
+      addRoad(tiles, i, a, size);
+      addRoad(tiles, a, i, size);
     }
   }
   if (kind === "coastal") {
-    for (let y = 1; y < SIZE - 1; y++) addRoad(tiles, COASTAL_BOARDWALK_X, y);
+    for (let y = 1; y < size - 1; y++) addRoad(tiles, COASTAL_BOARDWALK_X, y, size);
   }
-  // Mountain switchbacks into the valley.
+  // Short spurs from the valley cross out to the foothills.
   if (kind === "mountain") {
-    for (let y = 6; y <= 11; y++) addRoad(tiles, 16, y);
-    for (let x = 16; x <= 21; x++) addRoad(tiles, x, 6);
+    for (let y = 8; y <= 12; y++) addRoad(tiles, 24, y, size);
+    for (let y = 36; y <= 39; y++) addRoad(tiles, 24, y, size);
+    for (let x = 8; x <= 12; x++) addRoad(tiles, x, 24, size);
+    for (let x = 36; x <= 39; x++) addRoad(tiles, x, 24, size);
   }
-  connectRoads(tiles);
+  connectRoads(tiles, size);
 
   const buildings = new Map<string, Building>();
   let buildingIndex = 0;
@@ -314,39 +332,81 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
   };
 
   if (kind === "mountain") {
-    place("city_hall", 14, 14, (b) => {
+    place("city_hall", 21, 21, (b) => {
       b.name = "Peak Hall";
       b.wallColor = "#c9b8a0";
       b.roofColor = "#5a3d28";
     });
-    place("police", 11, 14);
-    place("hospital", 18, 14);
-    place("school", 14, 11);
-    place("shop", 11, 11, (b) => {
+    place("police", 19, 22);
+    place("hospital", 25, 19);
+    place("school", 19, 25);
+    place("fire", 27, 25);
+    place("shop", 19, 19, (b) => {
       b.name = "Trail Outfitters";
     });
-    place("shop", 18, 11, (b) => {
+    place("shop", 22, 19, (b) => {
       b.name = "Alpine Cafe";
     });
-    place("office", 11, 18);
-    place("apartment", 18, 18, (b) => {
+    place("office", 25, 25);
+    place("apartment", 26, 22, (b) => {
       b.floors = 5;
       b.wallColor = "#d8cfc0";
       b.roofColor = "#6a5040";
     });
-    place("house", 12, 20);
-    place("house", 19, 20);
-    place("house", 13, 12);
-    place("park_pavilion", 20, 12, (b) => {
+    place("house", 22, 26);
+    place("house", 23, 26);
+    place("park_pavilion", 28, 19, (b) => {
       b.name = "Ski Lodge";
       b.wallColor = "#8a6a4a";
       b.roofColor = "#3a2a1c";
     });
 
-    // Summit Field — southeast foothills, clear of the x=21 arterial.
+    // Neighborhoods out from the town center, along the new streets.
+    const outskirts: Array<[BuildingKind, number, number, string?]> = [
+      ["house", 13, 14],
+      ["house", 15, 14],
+      ["house", 20, 13],
+      ["shop", 26, 13, "Pine Market"],
+      ["apartment", 28, 14],
+      ["house", 33, 13],
+      ["shop", 34, 15, "Cedar Books"],
+      ["house", 14, 20],
+      ["house", 13, 22],
+      ["shop", 14, 26, "Wool & Wax"],
+      ["apartment", 13, 28],
+      ["park_pavilion", 14, 32, "Lookout Cabin"],
+      ["house", 33, 20],
+      ["house", 34, 22],
+      ["shop", 33, 26, "Gear Shed"],
+      ["apartment", 34, 28],
+      ["house", 13, 32],
+      ["house", 15, 33],
+      ["shop", 20, 32, "Summit Deli"],
+      ["house", 22, 33],
+      ["office", 26, 32],
+      ["apartment", 28, 31],
+      ["house", 37, 32],
+      ["shop", 28, 34, "Fireside Goods"],
+    ];
+    for (const [bKind, x, y, name] of outskirts) {
+      place(bKind, x, y, (b) => {
+        if (name) b.name = name;
+        if (bKind === "apartment") {
+          b.floors = 4;
+          b.wallColor = "#d8cfc0";
+          b.roofColor = "#6a5040";
+        }
+        if (bKind === "park_pavilion") {
+          b.wallColor = "#8a6a4a";
+          b.roofColor = "#3a2a1c";
+        }
+      });
+    }
+
+    // Summit Field — southeast of town, between the outer arterials.
     {
-      const sx = 22;
-      const sy = 22;
+      const sx = 31;
+      const sy = 31;
       prepStadiumSite(tiles, sx, sy);
       const club = BALLCLUBS.mountain;
       place("baseball_stadium", sx, sy, (b) => {
@@ -358,8 +418,33 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
       });
     }
 
-    for (let y = 0; y < SIZE; y++) {
-      for (let x = 0; x < SIZE; x++) {
+    // A few more houses and shops on open street frontage, leaving the block middles as grass.
+    const frontage: BuildingKind[] = ["house", "house", "house", "shop", "apartment"];
+    for (let y = 10; y < size - 10; y++) {
+      for (let x = 10; x < size - 10; x++) {
+        if (Math.abs(x - 24) <= 2 && Math.abs(y - 24) <= 2) continue;
+        if (!canPlace(tiles, x, y, 1, 1)) continue;
+        const nearRoad =
+          Boolean(tiles[y]?.[x - 1]?.road) ||
+          Boolean(tiles[y]?.[x + 1]?.road) ||
+          Boolean(tiles[y - 1]?.[x]?.road) ||
+          Boolean(tiles[y + 1]?.[x]?.road);
+        if (!nearRoad || rand() > 0.28) continue;
+        const bKind = pick(rand, frontage);
+        place(bKind, x, y, (b) => {
+          if (bKind === "shop") {
+            b.name = pick(rand, ["Trail Post", "Maple Goods", "Ridge Bakery", "Lantern Supply"]);
+          } else if (bKind === "apartment") {
+            b.floors = randInt(rand, 4, 6);
+            b.wallColor = "#d8cfc0";
+            b.roofColor = "#6a5040";
+          }
+        });
+      }
+    }
+
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
         const tile = tiles[y][x];
         if (tile.road || tile.buildingId || blockedTerrain(tile.terrain)) continue;
         if (tile.terrain === "park" && rand() > 0.45) {
@@ -451,8 +536,8 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
       "office",
       "shop",
     ];
-    for (let y = 1; y < SIZE - 1; y++) {
-      for (let x = 1; x < SIZE - 1; x++) {
+    for (let y = 1; y < size - 1; y++) {
+      for (let x = 1; x < size - 1; x++) {
         // Keep the scramble plaza open.
         if (x >= 14 && x <= 17 && y >= 14 && y <= 17) continue;
         if (!canPlace(tiles, x, y, 1, 1)) continue;
@@ -504,8 +589,8 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
       b.stats.extra = { ...(b.stats.extra ?? {}), neon: "#00e8ff" };
     });
 
-    for (let y = 0; y < SIZE; y++) {
-      for (let x = 0; x < SIZE; x++) {
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
         const tile = tiles[y][x];
         if (tile.road || tile.buildingId || tile.terrain === "water") continue;
         if (tile.terrain === "park") {
@@ -590,7 +675,7 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
   const state: CityState = {
     id: spec.id,
     name: spec.name,
-    size: SIZE,
+    size,
     tiles,
     buildings,
     citizens,
