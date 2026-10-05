@@ -11,6 +11,8 @@ import {
   stadiumSeriesGame,
   stadiumGateTile,
   stadiumWinner,
+  seriesRecordLabel,
+  worldSeriesBoard,
 } from "@/lib/city/stadium";
 import {
   buyGameTicket,
@@ -1943,6 +1945,19 @@ export function StreetView({
   const lastFinal =
     interior?.kind === "stadium" || atGate ? stadiumFinal(state) : null;
   const lastWinner = lastFinal ? stadiumWinner(lastFinal, ballclub) : null;
+  const seriesBoard = interior?.kind === "stadium" || atGate ? worldSeriesBoard(state.clock) : null;
+  const seriesTonight =
+    interior?.kind === "stadium" && seriesGame && seriesBoard
+      ? (seriesBoard.games.find((game) => game.game === seriesGame.game) ?? null)
+      : null;
+  const seriesWinner =
+    seriesTonight && seriesBoard
+      ? seriesTonight.topRuns > seriesTonight.secondRuns
+        ? seriesBoard.topName
+        : seriesTonight.secondRuns > seriesTonight.topRuns
+          ? seriesBoard.secondName
+          : null
+      : null;
 
   return (
     <div ref={wrapRef} className="absolute inset-0 z-30 bg-[#0b1420]">
@@ -2506,9 +2521,41 @@ export function StreetView({
                 ⚾{" "}
                 {seriesGame
                   ? `WORLD SERIES · GAME ${seriesGame.game}`
-                  : ballclub.fullName.toUpperCase()}
+                  : seriesBoard?.champion
+                    ? "WORLD SERIES"
+                    : ballclub.fullName.toUpperCase()}
               </p>
-              {lastFinal ? (
+              {seriesTonight?.status === "live" && seriesBoard ? (
+                <div className="mt-1.5 rounded-md bg-[#10233f] px-4 py-1.5">
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-amber-300">
+                    World Series
+                  </p>
+                  <p className="text-sm font-bold text-white">
+                    {seriesBoard.topName} {seriesBoard.topWins} – {seriesBoard.secondWins}{" "}
+                    {seriesBoard.secondName}
+                  </p>
+                </div>
+              ) : seriesTonight?.status === "final" && seriesBoard ? (
+                <div className="mt-1.5 rounded-md bg-[#10233f] px-4 py-1.5">
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-amber-300">
+                    {seriesBoard.champion ? "World Series" : "Final"}
+                  </p>
+                  <p className="text-sm font-bold text-white">
+                    {seriesBoard.champion
+                      ? seriesRecordLabel(seriesBoard)
+                      : seriesWinner
+                        ? `${seriesWinner} win`
+                        : "Game tied"}
+                  </p>
+                </div>
+              ) : interior?.kind === "stadium" && seriesBoard?.champion ? (
+                <div className="mt-1.5 rounded-md bg-[#10233f] px-4 py-1.5">
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-amber-300">
+                    World Series
+                  </p>
+                  <p className="text-sm font-bold text-white">{seriesRecordLabel(seriesBoard)}</p>
+                </div>
+              ) : lastFinal ? (
                 <div className="mt-1.5 rounded-md bg-[#10233f] px-4 py-1.5">
                   <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-amber-300">
                     Final

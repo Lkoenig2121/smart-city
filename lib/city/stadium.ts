@@ -314,6 +314,85 @@ export function stadiumSeriesGame(state: CityState) {
   return scoreboardMatchup(state)?.series ?? null;
 }
 
+export interface SeriesBoardGame {
+  game: number;
+  topRuns: number;
+  secondRuns: number;
+  status: "final" | "live";
+}
+
+export interface SeriesBoard {
+  topName: string;
+  secondName: string;
+  topWins: number;
+  secondWins: number;
+  champion: string | null;
+  /** Finals, plus tonight's game while it is being played. Upcoming games stay hidden. */
+  games: SeriesBoardGame[];
+  nextGame: number | null;
+}
+
+function seriesGameStatus(clock: CityClock, doy: number): "final" | "live" | "upcoming" {
+  if (doy < clock.dayOfYear) return "final";
+  if (doy > clock.dayOfYear) return "upcoming";
+  const playEnd = GAME_END_MINUTE - 8;
+  if (clock.minuteOfDay >= playEnd) return "final";
+  if (clock.minuteOfDay >= GAME_START_MINUTE) return "live";
+  return "upcoming";
+}
+
+/**
+ * World Series game log for this year, from Game 1 through the clinching game.
+ * Null before the first pitch of Game 1.
+ */
+export function worldSeriesBoard(clock: CityClock): SeriesBoard | null {
+  if (clock.dayOfYear < SERIES_START_DOY) return null;
+  const ws = worldSeriesFor(clock.year);
+  const club = seriesClub(ws);
+  const games: SeriesBoardGame[] = [];
+  let nextGame: number | null = null;
+  for (const g of ws.games) {
+    const status = seriesGameStatus(clock, g.doy);
+    if (status === "upcoming") {
+      nextGame ??= g.game;
+      continue;
+    }
+    const minute = status === "final" ? GAME_END_MINUTE : clock.minuteOfDay;
+    const sim = simulateGame(clockOn(clock.year, g.doy, minute), minute, club, g.topSeedWon);
+    games.push({ game: g.game, topRuns: sim.ravens, secondRuns: sim.visitors, status });
+  }
+  if (!games.length) return null;
+  const finals = games.filter((g) => g.status === "final");
+  const topWins = finals.filter((g) => g.topRuns > g.secondRuns).length;
+  const secondWins = finals.filter((g) => g.secondRuns > g.topRuns).length;
+  const champion =
+    topWins >= SERIES_WINS_NEEDED
+      ? ws.topSeed.club.shortName
+      : secondWins >= SERIES_WINS_NEEDED
+        ? ws.secondSeed.club.shortName
+        : null;
+  return {
+    topName: ws.topSeed.club.shortName,
+    secondName: ws.secondSeed.club.shortName,
+    topWins,
+    secondWins,
+    champion,
+    games,
+    nextGame: champion ? null : nextGame,
+  };
+}
+
+export function seriesRecordLabel(board: SeriesBoard) {
+  if (board.champion) {
+    const high = Math.max(board.topWins, board.secondWins);
+    const low = Math.min(board.topWins, board.secondWins);
+    return `${board.champion} win the series ${high}–${low}`;
+  }
+  if (board.topWins === board.secondWins) return `Series tied ${board.topWins}–${board.secondWins}`;
+  if (board.topWins > board.secondWins) return `${board.topName} lead ${board.topWins}–${board.secondWins}`;
+  return `${board.secondName} lead ${board.secondWins}–${board.topWins}`;
+}
+
 export type LeaguePhase = "preseason" | "regular" | "break" | "series" | "complete";
 
 export interface LeagueStatus {
@@ -585,7 +664,8 @@ function simulateGame(clock: CityClock, minuteOfDay: number, club: Ballclub, fav
     visitors = fixed.away;
   }
 
-  const outs = playing ? Math.min(2, Math.floor(hash2(clock.dayOfYear, elapsed, 19) * 3)) : 0;
+  // Outs climb through the half. A hash of the raw minute never reached 2.
+  const outs = playing ? Math.min(2, Math.floor(halfProgress * 3)) : 0;
   const balls = playing ? Math.min(3, Math.floor(hash2(clock.dayOfYear, Math.floor(elapsed), 21) * 4)) : 0;
   const strikes = playing ? Math.min(2, Math.floor(hash2(clock.dayOfYear, Math.floor(elapsed), 22) * 3)) : 0;
   const visitorsHits = hitsFor(clock, 3, visitors, halfIndex);

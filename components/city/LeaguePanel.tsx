@@ -3,7 +3,14 @@
 import { useMemo, useState } from "react";
 import { formatDate } from "@/lib/city/calendar";
 import type { CityClock } from "@/lib/city/types";
-import { BALLCLUBS, GAME_END_MINUTE, SERIES_HOST_CITY, leagueStatus } from "@/lib/city/stadium";
+import {
+  BALLCLUBS,
+  GAME_END_MINUTE,
+  SERIES_HOST_CITY,
+  leagueStatus,
+  seriesRecordLabel,
+  worldSeriesBoard,
+} from "@/lib/city/stadium";
 
 /** Closable league table + World Series tracker, shown under the player card. */
 export function LeaguePanel({
@@ -69,6 +76,10 @@ export function LeaguePanel({
     footer = "";
   }
 
+  const board = worldSeriesBoard(clock);
+  if (board) {
+    footer = board.nextGame ? `Game ${board.nextGame} still to play at ${host}` : "";
+  }
   const finalists = new Set(series ? [series.topSeed.cityId, series.secondSeed.cityId] : []);
 
   return (
@@ -124,6 +135,24 @@ export function LeaguePanel({
           })}
         </tbody>
       </table>
+      {board ? (
+        <div className="mt-2 border-t border-white/10 pt-1.5">
+          <p className="text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-amber-200">
+            {seriesRecordLabel(board)}
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {board.games.map((game) => (
+              <li key={game.game} className="flex items-baseline justify-between gap-2 text-[0.68rem]">
+                <span className="text-white/45">G{game.game}</span>
+                <span className="tabular-nums">
+                  {board.topName} {game.topRuns}–{game.secondRuns} {board.secondName}
+                  {game.status === "live" ? <span className="text-amber-200"> · live</span> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {footer ? <p className="mt-1.5 text-[0.65rem] leading-snug text-sky-100/75">{footer}</p> : null}
       {onJumpToSeries && status.phase !== "series" ? (
         <button
