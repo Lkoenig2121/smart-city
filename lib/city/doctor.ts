@@ -313,6 +313,21 @@ export function floorForDept(dept: Department) {
   return HOSPITAL_LEVELS.findIndex((level) => level.dept === dept);
 }
 
+/** Matches the room the interior actually builds for this floor and bed index. */
+export function roomLabelFor(floor: number, bed: number) {
+  const level = HOSPITAL_LEVELS[floor];
+  if (!level) return "Bed";
+  if (level.dept === "er") return `ER bay ${bed + 1}`;
+  if (level.dept === "imaging") return bed === 0 ? "MRI suite" : "X-ray room";
+  if (level.dept === "surgery") return `OR ${bed + 1}`;
+  if (level.beds >= 8) {
+    const room = Math.floor(bed / 2) + 1;
+    const slot = (bed % 2) === 0 ? "A" : "B";
+    return `Room ${(floor + 1) * 100 + room} · bed ${slot}`;
+  }
+  return `${level.short} bed ${bed + 1}`;
+}
+
 export function startDoctorShift(building: Building, state: CityState): PlayerState | string {
   if (!isHospital(building)) return "Clock in at a hospital.";
   const player = readPlayer();
@@ -380,7 +395,7 @@ export function pageNextPatient(random: () => number = Math.random): PlayerState
     floor,
     bed,
     floorName: level.name,
-    bedLabel: `${level.short} bed ${bed + 1}`,
+    bedLabel: roomLabelFor(floor, bed),
     reward: Math.round(condition.pay * mult),
     xp: condition.xp,
   };

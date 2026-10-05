@@ -311,6 +311,22 @@ function InventoryPane({ life, onPlayer }: { life: LifeState; onPlayer: (player:
         </div>
       ))}
       {!life.owned.length ? <p className="text-sm text-slate-400">Your inventory is empty.</p> : null}
+      {snacks.some((item) => item.kind === "goods") ? (
+        <div>
+          <p className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-amber-300/80">From the vending machine</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {snacks
+              .filter((item) => item.kind === "goods")
+              .map((item) => (
+                <div key={item.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                  <p className="text-sm font-semibold text-white">{item.name}</p>
+                  <p className="text-[0.7rem] text-slate-400">{item.detail}</p>
+                  <p className="mt-1 text-[0.65rem] text-amber-200/80">×{life.bag[item.id] ?? 0}</p>
+                </div>
+              ))}
+          </div>
+        </div>
+      ) : null}
       <div>
         <p className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-amber-300/80">Tools</p>
         <p className="text-xs text-slate-400">
@@ -319,9 +335,9 @@ function InventoryPane({ life, onPlayer }: { life: LifeState; onPlayer: (player:
       </div>
       <div>
         <p className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-amber-300/80">Consumables</p>
-        {snacks.length ? (
+        {snacks.some((item) => item.kind !== "goods") ? (
           <div className="grid gap-2 sm:grid-cols-2">
-            {snacks.map((item) => {
+            {snacks.filter((item) => item.kind !== "goods").map((item) => {
               const count = life.bag[item.id] ?? 0;
               const equipped = life.held === item.id;
               return (

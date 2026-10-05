@@ -1,4 +1,4 @@
-export type ConsumableKind = "drink" | "food";
+export type ConsumableKind = "drink" | "food" | "goods";
 
 export interface ConsumableItem {
   id: string;
@@ -48,6 +48,55 @@ export const CONSUMABLES: ConsumableItem[] = [
   { id: "food-garlic-knots", name: "Garlic knots", detail: "Parmesan · parsley", price: 6, kind: "food", color: "#e8d09a", accent: "#6b8f3a" },
   { id: "food-cannoli", name: "Cannoli", detail: "Sweet ricotta", price: 5, kind: "food", color: "#f0e2c0", accent: "#6a3a32" },
   { id: "drink-italian-soda", name: "Italian soda", detail: "Blood orange", price: 4, kind: "drink", color: "#e0602a", accent: "#f4f1ea" },
+  { id: "food-chips-salt", name: "Salted chips", detail: "Crispy bag", price: 2, kind: "food", color: "#f2c200", accent: "#c0392b" },
+  { id: "food-chips-bbq", name: "BBQ chips", detail: "Smoky bag", price: 2, kind: "food", color: "#c45c26", accent: "#f2c200" },
+  { id: "food-chips-onion", name: "Onion chips", detail: "Sour cream", price: 2, kind: "food", color: "#7ec86a", accent: "#f4f1ea" },
+  { id: "food-puffs", name: "Cheese puffs", detail: "Orange curls", price: 2, kind: "food", color: "#f0a020", accent: "#e23b2f" },
+  { id: "food-pretzel-bag", name: "Pretzel twists", detail: "Salted bag", price: 2, kind: "food", color: "#e8c36a", accent: "#6b4a32" },
+  { id: "food-tortilla", name: "Tortilla chips", detail: "Corn bag", price: 2, kind: "food", color: "#e8a317", accent: "#c0392b" },
+  { id: "food-chocolate", name: "Chocolate bar", detail: "Milk chocolate", price: 2, kind: "food", color: "#6a3a32", accent: "#e8c36a" },
+  { id: "food-cookie-pack", name: "Cookie pack", detail: "Chocolate chip", price: 2, kind: "food", color: "#c47a3a", accent: "#f4f1ea" },
+  { id: "food-candy", name: "Gummy candy", detail: "Fruit bag", price: 2, kind: "food", color: "#e23b6a", accent: "#f2c200" },
+  { id: "drink-cola", name: "Cola", detail: "Cold can", price: 2, kind: "drink", color: "#c0392b", accent: "#1a1a1a" },
+  { id: "drink-juice", name: "Orange juice", detail: "Bottle", price: 3, kind: "drink", color: "#f0a020", accent: "#f4f1ea" },
+];
+
+export type VendFace =
+  | "chips"
+  | "bbq"
+  | "onion"
+  | "puffs"
+  | "pretzel"
+  | "tortilla"
+  | "chocolate"
+  | "cookie"
+  | "candy"
+  | "cola"
+  | "water"
+  | "juice";
+
+/** Glass-case layout for the hospital vending machines. */
+export const VENDING_ROWS: Array<Array<{ id: string; face: VendFace }>> = [
+  [
+    { id: "food-chips-salt", face: "chips" },
+    { id: "food-chips-bbq", face: "bbq" },
+    { id: "food-chips-onion", face: "onion" },
+  ],
+  [
+    { id: "food-puffs", face: "puffs" },
+    { id: "food-pretzel-bag", face: "pretzel" },
+    { id: "food-tortilla", face: "tortilla" },
+  ],
+  [
+    { id: "food-chocolate", face: "chocolate" },
+    { id: "food-cookie-pack", face: "cookie" },
+    { id: "food-candy", face: "candy" },
+  ],
+  [
+    { id: "drink-cola", face: "cola" },
+    { id: "drink-water", face: "water" },
+    { id: "drink-juice", face: "juice" },
+  ],
 ];
 
 /** What each ballpark stand actually sells — matches the sign over the counter. */

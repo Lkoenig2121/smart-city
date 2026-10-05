@@ -9,8 +9,10 @@ export function buyConsumable(itemId: string, clock: CityClock, source = "Cabana
   if (typeof spent === "string") return spent;
   const player = addConsumable(itemId);
   if (typeof player === "string") return player;
-  player.life.held = itemId;
-  player.life.heldSips = 0;
+  if (item.kind !== "goods") {
+    player.life.held = itemId;
+    player.life.heldSips = 0;
+  }
   writePlayer(player);
   return player;
 }
@@ -54,6 +56,7 @@ export function consumeHeld(): PlayerState | string {
   const player = readPlayer();
   const item = consumableById(player.life.held ?? "");
   if (!item) return "You are not holding anything.";
+  if (item.kind === "goods") return "That's already in your bag.";
   player.life.heldSips = (player.life.heldSips ?? 0) + 1;
   if (player.life.heldSips < CONSUME_BITES) {
     writePlayer(player);

@@ -24,6 +24,8 @@ export interface VenueInterior {
   nearSnack?: (x: number, z: number, feetY?: number) => { id: string; name: string; items: string[] } | null;
   /** Standing beside the assigned patient bed (doctor career). */
   nearPatient?: (x: number, z: number) => boolean;
+  /** Standing in front of a vending machine. */
+  nearVending?: (x: number, z: number) => boolean;
   /** Lights the glowing case marker above the assigned bed. */
   setCase?: (doctorCase: import("@/lib/city/player").DoctorCase | null) => void;
   update?: (dt: number) => void;

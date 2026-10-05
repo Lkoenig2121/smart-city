@@ -265,6 +265,10 @@ export class VenueWorld {
     ) ?? null;
   }
 
+  nearVending() {
+    return this.interior.nearVending?.(this.controls.position.x, this.controls.position.z) ?? false;
+  }
+
   resize(width: number, height: number) {
     this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();

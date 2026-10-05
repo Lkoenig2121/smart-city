@@ -177,14 +177,19 @@ function sitPose(rig: Rig, seat: number) {
   }
 }
 
+/** How far the lying body sits above the mattress top so the back sinks into it. */
+const LIE_LIFT = 0.06;
+
 /** Flat on a mattress: root stays at the foot of the bed, head toward local -z. */
 function liePose(rig: Rig, mattress: number) {
-  standPose(rig, -0.35);
+  standPose(rig, -0.15);
   rig.body.rotation.x = -Math.PI / 2;
-  rig.body.position.set(0, mattress + 0.18, 0.05);
+  rig.body.rotation.z = 0;
+  rig.body.rotation.y = 0;
+  rig.body.position.set(0, mattress + LIE_LIFT, 0);
   for (let i = 0; i < 2; i++) {
-    rig.arms[i].rotation.x = -0.2;
-    rig.arms[i].rotation.z = i === 0 ? 0.25 : -0.25;
+    rig.arms[i].rotation.x = -0.15;
+    rig.arms[i].rotation.z = i === 0 ? 0.35 : -0.35;
   }
 }
 
@@ -192,7 +197,7 @@ function lookForUniform(base: Look, uniform: StaffSpot["uniform"] | undefined): 
   if (uniform === "guard") return { ...base, shirt: "#1f2a44", pants: "#1a1f2b" };
   if (uniform === "scrubs") return { ...base, shirt: "#5dade2", pants: "#2e86ab" };
   if (uniform === "coat") return { ...base, shirt: "#f4f6f8", pants: "#2f3640" };
-  if (uniform === "gown") return { ...base, shirt: "#e8f0f4", pants: "#e8f0f4" };
+  if (uniform === "gown") return { ...base, shirt: "#d5e3ee", pants: "#c5d5e2" };
   return base;
 }
 
@@ -319,8 +324,12 @@ export class OfficeCrowd {
       const { rig, spot } = actor;
       const t = this.time + actor.offset;
       if (spot!.lie !== undefined) {
-        rig.arms[0].rotation.x = -0.2 + Math.sin(t * 0.6) * 0.03;
-        rig.arms[1].rotation.x = -0.2 + Math.sin(t * 0.6 + 1.1) * 0.03;
+        rig.body.rotation.x = -Math.PI / 2;
+        rig.body.rotation.y = 0;
+        rig.body.rotation.z = 0;
+        rig.body.position.y = spot!.lie + LIE_LIFT + Math.sin(t * 1.35) * 0.012;
+        rig.arms[0].rotation.x = -0.15 + Math.sin(t * 0.7) * 0.02;
+        rig.arms[1].rotation.x = -0.15 + Math.sin(t * 0.7 + 1.1) * 0.02;
       } else if (spot!.seat !== undefined) {
         const typing = spot!.chair ? -0.95 : -0.25;
         rig.arms[0].rotation.x = typing + Math.sin(t * 9) * 0.05;

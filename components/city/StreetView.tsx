@@ -128,6 +128,7 @@ import { StreetMinimap } from "./StreetMinimap";
 import { SubwayBoard } from "./SubwayBoard";
 import { VenueDesk } from "./VenueDesk";
 import { PatientChart } from "./PatientChart";
+import { VendingMachine } from "./VendingMachine";
 import {
   activeOwnedVehicle,
   applyDriveTick,
@@ -272,6 +273,9 @@ export function StreetView({
   const [elevatorFade, setElevatorFade] = useState(false);
   const [patientChart, setPatientChart] = useState(false);
   const patientChartRef = useRef(false);
+  const [vendingOpen, setVendingOpen] = useState(false);
+  const vendingRef = useRef(false);
+  const [vendingNear, setVendingNear] = useState(false);
   const [mallSnack, setMallSnack] = useState<{
     name: string;
     items: string[];
@@ -392,6 +396,7 @@ export function StreetView({
     Boolean(mallShop) ||
     Boolean(mallFurnish) ||
     Boolean(mallSnack) ||
+    vendingOpen ||
     barMenu ||
     phoneOpen ||
     motorsOpen ||
@@ -416,6 +421,7 @@ export function StreetView({
     mallShopRef.current = mallShop;
     mallFurnishRef.current = mallFurnish;
     mallSnackRef.current = mallSnack;
+    vendingRef.current = vendingOpen;
     barMenuRef.current = barMenu;
     phoneOpenRef.current = phoneOpen;
     motorsOpenRef.current = motorsOpen;
@@ -426,6 +432,7 @@ export function StreetView({
     mallShop,
     mallFurnish,
     mallSnack,
+    vendingOpen,
     barMenu,
     phoneOpen,
     motorsOpen,
@@ -583,6 +590,12 @@ export function StreetView({
           setMallSnack(null);
           return;
         }
+        if (vendingRef.current) {
+          event.preventDefault();
+          vendingRef.current = false;
+          setVendingOpen(false);
+          return;
+        }
         if (patientChartRef.current) {
           event.preventDefault();
           patientChartRef.current = false;
@@ -632,7 +645,8 @@ export function StreetView({
         if (
           mallShopRef.current ||
           mallFurnishRef.current ||
-          mallSnackRef.current
+          mallSnackRef.current ||
+          vendingRef.current
         )
           return;
         event.preventDefault();
@@ -1492,6 +1506,8 @@ export function StreetView({
       mallShopRef.current = null;
       mallFurnishRef.current = null;
       mallSnackRef.current = null;
+      vendingRef.current = false;
+      setVendingOpen(false);
       setMallShop(null);
       setMallFurnish(null);
       setMallStore(null);
@@ -1513,6 +1529,7 @@ export function StreetView({
           mallShopRef.current ||
           mallFurnishRef.current ||
           mallSnackRef.current ||
+          vendingRef.current ||
           elevatorMenuRef.current ||
           patientChartRef.current
         )
@@ -1525,6 +1542,10 @@ export function StreetView({
             if (document.pointerLockElement === canvas)
               document.exitPointerLock();
           }
+        } else if (world.nearVending()) {
+          vendingRef.current = true;
+          setVendingOpen(true);
+          if (document.pointerLockElement === canvas) document.exitPointerLock();
         } else if (world.nearElevator()) {
           const menu = world.elevatorMenu();
           if (menu) {
@@ -1582,6 +1603,7 @@ export function StreetView({
         !mallShopRef.current &&
         !mallFurnishRef.current &&
         !mallSnackRef.current &&
+        !vendingRef.current &&
         !characterMenuRef.current &&
         !patientChartRef.current;
       atDeskRef.current = showDesk;
@@ -1600,6 +1622,8 @@ export function StreetView({
       setElevatorNear((prev) => (prev === lift ? prev : lift));
       const bedside = world.nearPatient();
       setPatientNear((prev) => (prev === bedside ? prev : bedside));
+      const vending = world.nearVending();
+      setVendingNear((prev) => (prev === vending ? prev : vending));
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
@@ -1625,6 +1649,9 @@ export function StreetView({
       patientChartRef.current = false;
       setPatientChart(false);
       setPatientNear(false);
+      vendingRef.current = false;
+      setVendingOpen(false);
+      setVendingNear(false);
     };
   }, [active, interior, state]);
 
@@ -1980,27 +2007,28 @@ export function StreetView({
             </div>
           ) : null}
           {onDoctorDuty(player) ? (
-            <div className="pointer-events-auto rounded-xl border border-teal-400/30 bg-[#0d181a]/9 px-3.5 py-2 text-teal-50 backdrop-blur">
-              <p className="text-[0.6rem] uppercase tracking-[0.2em] text-teal-300">
-                On duty · Doctor
-              </p>
-              <p className="text-sm font-semibold">
-                {doctorRank(player.doctorCareer?.xp ?? 0).label}
-              </p>
-              <p className="text-[0.7rem] text-teal-100/85">
-                Patients {player.doctorShift?.patients ?? 0} · Earnings{" "}
-                {formatDollars(player.doctorShift?.earnings ?? 0)}
-              </p>
-              {player.doctorCase ? (
-                <p className="mt-1 text-[0.7rem] text-amber-100">
-                  {player.doctorCase.patientName} · {player.doctorCase.bedLabel} ·{" "}
-                  {formatDollars(player.doctorCase.reward)}
+            <div className="pointer-events-auto w-64 overflow-hidden rounded-2xl border border-white/10 bg-[#f4f7f8]/95 text-[#14343a] shadow-xl backdrop-blur">
+              <div className="flex items-center gap-2 bg-[#14343a] px-3 py-1.5 text-white">
+                <span className="text-lg font-black leading-none text-[#ff8d84]">+</span>
+                <p className="text-[0.6rem] uppercase tracking-[0.18em] text-teal-100">
+                  {doctorRank(player.doctorCareer?.xp ?? 0).label}
                 </p>
-              ) : (
-                <p className="mt-1 text-[0.7rem] text-teal-100/70">
-                  Page a patient at Lobby reception
+              </div>
+              <div className="px-3 py-2">
+                <p className="text-[0.7rem] text-[#3d5560]">
+                  {player.doctorShift?.patients ?? 0} seen · {formatDollars(player.doctorShift?.earnings ?? 0)}
                 </p>
-              )}
+                {player.doctorCase ? (
+                  <p className="mt-1 text-sm font-semibold leading-snug">
+                    {player.doctorCase.patientName}
+                    <span className="mt-0.5 block text-xs font-medium text-[#9b2c3a]">
+                      {player.doctorCase.bedLabel} · {player.doctorCase.floorName}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-[#3d5560]">Page a patient at Lobby reception</p>
+                )}
+              </div>
             </div>
           ) : null}
           {onPoliceDuty(player) ? (
@@ -2913,6 +2941,24 @@ export function StreetView({
         </div>
       ) : null}
 
+      {vendingOpen && interior?.kind === "venue" ? (
+        <VendingMachine
+          clock={state.clock}
+          player={player}
+          onPlayerChange={setPlayer}
+          onClose={() => {
+            vendingRef.current = false;
+            setVendingOpen(false);
+          }}
+          onInventory={() => {
+            vendingRef.current = false;
+            setVendingOpen(false);
+            characterMenuRef.current = "inventory";
+            setCharacterMenu("inventory");
+          }}
+        />
+      ) : null}
+
       {mallSnack && venueBuilding && interior?.kind === "venue" ? (
         <PoolBar
           clock={state.clock}
@@ -3117,10 +3163,26 @@ export function StreetView({
       !elevatorMenu &&
       !characterMenu ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
-          <div className="rounded-xl border border-teal-300/35 bg-black/60 px-4 py-2 text-center backdrop-blur">
-            <p className="text-xs text-teal-100">
-              {player.doctorCase.patientName} · press{" "}
-              <span className="font-semibold text-white">E</span> to open the chart
+          <div className="rounded-2xl border border-white/10 bg-[#f4f7f8]/95 px-4 py-2 text-center text-[#14343a] shadow-xl">
+            <p className="text-[0.6rem] uppercase tracking-[0.18em] text-[#9b2c3a]">Bedside</p>
+            <p className="text-sm font-semibold">
+              {player.doctorCase.patientName} · press <span className="text-[#0f766e]">E</span> for the chart
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {interior?.kind === "venue" &&
+      vendingNear &&
+      !vendingOpen &&
+      !elevatorMenu &&
+      !patientChart &&
+      !characterMenu &&
+      !patientNear ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
+            <p className="text-xs text-slate-200">
+              Vending machine · press <span className="font-semibold text-white">E</span> · click an item to dispense it
             </p>
           </div>
         </div>
@@ -3131,7 +3193,8 @@ export function StreetView({
       !elevatorMenu &&
       !elevatorFade &&
       !characterMenu &&
-      !patientNear ? (
+      !patientNear &&
+      !vendingNear ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-white/15 bg-black/60 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">
@@ -3142,72 +3205,105 @@ export function StreetView({
       ) : null}
 
       {elevatorMenu && interior?.kind === "venue" ? (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40">
-          <div className="w-80 rounded-2xl border border-white/15 bg-slate-950/95 p-5 shadow-2xl">
-            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
-              {venueBuilding?.name ?? "Building"} · elevator
-            </p>
-            <p className="mt-1 text-lg font-semibold text-white">Choose a floor</p>
-            <div className="mt-4 grid grid-cols-4 gap-2">
-              {[...elevatorMenu.floors].map((label, index) => ({ label, index })).reverse().map(({ label, index }) => {
-                const here = index === elevatorMenu.current;
-                const wide = label === "Roof" || label === "Lobby" || label.length > 5;
-                const name = elevatorMenu.floorNames?.[index];
-                return (
-                  <button
-                    key={`${index}-${label}`}
-                    type="button"
-                    disabled={here}
-                    title={name}
-                    onClick={() => rideElevator(index)}
-                    className={`relative rounded-xl border px-2 py-2 text-sm font-semibold tabular-nums ${
-                      wide ? "col-span-2" : ""
-                    } ${
-                      here
-                        ? "border-amber-300/60 bg-amber-300/15 text-amber-200"
-                        : "border-white/10 bg-white/5 text-white hover:bg-white/15"
-                    }`}
-                  >
-                    {label === "Roof" ? "Roof deck" : label}
-                    {index === elevatorMenu.desk ? (
-                      <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-amber-400" />
-                    ) : null}
-                    {elevatorMenu.markFloor === index ? (
-                      <span className="absolute -left-1 -top-1 h-2.5 w-2.5 rounded-full bg-rose-400" />
-                    ) : null}
-                  </button>
-                );
-              })}
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 p-4">
+          {elevatorMenu.floorNames ? (
+            <div className="flex max-h-[min(36rem,calc(100%-2rem))] w-[min(24rem,calc(100%-1rem))] flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#f4f7f8] text-[#14343a] shadow-2xl">
+              <div className="bg-[#14343a] px-5 py-3 text-white">
+                <p className="text-[0.6rem] uppercase tracking-[0.28em] text-teal-200">
+                  {venueBuilding?.name ?? "Hospital"}
+                </p>
+                <p className="text-lg font-semibold">Choose a floor</p>
+              </div>
+              <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
+                {[...elevatorMenu.floors].map((label, index) => ({ label, index })).reverse().map(({ label, index }) => {
+                  const here = index === elevatorMenu.current;
+                  const marked = elevatorMenu.markFloor === index;
+                  return (
+                    <button
+                      key={`${index}-${label}`}
+                      type="button"
+                      disabled={here}
+                      onClick={() => rideElevator(index)}
+                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left ${
+                        marked
+                          ? "bg-[#fde8e6] text-[#9b2c3a]"
+                          : here
+                            ? "bg-[#d7efec] text-[#0f766e]"
+                            : "bg-white hover:bg-[#e7f3f1]"
+                      }`}
+                    >
+                      <span className="w-16 shrink-0 font-semibold">{label === "Roof" ? "Roof" : label}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm">{elevatorMenu.floorNames?.[index]}</span>
+                      {marked ? <span className="text-xs font-semibold">Case</span> : null}
+                      {index === elevatorMenu.desk ? <span className="text-xs text-[#7d8f96]">Desk</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="border-t border-[#d7e3e6] px-4 py-3">
+                <p className="text-xs text-[#3d5560]">
+                  {elevatorMenu.markLabel ?? "Reception is on Lobby. The roof is the helipad."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    elevatorMenuRef.current = false;
+                    setElevatorMenu(null);
+                  }}
+                  className="mt-2 text-xs text-[#7d8f96] hover:text-[#14343a]"
+                >
+                  Stay here · Esc
+                </button>
+              </div>
             </div>
-            <p className="mt-3 text-xs text-slate-400">
-              {elevatorMenu.markLabel ? (
-                <>
-                  <span className="mr-1 inline-block h-2 w-2 rounded-full bg-rose-400" />
-                  {elevatorMenu.markLabel}
-                </>
-              ) : venueBuilding && venueRole(venueBuilding) === "hospital" ? (
-                <>
-                  <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />
-                  Reception · Lobby · roof has the helipad
-                </>
-              ) : (
-                <>
-                  <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />
-                  Your desk · floor {elevatorMenu.floors[elevatorMenu.desk]} · roof has the conference and break deck
-                </>
-              )}
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                elevatorMenuRef.current = false;
-                setElevatorMenu(null);
-              }}
-              className="mt-3 text-xs text-slate-400 hover:text-white"
-            >
-              Stay here · Esc
-            </button>
-          </div>
+          ) : (
+            <div className="w-80 rounded-2xl border border-white/15 bg-slate-950/95 p-5 shadow-2xl">
+              <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
+                {venueBuilding?.name ?? "Building"} · elevator
+              </p>
+              <p className="mt-1 text-lg font-semibold text-white">Choose a floor</p>
+              <div className="mt-4 grid grid-cols-4 gap-2">
+                {[...elevatorMenu.floors].map((label, index) => ({ label, index })).reverse().map(({ label, index }) => {
+                  const here = index === elevatorMenu.current;
+                  const wide = label === "Roof" || label === "Lobby" || label.length > 5;
+                  return (
+                    <button
+                      key={`${index}-${label}`}
+                      type="button"
+                      disabled={here}
+                      onClick={() => rideElevator(index)}
+                      className={`relative rounded-xl border px-2 py-2 text-sm font-semibold tabular-nums ${
+                        wide ? "col-span-2" : ""
+                      } ${
+                        here
+                          ? "border-amber-300/60 bg-amber-300/15 text-amber-200"
+                          : "border-white/10 bg-white/5 text-white hover:bg-white/15"
+                      }`}
+                    >
+                      {label === "Roof" ? "Roof deck" : label}
+                      {index === elevatorMenu.desk ? (
+                        <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-amber-400" />
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-xs text-slate-400">
+                <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />
+                Your desk · floor {elevatorMenu.floors[elevatorMenu.desk]} · roof has the conference and break deck
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  elevatorMenuRef.current = false;
+                  setElevatorMenu(null);
+                }}
+                className="mt-3 text-xs text-slate-400 hover:text-white"
+              >
+                Stay here · Esc
+              </button>
+            </div>
+          )}
         </div>
       ) : null}
 

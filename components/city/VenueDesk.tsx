@@ -90,10 +90,18 @@ export function VenueDesk({
     ) : (
       <FlavorDesk building={building} state={state} role={role} />
     );
-  return <DeskFrame onClose={onClose}>{body}</DeskFrame>;
+  return <DeskFrame wide={role === "hospital"} onClose={onClose}>{body}</DeskFrame>;
 }
 
-function DeskFrame({ onClose, children }: { onClose?: () => void; children: ReactNode }) {
+function DeskFrame({
+  onClose,
+  wide,
+  children,
+}: {
+  onClose?: () => void;
+  wide?: boolean;
+  children: ReactNode;
+}) {
   return (
     <div
       className="pointer-events-auto absolute inset-0 z-40 grid place-items-center p-4"
@@ -102,7 +110,10 @@ function DeskFrame({ onClose, children }: { onClose?: () => void; children: Reac
         onClose?.();
       }}
     >
-      <div className="w-[min(26rem,calc(100%-2rem))]" onClick={(event) => event.stopPropagation()}>
+      <div
+        className={wide ? "w-[min(54rem,calc(100%-1.5rem))]" : "w-[min(26rem,calc(100%-2rem))]"}
+        onClick={(event) => event.stopPropagation()}
+      >
         {children}
       </div>
     </div>
@@ -626,87 +637,159 @@ function HospitalDesk({
   };
 
   const step = !onDuty ? 0 : !currentCase ? 1 : 2;
-  const steps = ["Clock in", "Page patient", "Treat at bedside", "Clock out"];
+  const steps = [
+    { n: "01", label: "Clock in" },
+    { n: "02", label: "Page" },
+    { n: "03", label: "Treat" },
+    { n: "04", label: "Clock out" },
+  ];
+  const xp = live.doctorCareer?.xp ?? 0;
+  const xpSpan = next ? next.xp - rank.xp : 1;
+  const xpHave = next ? Math.max(0, xp - rank.xp) : 1;
 
   return (
-    <div className="rounded-2xl border border-teal-300/35 bg-[#0d181a]/94 p-5 text-center shadow-2xl backdrop-blur">
-      <p className="text-[0.65rem] uppercase tracking-[0.28em] text-teal-300">Hospital Reception</p>
-      <p className="mt-1 text-lg font-semibold text-white">{building.name}</p>
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-1 text-[0.6rem] uppercase tracking-wide">
-        {steps.map((label, i) => (
-          <span
-            key={label}
-            className={`rounded-full px-2 py-0.5 ${
-              i === step ? "bg-teal-400 text-[#0a181a]" : i < step ? "bg-teal-400/20 text-teal-200" : "bg-white/5 text-slate-500"
-            }`}
-          >
-            {label}
+    <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#f4f7f8] text-[#14343a] shadow-2xl">
+      <div className="flex items-center justify-between gap-3 bg-[#14343a] px-5 py-3 text-white">
+        <div className="flex items-center gap-3">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-white text-2xl font-black leading-none text-[#c0392b]">
+            +
           </span>
-        ))}
+          <div>
+            <p className="text-[0.6rem] uppercase tracking-[0.28em] text-teal-200">Riverside General</p>
+            <p className="text-base font-semibold leading-tight">{building.name}</p>
+          </div>
+        </div>
+        <p className="text-right text-[0.65rem] uppercase tracking-wide text-white/60">
+          Nurse station
+          <br />
+          Lobby reception
+        </p>
       </div>
-      <p className="mt-2 text-sm text-slate-300">
-        {onDuty
-          ? currentCase
-            ? `${currentCase.patientName} is waiting on ${currentCase.floorName}. Ride the elevator and press E at the glowing bed.`
-            : `On duty as ${rank.label}. Page the next patient when you're ready.`
-          : "Clock in to work as a doctor — diagnose and treat patients across the wards."}
-      </p>
-      {live.doctorCareer ? (
-        <p className="mt-2 text-sm font-semibold text-teal-200">
-          {rank.label} · {live.doctorCareer.patientsTreated} patients · {formatDollars(live.doctorCareer.totalEarnings)} earned
-        </p>
-      ) : null}
-      {next ? (
-        <p className="mt-1 text-xs text-slate-400">
-          Next rank {next.label} at {next.xp} XP ({Math.max(0, next.xp - (live.doctorCareer?.xp ?? 0))} to go)
-        </p>
-      ) : null}
-      {rank.payMult > 1 ? (
-        <p className="mt-1 text-xs text-emerald-200">Case pay ×{Number(rank.payMult.toFixed(2))} at this rank</p>
-      ) : null}
-      {!onDuty ? (
-        <button
-          type="button"
-          onClick={start}
-          className="mt-4 w-full rounded-xl bg-teal-400 px-4 py-2.5 text-sm font-semibold text-[#0a181a]"
-        >
-          Clock in as doctor
-        </button>
-      ) : (
-        <div className="mt-4 grid gap-2">
-          {currentCase ? (
-            <p className="rounded-xl border border-teal-400/25 bg-teal-500/10 px-3 py-2 text-sm text-teal-100">
-              Active case · {currentCase.patientName} · {currentCase.bedLabel} · {formatDollars(currentCase.reward)}
-            </p>
+
+      <div className="grid gap-4 p-4 md:grid-cols-[16rem_1fr]">
+        <div className="rounded-2xl bg-[#14343a] p-4 text-white">
+          <p className="text-[0.6rem] uppercase tracking-[0.22em] text-teal-200">Credentials</p>
+          <p className="mt-1 text-lg font-semibold">{onDuty ? rank.label : "Off duty"}</p>
+          <p className="mt-2 text-sm text-white/70">
+            {live.doctorCareer
+              ? `${live.doctorCareer.patientsTreated} treated · ${live.doctorCareer.perfectCases} perfect · ${formatDollars(live.doctorCareer.totalEarnings)}`
+              : "No shifts on record yet."}
+          </p>
+          {next ? (
+            <div className="mt-3">
+              <div className="mb-1 flex justify-between text-[0.65rem] text-white/60">
+                <span>{xp} XP</span>
+                <span>{next.label}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-teal-300"
+                  style={{ width: `${Math.min(100, (xpHave / xpSpan) * 100)}%` }}
+                />
+              </div>
+            </div>
           ) : (
-            <button
-              type="button"
-              onClick={page}
-              className="w-full rounded-xl bg-teal-400 px-4 py-2.5 text-sm font-semibold text-[#0a181a]"
-            >
-              Page next patient
-            </button>
+            <p className="mt-3 text-xs text-teal-200">Chief of Medicine</p>
           )}
-          <button
-            type="button"
-            onClick={end}
-            className="w-full rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white"
-          >
-            Clock out
-          </button>
+          {rank.payMult > 1 ? (
+            <p className="mt-2 text-xs text-emerald-200">Case pay ×{Number(rank.payMult.toFixed(2))}</p>
+          ) : null}
+          <ol className="mt-4 space-y-1.5">
+            {steps.map((item, i) => (
+              <li
+                key={item.n}
+                className={`flex items-center gap-2 rounded-lg px-2 py-1 text-xs ${
+                  i === step ? "bg-teal-400 text-[#0c2424]" : i < step ? "text-teal-100" : "text-white/35"
+                }`}
+              >
+                <span className="font-mono">{item.n}</span>
+                {item.label}
+              </li>
+            ))}
+          </ol>
         </div>
-      )}
-      {summary ? (
-        <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-3 text-left text-sm text-slate-200">
-          <p className="font-semibold text-white">Hospital shift complete</p>
-          <p className="mt-1">Rank: {summary.rankLabel}</p>
-          <p>Patients treated: {summary.patients}</p>
-          <p>Money earned: {formatDollars(summary.moneyEarned)}</p>
-          <p>Doctor XP: +{summary.xpEarned}</p>
+
+        <div className="flex flex-col">
+          <p className="text-sm text-[#3d5560]">
+            {onDuty
+              ? currentCase
+                ? "Your patient is admitted. Take the elevator to the marked floor and open the chart at the bedside."
+                : "The board is clear. Page the next admission when you are ready."
+              : "Clock in to cover the wards. Interns start on the floor; surgery and ICU open as you rank up."}
+          </p>
+
+          {currentCase ? (
+            <div className="mt-3 rounded-2xl border border-[#d7e3e6] bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[0.6rem] uppercase tracking-[0.18em] text-[#7d8f96]">Active admission</p>
+                  <p className="text-xl font-semibold">{currentCase.patientName}</p>
+                  <p className="text-sm text-[#3d5560]">
+                    {currentCase.age} yrs · {currentCase.bedLabel}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-[#fde8e6] px-3 py-2 text-right">
+                  <p className="text-[0.6rem] uppercase tracking-wide text-[#9b2c3a]">Floor</p>
+                  <p className="text-sm font-semibold text-[#9b2c3a]">{currentCase.floorName}</p>
+                </div>
+              </div>
+              <p className="mt-3 text-sm text-[#3d5560]">
+                Follow the red cross over the bed. Press E to open the chart. Payout {formatDollars(currentCase.reward)}.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[#3d5560] sm:grid-cols-3">
+              {["Lobby", "ER bays", "MRI / X-ray", "Operating rooms", "Private rooms", "Helipad"].map((item) => (
+                <div key={item} className="rounded-xl bg-white px-3 py-2">
+                  {item}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-4 grid gap-2">
+            {!onDuty ? (
+              <button
+                type="button"
+                onClick={start}
+                className="rounded-xl bg-[#0f766e] px-4 py-3 text-sm font-semibold text-white"
+              >
+                Clock in as doctor
+              </button>
+            ) : (
+              <>
+                {currentCase ? null : (
+                  <button
+                    type="button"
+                    onClick={page}
+                    className="rounded-xl bg-[#0f766e] px-4 py-3 text-sm font-semibold text-white"
+                  >
+                    Page next patient
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={end}
+                  className="rounded-xl border border-[#c5d4d8] bg-white px-4 py-2.5 text-sm font-semibold text-[#14343a]"
+                >
+                  Clock out
+                </button>
+              </>
+            )}
+          </div>
+
+          {summary ? (
+            <div className="mt-3 rounded-2xl bg-[#14343a] p-3 text-sm text-white">
+              <p className="font-semibold">Shift complete · {summary.rankLabel}</p>
+              <p className="mt-1 text-white/80">
+                {summary.patients} patients · {formatDollars(summary.moneyEarned)} · +{summary.xpEarned} XP ·{" "}
+                {summary.durationMinutes} min
+              </p>
+            </div>
+          ) : null}
+          {note ? <p className="mt-3 text-sm font-medium text-[#0f766e]">{note}</p> : null}
         </div>
-      ) : null}
-      {note ? <p className="mt-3 text-sm text-teal-200">{note}</p> : null}
-      <p className="mt-3 text-[0.65rem] text-slate-500">Elevator: Lobby · ER · Imaging · Surgery · wards · Roof helipad</p>
+      </div>
     </div>
   );
 }
