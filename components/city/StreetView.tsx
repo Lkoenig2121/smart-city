@@ -338,7 +338,7 @@ export function StreetView({
     const prompt = policeCallPrompt(call, { x: pos.x, y: pos.y });
     if (!prompt) return false;
     if (prompt.next === "completed") {
-      const next = reportPoliceCallDone(state);
+      const next = reportPoliceCallDone(state, { x: pos.x, y: pos.y });
       if (typeof next === "string") {
         setPoliceNote(next);
         return true;
@@ -348,7 +348,9 @@ export function StreetView({
       worldRef.current?.setSuspiciousActivity(null);
       setPlayer(next);
       setPoliceNote(
-        `${call.title} done · return to the station and click Finish for ${formatDollars(call.reward)}`,
+        call.kind === "lost_resident"
+          ? `${call.residentName ?? "The resident"} heads inside. Return to the station and click Finish for ${formatDollars(call.reward)}`
+          : `${call.title} done · return to the station and click Finish for ${formatDollars(call.reward)}`,
       );
       setPolicePrompt(null);
       setWaypoint(readPhone().waypoint);

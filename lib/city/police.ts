@@ -403,6 +403,23 @@ function roadBeside(state: CityState, building: Building | undefined): Tile | nu
   return best;
 }
 
+function residentDoorTile(state: CityState) {
+  const houses = [...state.buildings.values()].filter(
+    (building) => building.kind === "house" || venueRole(building) === "house",
+  );
+  let best: { x: number; y: number; score: number } | null = null;
+  for (const house of houses) {
+    const x = house.origin.x + Math.floor(house.width / 2);
+    const y = house.origin.y + house.depth;
+    const dx = x - LOST_RESIDENT_MEETUP.x;
+    const dy = y - LOST_RESIDENT_MEETUP.y;
+    const score = dx * dx + dy * dy;
+    if (score < 16) continue;
+    if (!best || score < best.score) best = { x, y, score };
+  }
+  return best;
+}
+
 function findBuilding(state: CityState, test: (b: Building) => boolean) {
   for (const building of state.buildings.values()) if (test(building)) return building;
   return undefined;
@@ -421,10 +438,11 @@ function pickOne<T>(list: readonly T[]): T {
 function planCall(def: PoliceCallDef, state: CityState | undefined, player: PlayerState): Partial<PoliceCall> | string {
   if (!SCENE_DRIVEN_CALLS.includes(def.kind)) {
     if (def.kind === "lost_resident") {
+      const home = (state && residentDoorTile(state)) ?? LOST_RESIDENT_HOME;
       return {
         residentName: pickOne(LOST_RESIDENT_NAMES),
-        destTileX: LOST_RESIDENT_HOME.x,
-        destTileY: LOST_RESIDENT_HOME.y,
+        destTileX: home.x,
+        destTileY: home.y,
       };
     }
     return {};
@@ -714,6 +732,12 @@ export function policeObjective(call: PoliceCall | null, ctx: PoliceObjectiveCon
       if (call.phase === "stopped") return "Suspect boxed in — step out (E) and make the arrest.";
       if (POLICE_PROMPT_PHASES.includes(call.phase)) return "Finish the arrest (E).";
       return "Lights on (L) and follow the GPS to the robbery.";
+    case "lost_resident": {
+      const who = call.residentName ?? "the resident";
+      if (call.phase === "arrived") return `Talk to ${who} (E), then walk them home.`;
+      if (call.phase === "resolving") return `Walk ${who} to the green pin at the front door, then press E.`;
+      return `Find ${who} downtown.`;
+    }
     default:
       if (POLICE_PROMPT_PHASES.includes(call.phase)) return "Work the scene — press E at the marker.";
       return `Follow the GPS to ${call.locationLabel}.`;
@@ -823,14 +847,17 @@ function markFieldWorkDone(state: CityState, player: PlayerState) {
  * Field work is done — no pay yet. Waypoint returns to the station so the
  * officer can click Finish at the desk and collect the reward.
  */
-export function reportPoliceCallDone(state: CityState): PlayerState | string {
+export function reportPoliceCallDone(
+  state: CityState,
+  playerTile?: { x: number; y: number },
+): PlayerState | string {
   const player = readPlayer();
   const call = player.policeCall;
   if (!call) return "No active call.";
   if (!player.policeShift) return "You are not on a police shift.";
   if (call.phase === "completed") return player;
 
-  const prompt = policeCallPrompt(call);
+  const prompt = policeCallPrompt(call, playerTile);
   if (prompt?.next !== "completed") {
     return "Keep working the call.";
   }
