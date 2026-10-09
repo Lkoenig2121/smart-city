@@ -1571,17 +1571,17 @@ function buildPool(building: Building, state: CityState, realCity: boolean): Lod
     addRoomTelevision(group, disposables, { mount: "wall", scale: 2.2, at: { x: 0, y: 4.3, z: minZ + 0.92 } }),
     addRoomTelevision(group, disposables, {
       mount: "pole",
-      scale: 1.1,
-      at: { x: minX + 0.9, y: 2.6, z: 4, yaw: Math.PI / 2 },
+      scale: 1.85,
+      at: { x: minX + 0.9, y: 2.95, z: 4, yaw: Math.PI / 2 },
     }),
     addRoomTelevision(group, disposables, {
       mount: "pole",
-      scale: 1.1,
-      at: { x: maxX - 0.9, y: 2.6, z: 4, yaw: -Math.PI / 2 },
+      scale: 1.85,
+      at: { x: maxX - 0.9, y: 2.95, z: 4, yaw: -Math.PI / 2 },
     }),
   ];
-  blockers.push({ minX: minX + 0.45, maxX: minX + 1.0, minZ: 3.75, maxZ: 4.25 });
-  blockers.push({ minX: maxX - 1.0, maxX: maxX - 0.45, minZ: 3.75, maxZ: 4.25 });
+  blockers.push({ minX: minX + 0.45, maxX: minX + 1.15, minZ: 1.85, maxZ: 6.15 });
+  blockers.push({ minX: maxX - 1.15, maxX: maxX - 0.45, minZ: 1.85, maxZ: 6.15 });
   const tv: RoomTv = {
     update: (dt, s) => {
       for (const screen of screens) screen.update(dt, s);
