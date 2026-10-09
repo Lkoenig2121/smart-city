@@ -56,6 +56,8 @@ import {
 import {
   advancePoliceCall,
   applyPoliceSceneEvent,
+  cancelPoliceCall,
+  endPoliceShift,
   finishPoliceCall,
   isPoliceCruiser,
   nearPoliceCallObjective,
@@ -314,6 +316,7 @@ export function StreetView({
   const [policePrompt, setPolicePrompt] = useState<string | null>(null);
   const [policeNote, setPoliceNote] = useState<string | null>(null);
   const [policeObjectiveText, setPoliceObjective] = useState<string | null>(null);
+  const [endShiftConfirm, setEndShiftConfirm] = useState(false);
   const [waypoint, setWaypoint] = useState<PhoneWaypoint | null>(
     () => readPhone().waypoint,
   );
@@ -419,7 +422,8 @@ export function StreetView({
     pickingStop ||
     pickingRoom ||
     roomCustomize ||
-    riding;
+    riding ||
+    endShiftConfirm;
   useEffect(() => {
     if (!interior) return;
     // Hide street arrows indoors, but keep the phone / minimap pin so the
@@ -2077,6 +2081,64 @@ export function StreetView({
         className={`absolute inset-0 h-full w-full ${inside ? "" : "invisible pointer-events-none"}`}
         onClick={onCanvasClick}
       />
+      {endShiftConfirm ? (
+        <div className="absolute inset-0 z-50 grid place-items-center bg-black/50 p-6">
+          <div className="w-[min(20rem,calc(100%-2rem))] rounded-2xl border border-white/15 bg-[#0e1520]/96 p-5 text-center shadow-2xl">
+            <p className="text-lg font-semibold text-white">Are you sure?</p>
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const me = readPlayer();
+                  if (me.policeCall?.phase === "completed") finishPoliceCall(state);
+                  else if (me.policeCall) cancelPoliceCall();
+                  const next = endPoliceShift(state);
+                  setEndShiftConfirm(false);
+                  if (typeof next === "string") {
+                    setPoliceNote(next);
+                    return;
+                  }
+                  const updated = "summary" in next ? next.player : next;
+                  setPlayer(updated);
+                  setWaypoint(readPhone().waypoint);
+                  setPoliceNote(
+                    "summary" in next
+                      ? `Shift ended · ${formatDollars(next.summary.moneyEarned)} earned`
+                      : "Shift ended.",
+                  );
+                  setPoliceObjective(null);
+                  setPolicePrompt(null);
+                  setPoliceLights(false);
+                  const world = worldRef.current;
+                  if (!world) return;
+                  world.setPoliceDuty(false);
+                  world.setPoliceLights(false);
+                  world.setPoliceMission(null);
+                  world.setPoliceIncident(null);
+                  world.setSuspiciousActivity(null);
+                  world.setLostResidentEscort(null);
+                  if (world.inPoliceCruiser) {
+                    world.stopDriving();
+                    drivingRef.current = false;
+                    setDriving(false);
+                  }
+                }}
+                className="flex-1 rounded-xl bg-green-500 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => setEndShiftConfirm(false)}
+                className="flex-1 rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {failed ? (
         <div className="absolute inset-0 grid place-items-center bg-[#0b1420] p-6 text-center">
           <div className="max-w-sm">
@@ -2184,6 +2246,13 @@ export function StreetView({
                   C cruiser · L lights · M phone → Police
                 </p>
               ) : null}
+              <button
+                type="button"
+                onClick={() => setEndShiftConfirm(true)}
+                className="mt-2 w-full rounded-lg bg-yellow-400 px-3 py-1.5 text-xs font-semibold text-[#1a1206]"
+              >
+                End shift
+              </button>
             </div>
           ) : null}
         </div>
