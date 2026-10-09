@@ -756,6 +756,14 @@ export class StreetWorld {
     return this.missionScene.note;
   }
 
+  /** Live tile of the pursuit suspect, once the chase car is on the road. */
+  get suspectTracker(): { x: number; y: number } | null {
+    const call = this.missionCall;
+    if (!call || call.kind !== "pursuit") return null;
+    if (call.phase === "accepted" || call.phase === "traveling" || call.phase === "completed") return null;
+    return this.missionScene.trackedCar();
+  }
+
   get inPoliceCruiser() {
     return this.drivingId === POLICE_CRUISER_ID && Boolean(this.drive);
   }
@@ -998,6 +1006,7 @@ export class StreetWorld {
       ...this.missionScene.update(dt, this.missionCall, {
         x: me.x,
         z: me.z,
+        yaw: this.drive?.yaw ?? this.controls.yaw,
         driving: this.isDriving,
         inCruiser: this.inPoliceCruiser,
         lights: this.policeOnDuty && this.policeLightsOn,

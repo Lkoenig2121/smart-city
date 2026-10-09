@@ -5,6 +5,7 @@ import type { Building, CityState } from "@/lib/city/types";
 import { lodgingUse, type LodgingRoom, type LodgingZone } from "@/lib/city/lodging";
 import type { Blocker } from "./buildCity";
 import { MeshBuilder } from "./meshBuilder";
+import { buildStreetPerson, disposeObject3D } from "./streetPerson";
 import { addRoomTelevision, type RoomTv } from "./roomTv";
 import { resolveRoomStyle } from "@/lib/city/furnishings";
 import { readPlayer } from "@/lib/city/player";
@@ -107,7 +108,7 @@ function buildLobby(building: Building): LodgingInterior {
   const floorB = new MeshBuilder();
   const wallB = new MeshBuilder();
   const trimB = new MeshBuilder();
-  void lodgingUse(building);
+  const hotel = lodgingUse(building) === "hotel";
 
   const minX = -16;
   const maxX = 16;
@@ -160,6 +161,8 @@ function buildLobby(building: Building): LodgingInterior {
   wallB.box(-6.2, deskZ0 + 0.15, 6.2, deskZ1 - 0.1, 1.15, 1.28, ink);
   blockers.push({ minX: -6.4, maxX: 6.4, minZ: deskZ0, maxZ: deskZ1 });
 
+  const clerkUpdate = hotel ? addFrontDeskClerk(group, disposables) : null;
+
   const deskGeo = new THREE.PlaneGeometry(8.4, 2.4);
   const deskMat = new THREE.MeshStandardMaterial({
     color: "#111",
@@ -208,10 +211,81 @@ function buildLobby(building: Building): LodgingInterior {
     windowMesh: null,
     windowAnchor: null,
     slider: null,
+    update: clerkUpdate ? (dt) => clerkUpdate(dt) : undefined,
     dispose: () => {
       for (const item of disposables) item.dispose();
       deskMat.dispose();
     },
+  };
+}
+
+/** Green jacket, khaki pants, and a pillbox cap with a gold band. */
+function dressBellhop(clerk: THREE.Group) {
+  const green = new THREE.MeshStandardMaterial({ color: "#1c7a38", roughness: 0.62 });
+  const gold = new THREE.MeshStandardMaterial({ color: "#e2c15a", metalness: 0.6, roughness: 0.32 });
+
+  let head: THREE.Mesh | null = null;
+  for (const child of clerk.children) {
+    if (!(child instanceof THREE.Mesh)) continue;
+    if (child.position.y > 1.62) child.visible = false;
+    else if (child.position.y > 1.5 && child.position.y < 1.62) head = child;
+  }
+  if (!head) return;
+
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.215, 0.13, 14), green);
+  cap.position.y = 0.2;
+  cap.castShadow = true;
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.222, 0.222, 0.032, 14), gold);
+  band.position.y = 0.145;
+  head.add(cap, band);
+
+  for (let i = 0; i < 4; i++) {
+    const button = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), gold);
+    button.position.set(0, 1.22 - i * 0.11, -0.23);
+    clerk.add(button);
+  }
+}
+
+/**
+ * Starts on the staff side of the counter, left of the sign, and idles:
+ * a short step along the desk and a small look around.
+ */
+function addFrontDeskClerk(group: THREE.Group, disposables: Array<{ dispose: () => void }>) {
+  const clerk = buildStreetPerson({
+    shirt: "#1c7a38",
+    pants: "#c4a36a",
+    hair: "#1a120c",
+    shoes: "#1a1208",
+    skin: "#e4c4a4",
+  });
+  dressBellhop(clerk);
+  const homeX = -5.35;
+  const homeZ = -8.15;
+  clerk.position.set(homeX, 0, homeZ);
+  clerk.rotation.y = Math.PI;
+  clerk.name = "front-desk";
+  group.add(clerk);
+  disposables.push({ dispose: () => disposeObject3D(clerk) });
+
+  let head: THREE.Object3D | null = null;
+  for (const child of clerk.children) {
+    if (child instanceof THREE.Mesh && child.position.y > 1.5 && child.position.y < 1.62) {
+      head = child;
+      break;
+    }
+  }
+
+  let time = 0;
+  return (dt: number) => {
+    time += dt;
+    clerk.position.x = homeX + Math.sin(time * 0.32) * 0.55;
+    clerk.position.z = homeZ + Math.sin(time * 0.21) * 0.08;
+    clerk.rotation.y = Math.PI + Math.sin(time * 0.48) * 0.22;
+    clerk.rotation.z = Math.sin(time * 0.9) * 0.02;
+    if (head) {
+      head.rotation.y = Math.sin(time * 0.65 + 0.6) * 0.4;
+      head.rotation.x = Math.sin(time * 0.4) * 0.07;
+    }
   };
 }
 

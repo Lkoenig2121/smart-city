@@ -181,6 +181,7 @@ export function StreetView({
   const positionRef = useRef<{ x: number; y: number; yaw: number } | null>(
     null,
   );
+  const suspectRef = useRef<{ x: number; y: number } | null>(null);
   const atGateRef = useRef(false);
   const lodgingDoorRef = useRef<Building | null>(null);
   const subwayDoorRef = useRef<Building | null>(null);
@@ -1041,6 +1042,9 @@ export function StreetView({
         if (arrived) setPlayer(arrived);
         const callNow = readPlayer().policeCall;
         world.setPoliceMission(callNow);
+        const track = world.suspectTracker;
+        suspectRef.current = track;
+        if (track) world.setWaypoint({ x: track.x, y: track.y, label: "Suspect tracker" });
         const prompt = callNow ? policeCallPrompt(callNow, { x: pos.x, y: pos.y }) : null;
         const near =
           callNow &&
@@ -3576,6 +3580,7 @@ export function StreetView({
           positionRef={positionRef}
           waypoint={waypoint}
           driving={driving}
+          trackerRef={suspectRef}
         />
       ) : null}
     </div>

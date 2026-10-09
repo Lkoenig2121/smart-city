@@ -150,7 +150,7 @@ export const POLICE_CALL_CATALOG: PoliceCallDef[] = [
   {
     kind: "pursuit",
     title: "Pursuit",
-    blurb: "Armed robbery suspect fleeing by car. Chase them down and box them in.",
+    blurb: "Armed robbery suspect fleeing by car. A tracker stays on them — after 10 seconds, get within 10 m to stop the car.",
     locationLabel: "Robbery in progress",
     tileX: 0,
     tileY: 0,
@@ -727,9 +727,9 @@ export function policeObjective(call: PoliceCall | null, ctx: PoliceObjectiveCon
       return `Drive to the pickup to meet ${call.vipName ?? "the VIP"}'s limo.`;
     case "pursuit":
       if (call.phase === "pursuing") {
-        return `Chase the ${call.vehicleModel ?? "suspect"} (${call.plate ?? "?"}) — stay on their bumper to box them in${note}`;
+        return `Follow the tracker on the ${call.vehicleModel ?? "suspect"} (${call.plate ?? "?"}). After 10 seconds, get within 10 m to stop them${note}`;
       }
-      if (call.phase === "stopped") return "Suspect boxed in — step out (E) and make the arrest.";
+      if (call.phase === "stopped") return "Suspect stopped — step out (E) and make the arrest.";
       if (POLICE_PROMPT_PHASES.includes(call.phase)) return "Finish the arrest (E).";
       return "Lights on (L) and follow the GPS to the robbery.";
     case "lost_resident": {

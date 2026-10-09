@@ -17,12 +17,15 @@ export function StreetMinimap({
   positionRef,
   waypoint = null,
   driving = false,
+  trackerRef = null,
 }: {
   state: CityState;
   positionRef: React.RefObject<{ x: number; y: number; yaw: number } | null>;
   waypoint?: PhoneWaypoint | null;
   /** When true, you-are-here is a white car marker; otherwise yellow on foot. */
   driving?: boolean;
+  /** Live pursuit suspect, in tile coordinates. */
+  trackerRef?: React.RefObject<{ x: number; y: number } | null> | null;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -30,6 +33,8 @@ export function StreetMinimap({
   const sizeRef = useRef(240);
   const waypointRef = useRef(waypoint);
   waypointRef.current = waypoint;
+  const liveTrackerRef = useRef(trackerRef);
+  liveTrackerRef.current = trackerRef;
   const drivingRef = useRef(driving);
   drivingRef.current = driving;
 
@@ -170,6 +175,26 @@ export function StreetMinimap({
               ctx.fill();
               ctx.strokeStyle = "rgba(8, 20, 32, 0.8)";
               ctx.lineWidth = 1.3;
+              ctx.stroke();
+            }
+
+            const track = liveTrackerRef.current?.current;
+            if (track) {
+              const tx = track.x * cell;
+              const ty = track.y * cell + offsetY;
+              const pulse = 1 + Math.sin(performance.now() / 160) * 0.16;
+              const r = Math.max(5.2, cell * 1.35) * pulse;
+              ctx.beginPath();
+              ctx.arc(tx, ty, r + 2.2, 0, Math.PI * 2);
+              ctx.strokeStyle = "rgba(255, 70, 60, 0.85)";
+              ctx.lineWidth = 1.6;
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.arc(tx, ty, r, 0, Math.PI * 2);
+              ctx.fillStyle = "#ff3b30";
+              ctx.fill();
+              ctx.strokeStyle = "#fff";
+              ctx.lineWidth = 1.4;
               ctx.stroke();
             }
 

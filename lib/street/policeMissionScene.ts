@@ -3,6 +3,7 @@ import type { CityState } from "@/lib/city/types";
 import type { PoliceCall } from "@/lib/city/player";
 import type { PoliceSceneEvent } from "@/lib/city/police";
 import type { OwnedVehicle, VehicleCategory } from "@/lib/city/vehicles";
+import { nearestRoad } from "@/lib/simulation/traffic/pathfinding";
 import { TILE } from "./buildCity";
 import { disposeCarMesh, makePlayerCarMesh } from "./playerCar";
 import { buildStreetPerson, disposeObject3D } from "./streetPerson";
@@ -10,6 +11,7 @@ import { buildStreetPerson, disposeObject3D } from "./streetPerson";
 export interface MissionPlayer {
   x: number;
   z: number;
+  yaw: number;
   driving: boolean;
   inCruiser: boolean;
   lights: boolean;
@@ -22,8 +24,10 @@ const CURB = 3.4;
 const SPOT_RANGE = 36;
 const CHECKPOINT_RANGE = 15;
 const PULL_OVER_RANGE = 16;
-const BOX_IN_RANGE = 10;
 const LOSE_RANGE = 170;
+/** Pursuit: after this long on the chase, closing to CATCH_RANGE stops the car. */
+const CATCH_AFTER = 10;
+const CATCH_RANGE = 10;
 const VIP_GAP = 13;
 
 function npcCar(id: string, category: VehicleCategory, color: string, plate: string, tint = false): OwnedVehicle {
@@ -79,13 +83,21 @@ class RoadDriver {
   speed = 0;
   lane = LANE;
   yaw = 0;
+  /** True while the nose is still sweeping through a corner. */
+  turning = false;
   readonly pos = new THREE.Vector3();
+  private turnRate: number;
+  /** Chance to keep going straight at an intersection instead of juking. */
+  private holdStraight: number;
 
   constructor(
     private state: CityState,
     start: Tile,
     private choose: (options: Tile[], at: Tile) => Tile,
+    opts?: { turnRate?: number; holdStraight?: number },
   ) {
+    this.turnRate = opts?.turnRate ?? 7;
+    this.holdStraight = opts?.holdStraight ?? 0;
     this.from = start;
     this.to = this.pick(start, null);
     this.place();
@@ -111,7 +123,14 @@ class RoadDriver {
       options.push(n);
     }
     if (!options.length) return came ?? at;
-    return options.length === 1 ? options[0] : this.choose(options, at);
+    if (options.length === 1) return options[0];
+    if (came && this.holdStraight > 0) {
+      const dx = at.x - came.x;
+      const dy = at.y - came.y;
+      const straight = options.find((o) => o.x === at.x + dx && o.y === at.y + dy);
+      if (straight && Math.random() < this.holdStraight) return straight;
+    }
+    return this.choose(options, at);
   }
 
   step(dt: number) {
@@ -125,7 +144,16 @@ class RoadDriver {
     this.place();
     const dx = this.to.x - this.from.x;
     const dy = this.to.y - this.from.y;
-    if (dx || dy) this.yaw = turnToward(this.yaw, yawToward(dx, dy), dt * 7);
+    if (dx || dy) {
+      const target = yawToward(dx, dy);
+      let err = target - this.yaw;
+      while (err > Math.PI) err -= Math.PI * 2;
+      while (err < -Math.PI) err += Math.PI * 2;
+      this.turning = Math.abs(err) > 0.4;
+      this.yaw = turnToward(this.yaw, target, dt * this.turnRate);
+    } else {
+      this.turning = false;
+    }
   }
 
   private place() {
@@ -162,7 +190,6 @@ export class PoliceMissionScene {
   private beaconKey = "";
   private time = 0;
   private pullTimer = 0;
-  private boxTimer = 0;
   private lostTimer = 0;
   private chaseTime = 0;
   private stopping = false;
@@ -195,7 +222,6 @@ export class PoliceMissionScene {
     this.removeBeacon();
     this.callId = null;
     this.pullTimer = 0;
-    this.boxTimer = 0;
     this.lostTimer = 0;
     this.chaseTime = 0;
     this.stopping = false;
@@ -300,7 +326,16 @@ export class PoliceMissionScene {
       }
     }
     const tile = { x: Math.floor(at.x), y: Math.floor(at.z) };
-    const driver = moving ? new RoadDriver(this.state, tile, (opts) => this.chooseTurn(call, opts)) : null;
+    const pursuit = call.kind === "pursuit";
+    const driver = moving
+      ? new RoadDriver(this.state, tile, (opts) => this.chooseTurn(call, opts), {
+          // Pursuit corners sweep instead of snapping 90° at every intersection.
+          turnRate: pursuit ? 1.55 : 3.2,
+          holdStraight: pursuit ? 0.9 : 0.5,
+        })
+      : null;
+    if (driver && pursuit) driver.speed = 12;
+    if (pursuit) this.addTracker(mesh);
     if (driver) {
       mesh.position.copy(driver.pos);
       mesh.rotation.y = driver.yaw;
@@ -377,6 +412,25 @@ export class PoliceMissionScene {
     this.car = null;
   }
 
+  /** A road tile a few car lengths ahead, so the suspect appears in view. */
+  private spawnPointAhead(player: MissionPlayer) {
+    const fx = -Math.sin(player.yaw);
+    const fz = -Math.cos(player.yaw);
+    let found: Tile | null = null;
+    for (let step = 2; step <= 4; step++) {
+      const tx = Math.floor(player.x / TILE + fx * step);
+      const tz = Math.floor(player.z / TILE + fz * step);
+      const tile = this.state.tiles[tz]?.[tx];
+      if (tile?.road || tile?.bridge) found = { x: tx, y: tz };
+    }
+    if (!found) {
+      const near = nearestRoad(this.state, Math.floor(player.x / TILE), Math.floor(player.z / TILE));
+      if (near) found = { x: near.x, y: near.y };
+    }
+    const tile = found ?? { x: Math.floor(player.x / TILE), y: Math.floor(player.z / TILE) };
+    return { x: tile.x + 0.5, z: tile.y + 0.5 };
+  }
+
   private roadYaw(tile: Tile) {
     const road = (x: number, y: number) => Boolean(this.state.tiles[y]?.[x]?.road);
     if (road(tile.x, tile.y - 1) || road(tile.x, tile.y + 1)) return 0;
@@ -385,8 +439,43 @@ export class PoliceMissionScene {
 
   private playerPos = { x: 0, z: 0 };
 
+  /** Roof mast plus a red column so the fleeing car stays visible. */
+  private addTracker(mesh: THREE.Group) {
+    const mast = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.035, 0.035, 0.42, 6),
+      new THREE.MeshStandardMaterial({ color: "#1a1a1a", metalness: 0.4, roughness: 0.5 }),
+    );
+    mast.position.set(0, 1.12, 0.15);
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 12, 8),
+      new THREE.MeshStandardMaterial({ color: "#ff3b30", emissive: "#ff2018", emissiveIntensity: 2.2 }),
+    );
+    bulb.position.set(0, 1.38, 0.15);
+    bulb.name = "tracker";
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.55, 22, 14, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: "#ff3344",
+        transparent: true,
+        opacity: 0.22,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    beam.position.y = 12;
+    beam.name = "tracker-beam";
+    mesh.add(mast, bulb, beam);
+  }
+
+  /** Tile position of the mission car, for the minimap tracker. */
+  trackedCar(): { x: number; y: number } | null {
+    const mesh = this.car?.mesh;
+    if (!mesh) return null;
+    return { x: mesh.position.x / TILE, y: mesh.position.z / TILE };
+  }
+
   private chooseTurn(call: PoliceCall, options: Tile[]) {
-    if (call.kind !== "pursuit" || Math.random() < 0.22) {
+    if (call.kind !== "pursuit" || Math.random() < 0.15) {
       return options[Math.floor(Math.random() * options.length)];
     }
     // Run away from the cruiser.
@@ -417,6 +506,16 @@ export class PoliceMissionScene {
       for (const lamp of this.car.hazards) {
         (lamp.material as THREE.MeshStandardMaterial).emissiveIntensity = Math.sin(this.time * 6) > 0 ? 2.4 : 0.1;
       }
+      const bulb = this.car.mesh.getObjectByName("tracker");
+      if (bulb && bulb instanceof THREE.Mesh) {
+        const mat = bulb.material as THREE.MeshStandardMaterial;
+        mat.emissiveIntensity = Math.sin(this.time * 7) > 0 ? 3.4 : 0.35;
+      }
+      const beam = this.car.mesh.getObjectByName("tracker-beam");
+      if (beam && beam instanceof THREE.Mesh) {
+        const mat = beam.material as THREE.MeshBasicMaterial;
+        mat.opacity = 0.14 + (Math.sin(this.time * 4) > 0 ? 0.16 : 0);
+      }
     }
     if (!call || call.id !== this.callId || call.phase === "completed") return events;
 
@@ -439,12 +538,22 @@ export class PoliceMissionScene {
       case "traffic_stop":
       case "pursuit": {
         const pursuit = call.kind === "pursuit";
-        if ((call.phase === "accepted" || call.phase === "traveling") && !this.car) {
-          if (player.inCruiser && distTo(callX, callZ) < SPOT_RANGE + (pursuit ? 6 : 0)) {
-            this.spawnCar(call, { x: call.tileX + 0.5, z: call.tileY + 0.5 }, true);
-            emit({ type: "spotted" });
+        const waiting =
+          call.phase === "accepted" ||
+          call.phase === "traveling" ||
+          (pursuit && call.phase === "pursuing");
+        if (waiting && !this.car) {
+          const close = player.inCruiser && distTo(callX, callZ) < SPOT_RANGE + (pursuit ? 6 : 0);
+          // A reload keeps the call in "pursuing" and used to leave the street empty.
+          const resume = pursuit && call.phase === "pursuing" && player.inCruiser;
+          if (close || resume) {
+            const at = pursuit
+              ? this.spawnPointAhead(player)
+              : { x: call.tileX + 0.5, z: call.tileY + 0.5 };
+            this.spawnCar(call, at, true);
+            if (call.phase !== "pursuing") emit({ type: "spotted" });
           }
-          break;
+          if (!this.car || call.phase !== "pursuing") break;
         }
         const car = this.car;
         if (!car?.driver || call.phase !== "pursuing") break;
@@ -452,22 +561,26 @@ export class PoliceMissionScene {
         const d = distTo(driver.pos.x, driver.pos.z);
         if (pursuit) {
           this.chaseTime += dt;
-          // Suspect tires out so a steady chase always pays off.
-          const flee = this.stopping ? 0 : Math.max(15, 23 - this.chaseTime * 0.12);
-          driver.speed += (flee - driver.speed) * Math.min(1, dt * (this.stopping ? 3 : 1.4));
+          // Straight-line pace stays catchable; corners bleed speed so the turn is wide.
+          const cruise = Math.max(12, 17 - this.chaseTime * 0.1);
+          const flee = this.stopping ? 0 : cruise * (driver.turning ? 0.42 : 1);
+          driver.speed += (flee - driver.speed) * Math.min(1, dt * (this.stopping ? 3 : 1.2));
           if (!this.stopping) {
-            this.boxTimer = d < BOX_IN_RANGE ? this.boxTimer + dt : Math.max(0, this.boxTimer - dt * 0.5);
             this.lostTimer = d > LOSE_RANGE ? this.lostTimer + dt : 0;
-            if (this.boxTimer >= 2.5) this.stopping = true;
+            const ready = this.chaseTime >= CATCH_AFTER;
+            if (ready && d < CATCH_RANGE) this.stopping = true;
             if (this.lostTimer >= 8) {
               this.removeCar();
               emit({ type: "escaped" });
               break;
             }
+            const wait = Math.max(0, Math.ceil(CATCH_AFTER - this.chaseTime));
             this.note =
               d > LOSE_RANGE
                 ? `Losing them — ${Math.max(0, Math.ceil(8 - this.lostTimer))} s`
-                : `${Math.round(d)} m · box-in ${Math.round(Math.min(1, this.boxTimer / 2.5) * 100)}%`;
+                : ready
+                  ? `${Math.round(d)} m · within 10 m catches them`
+                  : `${Math.round(d)} m · tracker live · catch in ${wait} s`;
           }
         } else {
           const cruise = this.stopping ? 0 : player.lights && d < 40 ? 8 : 11;
