@@ -77,6 +77,8 @@ export interface BridgeCell {
   pier: boolean;
   /** Cable-stay pylon rising above the deck. */
   pylon: boolean;
+  /** Golden Gate span: orange portal towers and a catenary, instead of cable stays. */
+  suspension?: boolean;
   /** Which side touches land, if any — used to draw the abutment. */
   abutment: "start" | "end" | null;
   graffiti: Graffiti | null;

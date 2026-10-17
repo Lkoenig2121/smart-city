@@ -138,7 +138,7 @@ export class CityRenderer {
         if (!tileVisible(x, y, this.camera, this.width, this.height, 800)) continue;
         const tile = state.tiles[y][x];
         if (tile.bridge) {
-          drawBridge(ctx, x, y, tile.bridge, light, this.time);
+          drawBridge(ctx, x, y, tile.bridge, light, this.time, state.tiles);
         }
         if (
           (tile.terrain === "rock" || tile.terrain === "snow") &&

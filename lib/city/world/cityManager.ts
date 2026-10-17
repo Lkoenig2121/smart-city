@@ -1,4 +1,5 @@
 import type { CityState } from "@/lib/city/types";
+import { stampDreamHomes } from "@/lib/city/dreamHome";
 import {
   CITIES,
   isPlayableCity,
@@ -25,6 +26,7 @@ export class CityManager {
       throw new Error(`City ${id} is not playable yet.`);
     }
     const state = def.generate();
+    stampDreamHomes(state);
     this.cache.set(id, state);
     return state;
   }
@@ -37,6 +39,7 @@ export class CityManager {
   }
 
   remember(id: CityId, state: CityState) {
+    stampDreamHomes(state);
     this.cache.set(id, state);
   }
 

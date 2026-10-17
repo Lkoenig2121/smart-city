@@ -62,7 +62,8 @@ export class LodgingWorld {
     this.renderer.shadowMap.enabled = true;
 
     const roofView = zone === "pool" && realCity;
-    this.camera = new THREE.PerspectiveCamera(74, 1, 0.1, zone === "lobby" ? 80 : roofView ? 1400 : 900);
+    const dreamHome = building.stats.extra?.dream === "1" && zone === "lobby";
+    this.camera = new THREE.PerspectiveCamera(74, 1, 0.1, dreamHome ? 900 : zone === "lobby" ? 80 : roofView ? 1400 : 900);
     this.scene.add(this.camera);
     this.heldView.attach(this.camera);
     this.interior = buildLodgingInterior(building, zone, state, room, roofView);
@@ -81,14 +82,18 @@ export class LodgingWorld {
     );
 
     const night = this.isNight();
-    this.hemi = new THREE.HemisphereLight(zone === "pool" ? 0xc9e4ff : 0xfff1d6, 0x3d4a3a, night ? 0.7 : 1.15);
+    this.hemi = new THREE.HemisphereLight(
+      dreamHome ? 0xe8f3ff : zone === "pool" ? 0xc9e4ff : 0xfff1d6,
+      dreamHome ? 0xc9bba6 : 0x3d4a3a,
+      dreamHome ? 1.4 : night ? 0.7 : 1.15,
+    );
     this.sun = new THREE.DirectionalLight(zone === "pool" ? 0xfff6e8 : 0xffe7c2, night ? 0.4 : 1.7);
-    this.fill = new THREE.PointLight(0xffe0b0, zone === "lobby" ? 28 : 16, 36, 1.5);
+    this.fill = new THREE.PointLight(0xffe0b0, dreamHome ? 4 : zone === "lobby" ? 28 : 16, 36, 1.5);
     this.sun.position.set(8, 28, 10);
     this.fill.position.set(0, 5, 4);
-    if (zone === "room") {
-      const windowLight = new THREE.DirectionalLight(night ? 0x8aa4c8 : 0xfff4d6, night ? 0.7 : 1.35);
-      windowLight.position.set(0, 4, -12);
+    if (zone === "room" || dreamHome) {
+      const windowLight = new THREE.DirectionalLight(night ? 0x8aa4c8 : 0xfff4d6, night ? 0.7 : 1.45);
+      windowLight.position.set(0, 5, dreamHome ? -16 : -12);
       windowLight.target.position.set(0, 1.4, 2);
       this.scene.add(windowLight, windowLight.target);
     }
@@ -114,11 +119,16 @@ export class LodgingWorld {
         this.hemi.groundColor.set(0xc4a574);
         this.sun.color.set(0xffd090);
       }
+    } else if (building.stats.extra?.dream === "1" && zone === "lobby") {
+      const theme = cityThemeFor(state.id);
+      const daySky = theme.daySky;
+      this.scene.background = new THREE.Color(night ? theme.nightSky : daySky);
+      this.scene.fog = new THREE.Fog(night ? theme.fogNight : theme.fogDay, 70, 720);
     } else if (zone === "room") {
       const theme = cityThemeFor(state.id);
       const daySky = theme.daySky;
       this.scene.background = new THREE.Color(night ? theme.nightSky : daySky);
-      this.scene.fog = new THREE.Fog(night ? theme.fogNight : theme.fogDay, 90, 640);
+      this.scene.fog = new THREE.Fog(night ? theme.fogNight : theme.fogDay, 40, 90);
     } else {
       this.scene.background = new THREE.Color("#1c1814");
       this.scene.fog = new THREE.Fog(0x1c1814, 18, 48);
@@ -207,7 +217,10 @@ export class LodgingWorld {
   }
 
   nearBed() {
-    return this.interior.nearBed(this.controls.position.x, this.controls.position.z);
+    const hit = this.interior.nearBed(this.controls.position.x, this.controls.position.z);
+    if (!hit) return false;
+    if (this.building.stats.extra?.dream === "1" && this.controls.position.y < 4) return false;
+    return true;
   }
 
   nearConsole() {

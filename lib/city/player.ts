@@ -28,6 +28,9 @@ import {
 
 const STORAGE = "smartcity-player";
 const STARTING_WALLET = 500;
+/** One-time sandbox balance so building and shops can be tried without grinding. */
+const SANDBOX_WALLET = 1_000_000;
+const SANDBOX_GRANT_KEY = "smartcity-sandbox-grant";
 const LEDGER_LIMIT = 40;
 
 export const BANK_DAILY_RATE = 0.03;
@@ -248,7 +251,13 @@ export function readPlayer(): PlayerState {
   try {
     const raw = window.localStorage.getItem(STORAGE);
     const parsed = raw ? (JSON.parse(raw) as unknown) : null;
-    return parsePlayer(parsed);
+    const player = parsePlayer(parsed);
+    if (window.localStorage.getItem(SANDBOX_GRANT_KEY) !== "1") {
+      player.wallet = SANDBOX_WALLET;
+      window.localStorage.setItem(SANDBOX_GRANT_KEY, "1");
+      writePlayer(player);
+    }
+    return player;
   } catch {
     return emptyPlayer();
   }

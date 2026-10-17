@@ -95,7 +95,15 @@ import {
   makeOwnedHomeBuilding,
   type FurnishStore,
 } from "@/lib/city/furnishings";
+import {
+  confirmDreamHome,
+  dreamExitTile,
+  refundDreamHome,
+  type DreamChoice,
+  type DreamPlot,
+} from "@/lib/city/dreamHome";
 import { FurnitureShop } from "./FurnitureShop";
+import { DreamHomeStudio } from "./DreamHomeStudio";
 import { RoomCustomize } from "./RoomCustomize";
 import type { MoveMode } from "@/lib/street/controls";
 import { StreetWorld } from "@/lib/street/StreetWorld";
@@ -200,6 +208,7 @@ export function StreetView({
   const mallFurnishRef = useRef<FurnishStore | null>(null);
   const mallSnackRef = useRef<{ name: string; items: string[] } | null>(null);
   const ownedHomeBuildingRef = useRef<Building | null>(null);
+  const dreamOpenRef = useRef(false);
   const barMenuRef = useRef(false);
   const phoneOpenRef = useRef(false);
   const tickRef = useRef(onTick);
@@ -226,6 +235,10 @@ export function StreetView({
     return () => window.clearTimeout(timer);
   }, [passToast]);
   const [lodgingDoor, setLodgingDoor] = useState<Building | null>(null);
+  const [dreamOpen, setDreamOpen] = useState(false);
+  const [dreamPlot, setDreamPlot] = useState<DreamPlot | null>(null);
+  const [dreamOffer, setDreamOffer] = useState(false);
+  const [dreamNote, setDreamNote] = useState<string | null>(null);
   const [mountainTrail, setMountainTrail] = useState<"enter" | "exit" | null>(
     null,
   );
@@ -423,7 +436,8 @@ export function StreetView({
     pickingRoom ||
     roomCustomize ||
     riding ||
-    endShiftConfirm;
+    endShiftConfirm ||
+    dreamOpen;
   useEffect(() => {
     if (!interior) return;
     // Hide street arrows indoors, but keep the phone / minimap pin so the
@@ -568,6 +582,14 @@ export function StreetView({
         return;
       }
       if (event.code === "Escape") {
+        if (dreamOpenRef.current) {
+          event.preventDefault();
+          dreamOpenRef.current = false;
+          setDreamOpen(false);
+          setDreamPlot(null);
+          worldRef.current?.clearDreamStudio();
+          return;
+        }
         if (motorsOpenRef.current) {
           event.preventDefault();
           motorsOpenRef.current = false;
@@ -641,6 +663,7 @@ export function StreetView({
         }
         return;
       }
+      if (dreamOpenRef.current) return;
       if (event.code === "KeyM") {
         if (sleepingRef.current) return;
         if (atComputerRef.current || atOfficeComputerRef.current) return;
@@ -874,7 +897,17 @@ export function StreetView({
     };
     const enterStreetDoor = () => {
       const target = world.enterTarget();
-      if (!target) return false;
+      if (!target) {
+        if (dreamOpenRef.current || drivingRef.current) return false;
+        const plot = world.dreamPlotOffer();
+        if (!plot) return false;
+        dreamOpenRef.current = true;
+        setDreamPlot(plot);
+        setDreamOpen(true);
+        world.showDreamLot(plot);
+        if (document.pointerLockElement === canvas) document.exitPointerLock();
+        return true;
+      }
       if (target.kind === "venue") {
         setInterior({ kind: "venue", buildingId: target.building.id });
         setPlayer(discoverPlace(target.building.id));
@@ -1133,6 +1166,20 @@ export function StreetView({
       setHiking((prev) => (prev === world.hiking ? prev : world.hiking));
       const tunnel = world.nearMountainTunnel();
       setAtTunnel((prev) => (prev === tunnel ? prev : tunnel));
+      if (!dreamOpenRef.current) {
+        const offer = drivingRef.current ? null : world.dreamPlotOffer();
+        const show = Boolean(offer && world.dreamLotInFront(offer));
+        world.showDreamLot(show ? offer : null);
+        if (show) {
+          lodgingDoorRef.current = null;
+          venueDoorRef.current = null;
+          subwayDoorRef.current = null;
+          setLodgingDoor(null);
+          setVenueDoor(null);
+          setSubwayDoor(null);
+        }
+        setDreamOffer((prev) => (prev === show ? prev : show));
+      }
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
@@ -1339,8 +1386,9 @@ export function StreetView({
     if (!canvas || !wrap || !building) return;
 
     const street = worldRef.current;
+    const dreamHouse = building.stats.extra?.dream === "1";
     const city =
-      interior.zone === "room" || interior.zone === "pool"
+      interior.zone === "room" || interior.zone === "pool" || (dreamHouse && interior.zone === "lobby")
         ? (street?.borrowCity() ?? null)
         : null;
     let world: LodgingWorld;
@@ -1356,7 +1404,7 @@ export function StreetView({
       if (city) {
         world.attachCity(
           city,
-          findLodgingRoom(building, interior.roomId)?.floor ?? 8,
+          dreamHouse ? 1 : (findLodgingRoom(building, interior.roomId)?.floor ?? 8),
         );
       }
     } catch (error) {
@@ -1408,19 +1456,17 @@ export function StreetView({
         );
         setSpawn(mall ? venueGateTile(mall) : entry);
       } else {
-        setSpawn(lodgingGateTile(building));
+        setSpawn(
+          building.stats.extra?.dream === "1" ? dreamExitTile(building) : lodgingGateTile(building),
+        );
       }
       setInterior(null);
       setAtDesk(false);
     };
     const timers: number[] = [];
     const beginSleep = () => {
-      if (
-        sleepingRef.current ||
-        interior.zone !== "room" ||
-        !canSleepNow(state)
-      )
-        return;
+      const ownBed = interior.zone === "room" || building.stats.extra?.dream === "1";
+      if (sleepingRef.current || !ownBed || !canSleepNow(state)) return;
       sleepingRef.current = true;
       setSleeping(true);
       setSleepPhase("night");
@@ -1463,7 +1509,7 @@ export function StreetView({
           setSliderOpen(world.sliderOpen());
           return true;
         }
-        if (interior.zone === "room" && world.nearBed() && canSleepNow(state)) {
+        if ((interior.zone === "room" || building.stats.extra?.dream === "1") && world.nearBed() && canSleepNow(state)) {
           beginSleep();
           return true;
         }
@@ -1515,7 +1561,9 @@ export function StreetView({
       if (desk && document.pointerLockElement === canvas)
         document.exitPointerLock();
       const bed =
-        interior.zone === "room" && !atComputerRef.current && world.nearBed();
+        (interior.zone === "room" || building.stats.extra?.dream === "1") &&
+        !atComputerRef.current &&
+        world.nearBed();
       setAtBed((prev) => (prev === bed ? prev : bed));
       const slider =
         interior.zone === "room" &&
@@ -1866,6 +1914,33 @@ export function StreetView({
     };
   }, [active, interior, state]);
 
+  const closeDreamStudio = () => {
+    dreamOpenRef.current = false;
+    setDreamOpen(false);
+    setDreamPlot(null);
+    worldRef.current?.clearDreamStudio();
+  };
+
+  const confirmDreamBuild = (choice: DreamChoice) => {
+    if (!dreamPlot) return "No lot selected.";
+    const world = worldRef.current;
+    const result = confirmDreamHome(state, dreamPlot, choice, state.clock);
+    if (typeof result === "string") return result;
+    try {
+      if (!world) throw new Error("Street view is not ready.");
+      world.placeDreamHouse(result.building);
+      world.stepToDreamDoor(result.building);
+    } catch {
+      setPlayer(refundDreamHome(state, result.building.id, state.clock));
+      return "The house could not be placed. Your cash was returned.";
+    }
+    setPlayer(result.player);
+    setDreamNote(`${result.building.name} is ready. Press E to go inside.`);
+    window.setTimeout(() => setDreamNote(null), 4500);
+    closeDreamStudio();
+    return null;
+  };
+
   const requestLock = () => {
     if (
       atDesk ||
@@ -1880,7 +1955,8 @@ export function StreetView({
       mallFurnish ||
       mallSnack ||
       phoneOpen ||
-      patientChart
+      patientChart ||
+      dreamOpen
     )
       return;
     const canvas = inside ? canvasRef.current : outdoorCanvasRef.current;
@@ -1902,7 +1978,8 @@ export function StreetView({
       mallFurnish ||
       mallSnack ||
       phoneOpen ||
-      patientChart
+      patientChart ||
+      dreamOpen
     )
       return;
 
@@ -2057,7 +2134,7 @@ export function StreetView({
   const lastWinner = lastFinal ? stadiumWinner(lastFinal, ballclub) : null;
   const seriesBoard = interior?.kind === "stadium" || atGate ? worldSeriesBoard(state.clock) : null;
   const seriesTonight =
-    interior?.kind === "stadium" && seriesGame && seriesBoard
+    (interior?.kind === "stadium" || atGate) && seriesGame && seriesBoard
       ? (seriesBoard.games.find((game) => game.game === seriesGame.game) ?? null)
       : null;
   const seriesWinner =
@@ -2285,7 +2362,11 @@ export function StreetView({
                     const stadium = findStadium(state);
                     if (stadium) setSpawn(stadiumGateTile(stadium));
                   } else if (lodgingBuilding) {
-                    setSpawn(lodgingGateTile(lodgingBuilding));
+                    setSpawn(
+                      lodgingBuilding.stats.extra?.dream === "1"
+                        ? dreamExitTile(lodgingBuilding)
+                        : lodgingGateTile(lodgingBuilding),
+                    );
                   } else if (venueBuilding) {
                     setSpawn(venueGateTile(venueBuilding));
                   } else if (interior?.kind === "subway") {
@@ -2644,19 +2725,56 @@ export function StreetView({
         </div>
       ) : null}
 
+      {dreamOffer && !dreamOpen && !hiking && !inside && !failed && !driving ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-2xl border border-emerald-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-emerald-300">
+              Empty lot
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">Build your dream home</p>
+            <p className="mt-1 text-sm text-slate-300">
+              Press <span className="font-semibold text-white">E</span> or{" "}
+              <span className="font-semibold text-white">click</span> to choose a house
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {dreamNote && !inside ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-2xl border border-emerald-300/40 bg-black/75 px-6 py-3 text-center text-sm text-white shadow-2xl backdrop-blur">
+            {dreamNote}
+          </div>
+        </div>
+      ) : null}
+
+      {dreamOpen && dreamPlot ? (
+        <DreamHomeStudio
+          plot={dreamPlot}
+          player={player}
+          onPreview={(building) => worldRef.current?.setDreamPreview(building)}
+          onConfirm={confirmDreamBuild}
+          onClose={closeDreamStudio}
+        />
+      ) : null}
+
       {lodgingDoor && !inside && !failed ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-2xl border border-amber-300/40 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-300">
-              {lodgingUse(lodgingDoor) === "hotel" ? "Hotel" : "Residences"}
+              {lodgingDoor.stats.extra?.dream === "1"
+                ? "Your home"
+                : lodgingUse(lodgingDoor) === "hotel"
+                  ? "Hotel"
+                  : "Residences"}
             </p>
             <p className="mt-1 text-xl font-semibold text-white">
               {lodgingDoor.name}
             </p>
             <p className="mt-1 text-sm text-slate-300">
               <span className="font-semibold text-white">Click</span> or press{" "}
-              <span className="font-semibold text-white">E</span> to enter the
-              lobby
+              <span className="font-semibold text-white">E</span> to enter
+              {lodgingDoor.stats.extra?.dream === "1" ? "" : " the lobby"}
             </p>
           </div>
         </div>
@@ -2738,11 +2856,22 @@ export function StreetView({
                     {seriesBoard.topName} {seriesBoard.topWins} – {seriesBoard.secondWins}{" "}
                     {seriesBoard.secondName}
                   </p>
+                  <p className="mt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-amber-200">
+                    Score
+                  </p>
+                  <p className="text-sm font-bold text-white">
+                    {seriesBoard.topName} {seriesTonight.topRuns} – {seriesTonight.secondRuns}{" "}
+                    {seriesBoard.secondName}
+                  </p>
                 </div>
               ) : seriesTonight?.status === "final" && seriesBoard ? (
                 <div className="mt-1.5 rounded-md bg-[#10233f] px-4 py-1.5">
                   <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-amber-300">
                     {seriesBoard.champion ? "World Series" : "Final"}
+                  </p>
+                  <p className="text-sm font-bold text-white">
+                    {seriesBoard.topName} {seriesTonight.topRuns} – {seriesTonight.secondRuns}{" "}
+                    {seriesBoard.secondName}
                   </p>
                   <p className="text-sm font-bold text-white">
                     {seriesBoard.champion
@@ -3052,7 +3181,7 @@ export function StreetView({
       !sleeping &&
       !atComputer &&
       interior?.kind === "lodging" &&
-      interior.zone === "room" ? (
+      (interior.zone === "room" || lodgingBuilding?.stats.extra?.dream === "1") ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-amber-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
             {canSleepNow(state) ? (
@@ -3306,10 +3435,19 @@ export function StreetView({
           onVisitHome={(homeId) => {
             const home = player.ownedHomes.find((item) => item.id === homeId);
             if (!home) return;
-            const fake = makeOwnedHomeBuilding(home);
-            ownedHomeBuildingRef.current = fake;
             mallFurnishRef.current = null;
             setMallFurnish(null);
+            const placed = home.plot?.cityId === state.id ? findLodging(state, home.id) : null;
+            if (placed) {
+              setInterior({
+                kind: "lodging",
+                buildingId: placed.id,
+                zone: "lobby",
+              });
+              return;
+            }
+            const fake = makeOwnedHomeBuilding(home);
+            ownedHomeBuildingRef.current = fake;
             setInterior({
               kind: "lodging",
               buildingId: fake.id,

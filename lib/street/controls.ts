@@ -85,6 +85,11 @@ export class StreetControls {
     private state: CityState,
     blockers: Blocker[],
   ) {
+    this.addBlockers(blockers);
+  }
+
+  /** Register boxes added after the city was first built, such as a new house. */
+  addBlockers(blockers: Blocker[]) {
     for (const blocker of blockers) {
       const tx0 = Math.floor(blocker.minX / TILE);
       const tx1 = Math.floor(blocker.maxX / TILE);

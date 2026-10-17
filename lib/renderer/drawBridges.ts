@@ -1,6 +1,6 @@
 import { gridToScreen } from "@/lib/city/iso";
 import { hash2 } from "@/lib/city/rng";
-import type { BridgeCell, Graffiti } from "@/lib/city/types";
+import type { BridgeCell, Graffiti, Tile } from "@/lib/city/types";
 import { alpha, lit, mix, shade, type Lighting } from "./palette";
 
 const DECK_THICKNESS = 7;
@@ -50,6 +50,7 @@ export function drawBridge(
   bridge: BridgeCell,
   light: Lighting,
   time: number,
+  tiles?: Tile[][],
 ) {
   const lift = bridge.deck;
   const top = deckCorners(x, y, bridge.axis, lift);
@@ -72,7 +73,8 @@ export function drawBridge(
   drawRailing(ctx, top[0], top[1], light);
   drawRailing(ctx, top[3], top[2], light);
 
-  if (bridge.pylon) drawPylon(ctx, top, light, time);
+  if (bridge.suspension) drawSuspension(ctx, x, y, bridge, top, light, tiles);
+  else if (bridge.pylon) drawPylon(ctx, top, light, time);
 }
 
 function drawDeckMarkings(
@@ -214,6 +216,109 @@ function drawAbutment(
       light,
     );
   }
+}
+
+const GATE = "#e24b1a";
+
+function drawSuspension(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  bridge: BridgeCell,
+  top: P[],
+  light: Lighting,
+  tiles?: Tile[][],
+) {
+  const span = spanOf(tiles, x, y);
+  const h0 = cablePixels(x, span);
+  const h1 = cablePixels(x + 1, span);
+  const sideA = { x: (top[0].x + top[3].x) / 2, y: (top[0].y + top[3].y) / 2 };
+  const sideB = { x: (top[1].x + top[2].x) / 2, y: (top[1].y + top[2].y) / 2 };
+  strokeCable(ctx, sideA, h0, sideB, h1, light);
+  for (let i = 1; i <= 3; i++) {
+    const t = i / 4;
+    const px = sideA.x + (sideB.x - sideA.x) * t;
+    const py = sideA.y + (sideB.y - sideA.y) * t;
+    const ch = h0 + (h1 - h0) * t;
+    ctx.beginPath();
+    ctx.moveTo(px, py - ch);
+    ctx.lineTo(px, py - bridge.deck);
+    ctx.strokeStyle = alpha(lit("#f4f6f8", light, "top"), 0.7);
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+  }
+
+  if (!bridge.pylon) return;
+  const mid = {
+    x: (top[0].x + top[1].x + top[2].x + top[3].x) / 4,
+    y: (top[0].y + top[1].y + top[2].y + top[3].y) / 4,
+  };
+  const height = 118;
+  const orange = lit(GATE, light, "right");
+  const legs = [
+    { x: (top[0].x + top[1].x) / 2, y: (top[0].y + top[1].y) / 2 },
+    { x: (top[3].x + top[2].x) / 2, y: (top[3].y + top[2].y) / 2 },
+  ];
+  for (const leg of legs) {
+    ctx.fillStyle = orange;
+    ctx.fillRect(leg.x - 3.2, leg.y - height, 6.4, height);
+  }
+  ctx.fillStyle = lit(GATE, light, "top");
+  const beamY = mid.y - height + 8;
+  ctx.fillRect(Math.min(legs[0].x, legs[1].x) - 2, beamY, Math.abs(legs[1].x - legs[0].x) + 4, 5);
+  ctx.fillRect(Math.min(legs[0].x, legs[1].x) - 2, mid.y - height * 0.55, Math.abs(legs[1].x - legs[0].x) + 4, 4);
+  ctx.beginPath();
+  ctx.fillStyle = alpha("#ffb199", light.phase === "night" ? 0.95 : 0.8);
+  ctx.arc(mid.x, mid.y - height - 3, 2.4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function spanOf(tiles: Tile[][] | undefined, x: number, y: number) {
+  let left = x;
+  let right = x;
+  const towers: number[] = [];
+  if (tiles) {
+    while (tiles[y]?.[left - 1]?.bridge?.suspension) left--;
+    while (tiles[y]?.[right + 1]?.bridge?.suspension) right++;
+    for (let i = left; i <= right; i++) {
+      if (tiles[y][i]?.bridge?.pylon) towers.push(i);
+    }
+  }
+  return { left, right, t1: towers[0] ?? left, t2: towers[1] ?? right };
+}
+
+function cablePixels(gx: number, span: { left: number; right: number; t1: number; t2: number }) {
+  const top = 112;
+  const anchor = 18;
+  const belly = 34;
+  const tower1 = span.t1 + 0.5;
+  const tower2 = span.t2 + 0.5;
+  if (gx <= tower1) {
+    const t = (gx - span.left) / Math.max(0.001, tower1 - span.left);
+    return anchor + (top - anchor) * t;
+  }
+  if (gx >= tower2) {
+    const t = (gx - tower2) / Math.max(0.001, span.right + 1 - tower2);
+    return top + (anchor - top) * t;
+  }
+  const t = (gx - tower1) / Math.max(0.001, tower2 - tower1);
+  return top - (top - belly) * 4 * t * (1 - t);
+}
+
+function strokeCable(
+  ctx: CanvasRenderingContext2D,
+  a: P,
+  liftA: number,
+  b: P,
+  liftB: number,
+  light: Lighting,
+) {
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y - liftA);
+  ctx.quadraticCurveTo((a.x + b.x) / 2, (a.y + b.y) / 2 - (liftA + liftB) / 2, b.x, b.y - liftB);
+  ctx.strokeStyle = alpha(lit("#f7f8fa", light, "top"), 0.9);
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
 }
 
 function drawPylon(

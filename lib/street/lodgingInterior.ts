@@ -53,9 +53,282 @@ export function buildLodgingInterior(
   room: LodgingRoom | null = null,
   realCity = false,
 ): LodgingInterior {
+  if (building.stats.extra?.dream === "1" && zone === "lobby") return buildDreamHome(building);
   if (zone === "room") return buildRoom(building, state, room);
   if (zone === "pool") return buildPool(building, state, realCity);
   return buildLobby(building);
+}
+
+/** Open house: living room downstairs, and a bedroom you reach by walking the stairs. */
+function buildDreamHome(building: Building): LodgingInterior {
+  const group = new THREE.Group();
+  const blockers: Blocker[] = [];
+  const disposables: Array<{ dispose: () => void }> = [];
+  const floorB = new MeshBuilder();
+  const wallB = new MeshBuilder();
+  const trimB = new MeshBuilder();
+
+  const minX = -11;
+  const maxX = 11;
+  const minZ = -8;
+  const maxZ = 9;
+  const UP = 3.2;
+  const TOP = 6.35;
+  const hasUp = building.floors >= 2;
+  const SX0 = 3.4;
+  const SX1 = 6.8;
+  const SZ0 = -2.4;
+  const SZ1 = 2.2;
+  const upperZ = 4.15;
+  const wall = 0.28;
+  const style = resolveRoomStyle(readPlayer());
+  const floor = new THREE.Color(style.floorColor ?? "#d8c4a4");
+  const white = new THREE.Color("#f7f4ef");
+  const ceiling = new THREE.Color("#f3f0ea");
+  const ink = new THREE.Color("#1c2128");
+  const cabinet = new THREE.Color("#2c3136");
+  const stone = new THREE.Color("#e7e2d8");
+  const sofa = new THREE.Color("#3c4650");
+  const cloth = new THREE.Color("#efe6d8");
+  const plant = new THREE.Color("#2f6b45");
+  const wood = new THREE.Color("#8a6848");
+  const linen = new THREE.Color("#f4f1ea");
+  const art = new THREE.Color("#c4a574");
+
+  const low = (box: Blocker) => blockers.push(hasUp ? { ...box, maxY: 2.55 } : box);
+  const high = (box: Blocker) => blockers.push({ ...box, minY: UP + 0.08 });
+
+  floorB.ground(minX, minZ, maxX, maxZ, 0, floor);
+  floorB.ground(1.6, 1.15, 8.5, 6.2, 0.012, new THREE.Color("#c9b89a"));
+  if (hasUp) floorB.ground(-9.2, -4.9, 1.2, 0.2, UP + 0.012, new THREE.Color("#d5c6ae"));
+
+  const shellTop = hasUp ? TOP : 3.15;
+  wallB.box(minX, minZ, minX + wall, maxZ, 0, shellTop, white);
+  wallB.box(maxX - wall, minZ, maxX, 0.4, 0, shellTop, white);
+  wallB.box(maxX - wall, 4.2, maxX, maxZ, 0, shellTop, white);
+  wallB.box(maxX - wall, 0.4, maxX, 4.2, 0, 0.85, white);
+  wallB.box(maxX - wall, 0.4, maxX, 4.2, 2.45, shellTop, white);
+  blockers.push({ minX, maxX: minX + wall, minZ, maxZ });
+  blockers.push({ minX: maxX - wall, maxX, minZ, maxZ });
+
+  const winX0 = -6.2;
+  const winX1 = 5.4;
+  wallB.box(minX, minZ, winX0, minZ + wall, 0, shellTop, white);
+  wallB.box(winX1, minZ, maxX, minZ + wall, 0, shellTop, white);
+  wallB.box(winX0, minZ, winX1, minZ + wall, 0, 0.42, white);
+  wallB.box(winX0, minZ, winX1, minZ + wall, 2.72, hasUp ? UP : shellTop, white);
+  if (hasUp) {
+    wallB.box(winX0, minZ, winX1, minZ + wall, UP, UP + 0.38, white);
+    wallB.box(winX0, minZ, winX1, minZ + wall, TOP - 0.42, TOP, white);
+  }
+  blockers.push({ minX, maxX, minZ, maxZ: minZ + wall });
+
+  wallB.box(minX, maxZ - wall, -1.15, maxZ, 0, shellTop, white);
+  wallB.box(1.15, maxZ - wall, maxX, maxZ, 0, shellTop, white);
+  wallB.box(-1.15, maxZ - wall, 1.15, maxZ, 2.35, shellTop, white);
+  blockers.push({ minX, maxX: -1.15, minZ: maxZ - wall, maxZ });
+  blockers.push({ minX: 1.15, maxX, minZ: maxZ - wall, maxZ });
+
+  if (hasUp) {
+    addCeiling(floorB, minX, upperZ, maxX, maxZ, TOP, ceiling);
+    const slab = (x0: number, z0: number, x1: number, z1: number) => {
+      floorB.box(x0, z0, x1, z1, UP - 0.16, UP, floor);
+      floorB.soffit(x0, z0, x1, z1, UP - 0.16, ceiling);
+      blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, minY: UP - 0.2, maxY: UP - 0.02 });
+    };
+    slab(minX, minZ, SX0, upperZ);
+    slab(SX1, minZ, maxX, upperZ);
+    slab(SX0, minZ, SX1, SZ0);
+    slab(SX0, SZ1, SX1, upperZ);
+    addCeiling(floorB, minX, minZ, maxX, upperZ, TOP, ceiling);
+  } else {
+    addCeiling(floorB, minX, minZ, maxX, maxZ, shellTop, ceiling);
+  }
+
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: "#d7eef8",
+    transparent: true,
+    opacity: 0.1,
+    roughness: 0.04,
+    metalness: 0.15,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const addPane = (x: number, y: number, z: number, w: number, h: number, rotY = 0) => {
+    const geo = new THREE.PlaneGeometry(w, h);
+    const mesh = new THREE.Mesh(geo, glassMat);
+    mesh.position.set(x, y, z);
+    mesh.rotation.y = rotY;
+    group.add(mesh);
+    disposables.push(geo);
+  };
+  const mullion = (x0: number, z0: number, x1: number, z1: number, y0: number, y1: number) => {
+    trimB.box(x0, z0, x1, z1, y0, y1, ink);
+  };
+  mullion(winX0, minZ + 0.02, winX0 + 0.08, minZ + 0.22, 0.42, hasUp ? TOP - 0.42 : 2.72);
+  mullion(winX1 - 0.08, minZ + 0.02, winX1, minZ + 0.22, 0.42, hasUp ? TOP - 0.42 : 2.72);
+  for (let i = 1; i < 4; i++) {
+    const x = winX0 + ((winX1 - winX0) * i) / 4;
+    mullion(x - 0.035, minZ + 0.04, x + 0.035, minZ + 0.2, 0.42, 2.72);
+    if (hasUp) mullion(x - 0.035, minZ + 0.04, x + 0.035, minZ + 0.2, UP + 0.38, TOP - 0.42);
+  }
+  addPane((winX0 + winX1) / 2, 1.57, minZ + 0.2, winX1 - winX0 - 0.16, 2.22);
+  if (hasUp) addPane((winX0 + winX1) / 2, (UP + 0.38 + TOP - 0.42) / 2, minZ + 0.2, winX1 - winX0 - 0.16, TOP - UP - 0.9);
+  wallB.box(winX0 - 0.35, minZ + 0.28, winX0 - 0.08, minZ + 0.55, 0.5, 2.7, cloth);
+  wallB.box(winX1 + 0.08, minZ + 0.28, winX1 + 0.35, minZ + 0.55, 0.5, 2.7, cloth);
+
+  mullion(maxX - 0.22, 0.4, maxX - 0.02, 0.48, 0.85, 2.45);
+  mullion(maxX - 0.22, 4.15, maxX - 0.02, 4.23, 0.85, 2.45);
+  mullion(maxX - 0.22, 0.4, maxX - 0.02, 4.23, 0.85, 0.93);
+  mullion(maxX - 0.22, 0.4, maxX - 0.02, 4.23, 2.37, 2.45);
+  addPane(maxX - 0.16, 1.65, 2.3, 3.6, 1.45, Math.PI / 2);
+
+  wallB.box(-10.72, -6.2, -9.55, 1.6, 0, 0.92, cabinet);
+  trimB.box(-10.78, -6.3, -9.45, 1.7, 0.92, 1.02, stone);
+  trimB.box(-10.5, -4.2, -9.6, -3.5, 1.02, 1.55, ink);
+  low({ minX: -10.78, maxX: -9.45, minZ: -6.3, maxZ: 1.7 });
+  wallB.box(-7.4, -1.15, -4.15, 2.05, 0, 0.9, cabinet);
+  trimB.box(-7.55, -1.3, -4, 2.2, 0.9, 1.0, stone);
+  trimB.box(-6.1, 0.2, -5.5, 0.85, 1.0, 1.18, plant);
+  low({ minX: -7.55, maxX: -4, minZ: -1.3, maxZ: 2.2 });
+  trimB.box(-6.55, 2.25, -6.05, 2.75, 0, 0.62, ink);
+  trimB.box(-5.05, 2.25, -4.55, 2.75, 0, 0.62, ink);
+
+  wallB.box(2.15, 3.2, 8.3, 4.95, 0, 0.42, sofa);
+  wallB.box(2.35, 3.4, 8.1, 4.75, 0.42, 0.78, sofa);
+  wallB.box(2.15, 4.55, 2.7, 5.15, 0.42, 1.05, cloth);
+  wallB.box(7.7, 4.55, 8.25, 5.15, 0.42, 1.05, cloth);
+  trimB.box(3.1, 4.15, 4.0, 4.7, 0.8, 0.98, art);
+  trimB.box(6.4, 4.15, 7.3, 4.7, 0.8, 0.98, linen);
+  low({ minX: 2.15, maxX: 8.3, minZ: 3.2, maxZ: 5.15 });
+  trimB.box(3.35, 1.2, 7.15, 2.55, 0, 0.32, stone);
+  trimB.box(4.5, 1.55, 5.15, 2.15, 0.32, 0.4, ink);
+  trimB.box(5.5, 1.7, 6.35, 2.2, 0.32, 0.48, wood);
+
+  trimB.box(9.55, 1.6, 9.9, 5.4, 0, 0.4, wood);
+  trimB.box(9.63, 2.1, 9.85, 4.4, 0.45, 1.7, ink);
+  wallB.box(9.4, -2.35, 10.05, -1.7, 0, 1.35, wood);
+  trimB.box(9.55, -2.2, 9.9, -1.85, 0.55, 1.15, linen);
+
+  trimB.box(-1.3, -5.5, 3.5, -3.45, 0.7, 0.82, stone);
+  wallB.box(-1.05, -5.25, -0.6, -3.7, 0, 0.7, ink);
+  wallB.box(3.05, -5.25, 3.45, -3.7, 0, 0.7, ink);
+  wallB.box(-1.05, -3.7, 3.45, -3.4, 0, 0.7, ink);
+  wallB.box(-1.05, -5.5, 3.45, -5.2, 0, 0.7, ink);
+  trimB.box(-0.2, -4.7, 0.35, -4.15, 0.82, 1.05, plant);
+  low({ minX: -1.3, maxX: 3.5, minZ: -5.5, maxZ: -3.4 });
+
+  wallB.box(-4.6, 7.35, -1.9, 8.2, 0, 0.72, wood);
+  trimB.box(-2.7, 7.5, -2.05, 7.95, 0.72, 0.95, plant);
+  low({ minX: -4.6, maxX: -1.9, minZ: 7.35, maxZ: 8.2 });
+  trimB.box(-9.6, 4.2, -7.2, 4.35, 1.35, 2.55, art);
+  trimB.box(-8.2, 1.4, -6.4, 1.55, 1.2, 2.35, ink);
+  wallB.box(8.55, 5.35, 10.55, 6.15, 0, 0.28, wood);
+  wallB.box(8.7, 5.5, 10.4, 6.0, 0.28, 1.55, cabinet);
+  trimB.box(8.85, 5.58, 10.25, 5.92, 0.42, 0.52, art);
+  trimB.box(8.85, 5.58, 10.25, 5.92, 0.78, 0.88, linen);
+  trimB.box(8.85, 5.58, 10.25, 5.92, 1.15, 1.25, wood);
+  low({ minX: 8.55, maxX: 10.55, minZ: 5.35, maxZ: 6.15 });
+  trimB.box(10.55, 6.35, 10.72, 7.2, 1.55, 2.3, ink);
+  trimB.box(10.58, 6.5, 10.7, 7.05, 1.7, 2.12, linen);
+
+  wallB.box(-9.4, -7.35, -8.6, -6.55, 0, 0.28, stone);
+  wallB.box(-9.22, -7.18, -8.78, -6.72, 0.28, 1.25, plant);
+  wallB.box(4.6, -7.2, 5.3, -6.5, 0, 0.28, stone);
+  wallB.box(4.75, -7.05, 5.15, -6.65, 0.28, 1.05, plant);
+
+  if (hasUp) {
+    const steps = 14;
+    const run = (SZ1 - SZ0) / steps;
+    for (let i = 0; i < steps; i++) {
+      const z1 = SZ1 - i * run;
+      const z0 = z1 - run;
+      const y = ((i + 1) / steps) * UP;
+      wallB.box(SX0 + 0.18, z0, SX1 - 0.18, z1, y - 0.1, y, stone);
+    }
+    trimB.box(SX0 - 0.06, SZ0, SX0 + 0.08, SZ1, 0.4, UP + 0.95, ink);
+    trimB.box(SX1 - 0.08, SZ0, SX1 + 0.06, SZ1, 0.4, UP + 0.95, ink);
+    trimB.box(SX0 + 0.12, SZ1 - 0.05, SX1 - 0.12, SZ1 + 0.05, UP + 0.82, UP + 0.96, ink);
+    blockers.push({ minX: SX0 - 0.1, maxX: SX0 + 0.1, minZ: SZ0, maxZ: SZ1, maxY: UP + 1 });
+    blockers.push({ minX: SX1 - 0.1, maxX: SX1 + 0.1, minZ: SZ0, maxZ: SZ1, maxY: UP + 1 });
+    blockers.push({
+      minX: SX0 + 0.08,
+      maxX: SX1 - 0.08,
+      minZ: SZ1 - 0.1,
+      maxZ: SZ1 + 0.08,
+      minY: UP + 0.15,
+      maxY: UP + 1.05,
+    });
+
+    const bed = linen;
+    wallB.box(-8.6, -4.5, -2.4, -1.0, UP, UP + 0.38, wood);
+    wallB.box(-8.35, -4.25, -2.6, -1.2, UP + 0.38, UP + 0.72, bed);
+    wallB.box(-8.5, -4.65, -2.5, -4.35, UP + 0.38, UP + 1.15, wood);
+    wallB.box(-7.6, -4.0, -5.6, -2.9, UP + 0.72, UP + 0.92, cloth);
+    wallB.box(-4.6, -4.0, -3.1, -3.0, UP + 0.72, UP + 0.92, cloth);
+    high({ minX: -8.6, maxX: -2.4, minZ: -4.65, maxZ: -1.0 });
+    trimB.box(-9.3, -3.8, -8.7, -2.5, UP, UP + 0.48, wood);
+    trimB.box(-2.3, -3.8, -1.7, -2.5, UP, UP + 0.48, wood);
+    trimB.box(1.3, -3.7, 4.1, -2.95, UP, UP + 0.85, cabinet);
+    high({ minX: 1.3, maxX: 4.1, minZ: -3.7, maxZ: -2.95 });
+    wallB.box(1.2, -1.2, 2.5, 0.6, UP, UP + 0.45, sofa);
+    wallB.box(1.2, -1.2, 1.55, 0.6, UP + 0.45, UP + 1.05, sofa);
+    high({ minX: 1.2, maxX: 2.5, minZ: -1.2, maxZ: 0.6 });
+    wallB.box(-10.55, -1.4, -9.7, 2.4, UP, UP + 2.15, cabinet);
+    high({ minX: -10.55, maxX: -9.7, minZ: -1.4, maxZ: 2.4 });
+    trimB.box(-6.5, -7.55, -3.2, -7.4, UP + 1.3, UP + 2.15, art);
+    wallB.box(-4.2, 1.6, -3.5, 2.3, UP, UP + 0.25, stone);
+    wallB.box(-4.05, 1.75, -3.65, 2.15, UP + 0.25, UP + 1.15, plant);
+    mullion(winX0, minZ + 0.02, winX1, minZ + 0.16, UP + 0.32, UP + 0.4);
+  }
+
+  const pendant = new THREE.PointLight(0xfff4e0, 7, 8, 1.6);
+  pendant.position.set(-5.8, 2.5, 0.4);
+  group.add(pendant);
+  trimB.box(-6.15, 0.15, -5.45, 0.7, 2.55, 2.62, ink);
+  if (hasUp) {
+    const lamp = new THREE.PointLight(0xfff1d6, 5, 7, 1.8);
+    lamp.position.set(-5.5, UP + 2.3, -4.2);
+    group.add(lamp);
+  }
+
+  assemble(group, floorB, wallB, trimB, disposables);
+  disposables.push(glassMat);
+
+  const dreamGround = (x: number, z: number, feetY = 0) => {
+    if (!hasUp) return 0;
+    const onStair = x > SX0 + 0.12 && x < SX1 - 0.12 && z > SZ0 - 0.4 && z < SZ1 + 0.15;
+    if (onStair) {
+      const t = Math.min(1, Math.max(0, (SZ1 - z) / (SZ1 - SZ0)));
+      const ramp = t * UP;
+      if (feetY > ramp - 1.35 && feetY < ramp + 1.2) return ramp;
+    }
+    const inHole = x > SX0 + 0.02 && x < SX1 - 0.02 && z > SZ0 + 0.05 && z < SZ1 - 0.05;
+    if (feetY > UP - 1.05 && z < upperZ && !inHole) return UP;
+    return 0;
+  };
+
+  return {
+    group,
+    blockers,
+    spawn: { x: 0, z: 5.9, yaw: 0, pitch: -0.04 },
+    bounds: { minX, maxX, minZ, maxZ },
+    deskMat: null,
+    tv: null,
+    groundAt: dreamGround,
+    nearDesk: () => false,
+    nearComputer: () => false,
+    nearBed: (x, z) => hasUp && x > -8.8 && x < -2.2 && z > -4.8 && z < -0.8,
+    nearConsole: () => false,
+    nearExit: (x, z) => z > 7.15 && Math.abs(x) < 1.15,
+    computerHit: null,
+    windowMesh: null,
+    windowAnchor: { x: (winX0 + winX1) / 2, y: 1.55, z: minZ + 0.2 },
+    slider: null,
+    dispose: () => {
+      for (const item of disposables) item.dispose();
+    },
+  };
 }
 
 function addCeiling(builder: MeshBuilder, x0: number, z0: number, x1: number, z1: number, y: number, color: THREE.Color) {

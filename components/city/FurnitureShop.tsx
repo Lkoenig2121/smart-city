@@ -1,5 +1,6 @@
 "use client";
 
+import { dreamCityName } from "@/lib/city/dreamHome";
 import {
   FURNISH_STORES,
   HOME_LISTINGS,
@@ -117,7 +118,8 @@ export function FurnitureShop({ store, player, clock, onPlayer, onClose, onVisit
                     {player.ownedHomes.map((home) => (
                       <li key={home.id} className="flex items-center justify-between gap-2">
                         <span>
-                          {home.name} · {home.kind}
+                          {home.name}
+                          {home.plot ? ` · ${dreamCityName(home.plot.cityId)}` : ` · ${home.kind}`}
                         </span>
                         {onVisitHome ? (
                           <button

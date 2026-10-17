@@ -9,6 +9,8 @@ import { isMountainTerrain } from "@/lib/city/terrainElevation";
 import { lightingFor, type Lighting } from "@/lib/renderer/palette";
 import { AgentLayer } from "./agents";
 import { buildCity, TILE, updateTrafficSignals, type CityMeshes } from "./buildCity";
+import { buildDreamHouseGroup, disposeDreamGroup, dreamCollider } from "./dreamHouseMesh";
+import { dreamDoorYaw, dreamExitTile, findDreamPlot, type DreamPlot } from "@/lib/city/dreamHome";
 import { buildMountainTunnelMouth, nearMountainTunnel } from "./mountainTunnel";
 import { BuildingGlow } from "./buildingGlow";
 import { FLOOR_H } from "./textures";
@@ -30,6 +32,36 @@ import { driveStats } from "@/lib/city/vehicles";
 import { findPath, nearestRoad } from "@/lib/simulation/traffic/pathfinding";
 import { DriveControls } from "./driveControls";
 import { carLookKey, disposeCarMesh, makePlayerCarMesh, updateDutySiren } from "./playerCar";
+
+function lotExclamation() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = "#146b38";
+    ctx.beginPath();
+    ctx.arc(64, 64, 58, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = "#d8ffe6";
+    ctx.stroke();
+    ctx.fillStyle = "#f4fff8";
+    ctx.font = "bold 88px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("!", 64, 72);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }),
+  );
+  sprite.name = "dream-mark";
+  sprite.scale.set(2.4, 2.4, 1);
+  sprite.renderOrder = 10;
+  return sprite;
+}
 
 /** Field of view at rest, and how far it narrows mid-hop. */
 const BASE_FOV = 72;
@@ -101,6 +133,11 @@ export class StreetWorld {
   private missionScene: PoliceMissionScene;
   private missionCall: PoliceCall | null = null;
   private missionEvents: PoliceSceneEvent[] = [];
+  private dreamGroups = new Map<string, THREE.Group>();
+  private dreamPreview: THREE.Group | null = null;
+  private dreamLot: THREE.Group | null = null;
+  private dreamLotKey = "";
+  private dreamRise: { group: THREE.Group; t: number } | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -130,6 +167,7 @@ export class StreetWorld {
       this.city.blockers.push(...mouth.blockers);
     }
     this.scene.add(this.city.group);
+    this.mountDreamHouses();
     this.scene.add(this.glow.group);
 
     this.controls = new StreetControls(state, this.city.blockers);
@@ -974,6 +1012,7 @@ export class StreetWorld {
 
   render(dt: number) {
     this.time += dt;
+    this.tickDreamRise(dt);
     if (this.drive && this.drivingId) {
       this.drive.update(dt, this.driveFuelEmpty);
       this.drive.applyTo(this.camera);
@@ -1274,7 +1313,156 @@ export class StreetWorld {
     };
   }
 
+  /** Grass lot in front of the walker that can hold a house. */
+  dreamPlotOffer(): DreamPlot | null {
+    if (this.isDriving || this.controls.hiking) return null;
+    return findDreamPlot(
+      this.state,
+      this.controls.position.x,
+      this.controls.position.z,
+      this.controls.yaw,
+    );
+  }
+
+  /** True when the lawn is closer than the building under the crosshair. */
+  dreamLotInFront(plot: DreamPlot) {
+    const aimed = this.aimedBuilding();
+    if (!aimed) return true;
+    const px = this.controls.position.x;
+    const pz = this.controls.position.z;
+    const lawn = this.distanceToRect(plot.x, plot.y, plot.w, plot.d, px, pz);
+    return lawn <= this.distanceToBuilding(aimed, px, pz) + 1.5;
+  }
+
+  showDreamLot(plot: DreamPlot | null) {
+    const key = plot ? `${plot.x},${plot.y},${plot.w},${plot.d}` : "";
+    if (key === this.dreamLotKey) return;
+    this.dreamLotKey = key;
+    this.clearDreamLot();
+    if (!plot) return;
+    const width = plot.w * TILE - 0.4;
+    const depth = plot.d * TILE - 0.4;
+    const geo = new THREE.PlaneGeometry(width, depth);
+    geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x3dff7a,
+      transparent: true,
+      opacity: 0.38,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    const cx = (plot.x + plot.w / 2) * TILE;
+    const cz = (plot.y + plot.d / 2) * TILE;
+    const ground = this.controls.groundAt(cx, cz);
+    mesh.position.set(cx, ground + 0.2, cz);
+    const mark = lotExclamation();
+    mark.position.set(cx, ground + 4.2, cz);
+    mark.userData.baseY = ground + 4.2;
+    const group = new THREE.Group();
+    group.add(mesh);
+    group.add(mark);
+    this.city.group.add(group);
+    this.dreamLot = group;
+  }
+
+  setDreamPreview(building: Building | null) {
+    if (this.dreamPreview) {
+      disposeDreamGroup(this.dreamPreview);
+      this.dreamPreview = null;
+    }
+    if (!building) return;
+    const group = buildDreamHouseGroup(building, true);
+    this.city.group.add(group);
+    this.dreamPreview = group;
+  }
+
+  /** Drop the ghost house and the green lot after the studio closes. */
+  clearDreamStudio() {
+    this.setDreamPreview(null);
+    this.showDreamLot(null);
+  }
+
+  placeDreamHouse(building: Building) {
+    this.clearDreamStudio();
+    if (this.dreamGroups.has(building.id)) return;
+    const group = buildDreamHouseGroup(building);
+    group.scale.y = 0.04;
+    this.city.group.add(group);
+    this.dreamGroups.set(building.id, group);
+    this.dreamRise = { group, t: 0 };
+    const blocker = dreamCollider(building);
+    this.city.blockers.push(blocker);
+    this.controls.addBlockers([blocker]);
+    const height = Math.max(1, building.floors) * FLOOR_H + 2.6;
+    this.city.volumes.push({
+      id: building.id,
+      box: new THREE.Box3(
+        new THREE.Vector3(blocker.minX, 0, blocker.minZ),
+        new THREE.Vector3(blocker.maxX, height, blocker.maxZ),
+      ),
+    });
+  }
+
+  stepToDreamDoor(building: Building) {
+    const tile = dreamExitTile(building);
+    this.controls.spawnAt(tile.x, tile.y, dreamDoorYaw(building));
+  }
+
+  private mountDreamHouses() {
+    for (const building of this.state.buildings.values()) {
+      if (building.stats.extra?.dream !== "1") continue;
+      const group = buildDreamHouseGroup(building);
+      this.city.group.add(group);
+      this.dreamGroups.set(building.id, group);
+    }
+  }
+
+  private tickDreamRise(dt: number) {
+    const mark = this.dreamLot?.getObjectByName("dream-mark");
+    if (mark) {
+      const base = typeof mark.userData.baseY === "number" ? mark.userData.baseY : mark.position.y;
+      mark.position.y = base + Math.sin(this.time * 3) * 0.28;
+    }
+    if (!this.dreamRise) return;
+    this.dreamRise.t += dt;
+    const u = Math.min(1, this.dreamRise.t / 1.15);
+    const eased = 1 - (1 - u) ** 3;
+    this.dreamRise.group.scale.y = 0.04 + 0.96 * eased;
+    if (u >= 1) this.dreamRise = null;
+  }
+
+  private distanceToRect(tileX: number, tileY: number, w: number, d: number, x: number, z: number) {
+    const minX = tileX * TILE;
+    const maxX = (tileX + w) * TILE;
+    const minZ = tileY * TILE;
+    const maxZ = (tileY + d) * TILE;
+    const dx = x < minX ? minX - x : x > maxX ? x - maxX : 0;
+    const dz = z < minZ ? minZ - z : z > maxZ ? z - maxZ : 0;
+    return Math.hypot(dx, dz);
+  }
+
+  private clearDreamLot() {
+    const group = this.dreamLot;
+    this.dreamLot = null;
+    if (!group) return;
+    group.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) obj.geometry.dispose();
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.Sprite) {
+        const mat = obj.material;
+        const materials = Array.isArray(mat) ? mat : [mat];
+        for (const item of materials) {
+          if (item instanceof THREE.SpriteMaterial && item.map) item.map.dispose();
+          item.dispose();
+        }
+      }
+    });
+    group.removeFromParent();
+  }
+
   dispose() {
+    this.clearDreamStudio();
+    for (const group of this.dreamGroups.values()) disposeDreamGroup(group);
+    this.dreamGroups.clear();
     this.heldView.dispose();
     this.dutyView.dispose();
     this.clearPoliceIncident();

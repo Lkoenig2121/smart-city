@@ -41,12 +41,39 @@ export interface HomeListing {
   blurb: string;
 }
 
+export interface DreamHomePlot {
+  cityId: string;
+  x: number;
+  y: number;
+  w: number;
+  d: number;
+  facing: number;
+  houseX: number;
+  houseY: number;
+  houseW: number;
+  houseD: number;
+  landPrice: number;
+}
+
+export interface DreamHomeDesign {
+  styleId: string;
+  stories: number;
+  wallColor: string;
+  roofColor: string;
+  accentColor: string;
+  roof: "gable" | "hip" | "flat";
+  floorId: string | null;
+}
+
 export interface OwnedHome {
   id: string;
   listingId: string;
   name: string;
   kind: HomeKind;
   purchasePrice: number;
+  /** Set when the home was built on a street lot. */
+  plot?: DreamHomePlot;
+  design?: DreamHomeDesign;
 }
 
 export const FURNISH_STORES: { id: FurnishStore; name: string; blurb: string }[] = [
@@ -409,33 +436,80 @@ export function parseOwnedHomes(value: unknown): OwnedHome[] {
     const item = raw as Partial<OwnedHome>;
     const listingId = typeof item.listingId === "string" ? item.listingId : "";
     const listing = homeListingById(listingId);
-    if (!listing) continue;
+    const plot = parseDreamPlot(item.plot);
+    const design = parseDreamDesign(item.design);
+    if (!listing && !(plot && design)) continue;
     list.push({
       id: typeof item.id === "string" ? item.id : `home-${listingId}`,
-      listingId,
-      name: typeof item.name === "string" ? item.name : listing.name,
-      kind: listing.kind,
-      purchasePrice: Number(item.purchasePrice) || listing.price,
+      listingId: listingId || (design ? `dream:${design.styleId}` : ""),
+      name: typeof item.name === "string" ? item.name : (listing?.name ?? "Home"),
+      kind: listing?.kind ?? (plot && plot.houseW >= 4 ? "mansion" : "house"),
+      purchasePrice: Number(item.purchasePrice) || listing?.price || 0,
+      ...(plot && design ? { plot, design } : {}),
     });
   }
   return list;
 }
 
+function parseDreamPlot(value: unknown): DreamHomePlot | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<DreamHomePlot>;
+  const num = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? n : null);
+  const x = num(raw.x);
+  const y = num(raw.y);
+  const w = num(raw.w);
+  const d = num(raw.d);
+  const houseX = num(raw.houseX);
+  const houseY = num(raw.houseY);
+  const houseW = num(raw.houseW);
+  const houseD = num(raw.houseD);
+  if (x == null || y == null || w == null || d == null || houseX == null || houseY == null || houseW == null || houseD == null) {
+    return null;
+  }
+  if (typeof raw.cityId !== "string") return null;
+  return {
+    cityId: raw.cityId,
+    x, y, w, d,
+    facing: num(raw.facing) ?? 0,
+    houseX, houseY, houseW, houseD,
+    landPrice: num(raw.landPrice) ?? 0,
+  };
+}
+
+function parseDreamDesign(value: unknown): DreamHomeDesign | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<DreamHomeDesign>;
+  if (typeof raw.styleId !== "string") return null;
+  const stories = typeof raw.stories === "number" ? raw.stories : 1;
+  const roof = raw.roof === "hip" || raw.roof === "flat" || raw.roof === "gable" ? raw.roof : "gable";
+  return {
+    styleId: raw.styleId,
+    stories,
+    wallColor: typeof raw.wallColor === "string" ? raw.wallColor : "#d8c4a8",
+    roofColor: typeof raw.roofColor === "string" ? raw.roofColor : "#6a5340",
+    accentColor: typeof raw.accentColor === "string" ? raw.accentColor : "#c9a44c",
+    roof,
+    floorId: typeof raw.floorId === "string" ? raw.floorId : null,
+  };
+}
+
 /** Synthetic lodging building so owned homes reuse hotel room interiors. */
 export function makeOwnedHomeBuilding(home: OwnedHome): import("./types").Building {
   const mansion = home.kind === "mansion";
+  const design = home.design;
+  const plot = home.plot;
   return {
     id: home.id,
-    kind: "apartment",
+    kind: plot ? "house" : "apartment",
     name: home.name,
-    origin: { x: 0, y: 0 },
-    width: mansion ? 4 : 3,
-    depth: mansion ? 4 : 3,
+    origin: plot ? { x: plot.houseX, y: plot.houseY } : { x: 0, y: 0 },
+    width: plot ? plot.houseW : mansion ? 4 : 3,
+    depth: plot ? plot.houseD : mansion ? 4 : 3,
     variant: mansion ? 2 : 0,
-    floors: mansion ? 6 : 3,
-    wallColor: mansion ? "#e8dcc8" : "#d8c4a8",
-    roofColor: mansion ? "#5a3d28" : "#6a5340",
-    accentColor: "#c9a44c",
+    floors: design?.stories ?? (mansion ? 6 : 3),
+    wallColor: design?.wallColor ?? (mansion ? "#e8dcc8" : "#d8c4a8"),
+    roofColor: design?.roofColor ?? (mansion ? "#5a3d28" : "#6a5340"),
+    accentColor: design?.accentColor ?? "#c9a44c",
     constructionLeft: 0,
     stats: {
       residents: 0,
@@ -448,7 +522,15 @@ export function makeOwnedHomeBuilding(home: OwnedHome): import("./types").Buildi
       happiness: 90,
       propertyValue: home.purchasePrice,
       status: "open",
-      extra: { lodging: "residences" },
+      extra: plot
+        ? {
+            lodging: "residences",
+            dream: "1",
+            facing: String(plot.facing),
+            roof: design?.roof ?? "gable",
+            style: design?.styleId ?? "starter",
+          }
+        : { lodging: "residences" },
     },
   };
 }

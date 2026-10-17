@@ -17,7 +17,7 @@ export function promenadeXAt(y: number) {
 }
 
 /** Coastal City boardwalk — runs along the inland sand strip, facing the sea. */
-export const COASTAL_BOARDWALK_X = 25;
+export const COASTAL_BOARDWALK_X = 18;
 
 export function isPromenadeTile(x: number, y: number, cityId?: string) {
   if (cityId === "coastal") return x === COASTAL_BOARDWALK_X;

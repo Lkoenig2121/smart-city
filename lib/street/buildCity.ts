@@ -267,6 +267,15 @@ export function buildCity(state: CityState): CityMeshes {
   const volumes: BuildingVolume[] = [];
   const neonB = new MeshBuilder();
   for (const building of state.buildings.values()) {
+    if (building.stats.extra?.dream === "1") {
+      const x0 = building.origin.x * TILE + WALL_INSET;
+      const z0 = building.origin.y * TILE + WALL_INSET;
+      const x1 = (building.origin.x + building.width) * TILE - WALL_INSET;
+      const z1 = (building.origin.y + building.depth) * TILE - WALL_INSET;
+      blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1 });
+      volumes.push(volumeFor(building));
+      continue;
+    }
     if (venueRole(building) === "mall") {
       addBuilding(building, mallWallsFor, mallRoofB, mallTrimB, mallBalconyB, blockers);
     } else {
@@ -292,6 +301,7 @@ export function buildCity(state: CityState): CityMeshes {
       addBridge(tile, state.tiles, concreteB, roadB, trimB, lampHeadB, lamps, scratch);
     }
   }
+  addSuspensionSpans(state.tiles, trimB);
 
   // ─── Assemble meshes ───────────────────────────────────────────────────────
   const addMesh = (
@@ -1184,8 +1194,8 @@ function addBridge(
   const ySouth = bridgeDeckHeight(tile, x0 + TILE / 2, z1 - 0.01, tiles);
 
   const asphalt = new THREE.Color("#3b3d43");
-  const under = new THREE.Color("#8a8680");
-  const rail = new THREE.Color("#c5c9ce");
+  const under = new THREE.Color(bridge.suspension ? "#8d3a22" : "#8a8680");
+  const rail = new THREE.Color(bridge.suspension ? "#e24b1a" : "#c5c9ce");
 
   if (bridge.axis === "ew") {
     slopedDeck(roadB, dx0, dz0, dx1, dz1, yWest, yEast, "ew", asphalt);
@@ -1268,7 +1278,8 @@ function addBridge(
   }
 
   // Towers sit beside the roadway so they never swallow the walker.
-  if (bridge.pylon) {
+  // Suspension portals are drawn once for the whole span.
+  if (bridge.pylon && !bridge.suspension) {
     scratch.set("#d5dae0");
     const cx = (x0 + x1) / 2;
     const mid = (z0 + z1) / 2;
@@ -1430,6 +1441,115 @@ function railing(
 function addPylon(builder: MeshBuilder, x: number, z: number, color: THREE.Color) {
   builder.box(x - 0.28, z - 0.28, x + 0.28, z + 0.28, -2.4, DECK_H + 9, color);
   builder.box(x - 0.4, z - 0.4, x + 0.4, z + 0.4, DECK_H + 8.6, DECK_H + 9.3, color);
+}
+
+const GATE_ORANGE = new THREE.Color("#e24b1a");
+const GATE_CABLE = new THREE.Color("#f3f4f6");
+const GATE_TOP = DECK_H + 28;
+
+/** International-orange portals and a catenary across each suspension span. */
+function addSuspensionSpans(tiles: Tile[][], trimB: MeshBuilder) {
+  const seen = new Set<string>();
+  for (let y = 0; y < tiles.length; y++) {
+    for (let x = 0; x < tiles.length; x++) {
+      const bridge = tiles[y][x].bridge;
+      if (!bridge?.suspension || bridge.axis !== "ew" || seen.has(`${x},${y}`)) continue;
+      let left = x;
+      while (tiles[y][left - 1]?.bridge?.suspension) left--;
+      let right = x;
+      while (tiles[y][right + 1]?.bridge?.suspension) right++;
+      for (let i = left; i <= right; i++) seen.add(`${i},${y}`);
+      addGateSpan(tiles, y, left, right, trimB);
+    }
+  }
+}
+
+function addGateSpan(tiles: Tile[][], y: number, left: number, right: number, trimB: MeshBuilder) {
+  const towers: number[] = [];
+  for (let x = left; x <= right; x++) {
+    if (tiles[y][x].bridge?.pylon) towers.push(x);
+  }
+  const t1 = towers[0] ?? left;
+  const t2 = towers[1] ?? right;
+  const z0 = y * TILE;
+  const north = z0 + 0.7;
+  const south = z0 + TILE - 0.7;
+  for (const tx of [t1, t2]) addGateTower(trimB, tx * TILE + TILE / 2, north, south);
+  for (const z of [north, south]) {
+    layCable(trimB, left * TILE, cableY(left, left, right, t1, t2), (right + 1) * TILE, z, t1, t2, left, right);
+    for (let x = left * TILE + 3; x < (right + 1) * TILE - 2; x += 4) {
+      const gy = cableY(x / TILE, left, right, t1, t2);
+      if (gy < DECK_H + 2.2) continue;
+      trimB.box(x - 0.04, z - 0.04, x + 0.04, z + 0.04, DECK_H + 1.15, gy, GATE_CABLE);
+    }
+  }
+}
+
+function addGateTower(trimB: MeshBuilder, cx: number, north: number, south: number) {
+  const leg = 0.55;
+  trimB.box(cx - leg, north - leg, cx + leg, north + leg, -1.4, GATE_TOP, GATE_ORANGE);
+  trimB.box(cx - leg, south - leg, cx + leg, south + leg, -1.4, GATE_TOP, GATE_ORANGE);
+  for (const yb of [DECK_H + 9, DECK_H + 17, GATE_TOP - 1.4]) {
+    trimB.box(cx - 0.42, north, cx + 0.42, south, yb, yb + 0.85, GATE_ORANGE);
+  }
+  trimB.box(cx - 0.7, north - 0.7, cx + 0.7, north + 0.7, GATE_TOP - 0.3, GATE_TOP + 0.55, GATE_ORANGE);
+  trimB.box(cx - 0.7, south - 0.7, cx + 0.7, south + 0.7, GATE_TOP - 0.3, GATE_TOP + 0.55, GATE_ORANGE);
+}
+
+/** Cable height above the water at a fractional tile position. */
+function cableY(gx: number, left: number, right: number, t1: number, t2: number) {
+  const top = GATE_TOP - 0.4;
+  const anchor = DECK_H + 2.3;
+  const belly = DECK_H + 6.5;
+  const tower1 = t1 + 0.5;
+  const tower2 = t2 + 0.5;
+  if (gx <= tower1) {
+    const t = (gx - left) / Math.max(0.001, tower1 - left);
+    return anchor + (top - anchor) * t - 6 * t * (1 - t);
+  }
+  if (gx >= tower2) {
+    const t = (gx - tower2) / Math.max(0.001, right + 1 - tower2);
+    return top + (anchor - top) * t - 6 * t * (1 - t);
+  }
+  const t = (gx - tower1) / Math.max(0.001, tower2 - tower1);
+  return top - (top - belly) * 4 * t * (1 - t);
+}
+
+function layCable(
+  trimB: MeshBuilder,
+  x0: number,
+  y0: number,
+  x1: number,
+  z: number,
+  t1: number,
+  t2: number,
+  left: number,
+  right: number,
+) {
+  const steps = Math.max(12, Math.round((x1 - x0) / 3));
+  for (let i = 0; i < steps; i++) {
+    const a = i / steps;
+    const b = (i + 1) / steps;
+    const ax = x0 + (x1 - x0) * a;
+    const bx = x0 + (x1 - x0) * b;
+    const ay = i === 0 ? y0 : cableY(ax / TILE, left, right, t1, t2);
+    const by = cableY(bx / TILE, left, right, t1, t2);
+    const thick = 0.09;
+    trimB.quad(
+      { x: ax, y: ay, z: z - thick },
+      { x: bx, y: by, z: z - thick },
+      { x: bx, y: by, z: z + thick },
+      { x: ax, y: ay, z: z + thick },
+      GATE_CABLE,
+    );
+    trimB.quad(
+      { x: ax, y: ay - thick, z },
+      { x: bx, y: by - thick, z },
+      { x: bx, y: by + thick, z },
+      { x: ax, y: ay + thick, z },
+      GATE_CABLE,
+    );
+  }
 }
 
 function buildWater(state: CityState) {

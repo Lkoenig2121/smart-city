@@ -43,7 +43,7 @@ const SPECS: Record<"mountain" | "coastal" | "future", StubSpec> = {
     id: "coastal",
     name: "Coastal City",
     seed: 550323,
-    ground: "sand",
+    ground: "grass",
     treasury: 1_200_000,
     colors: ["#3d7ea6", "#e8d5a8", "#2a6b5a", "#c45c4a"],
   },
@@ -272,12 +272,38 @@ function paintFutureTerrain(tiles: Tile[][], rand: () => number, size: number) {
 
 function paintCoastalTerrain(tiles: Tile[][], size: number) {
   for (let y = 0; y < size; y++) {
-    for (let x = size - 5; x < size; x++) {
-      tiles[y][x].terrain = "water";
-    }
-    if (tiles[y][size - 6]) tiles[y][size - 6].terrain = "sand";
-    if (tiles[y][size - 7]) tiles[y][size - 7].terrain = "sand";
+    for (let x = 20; x < size; x++) tiles[y][x].terrain = "water";
+    if (tiles[y][18]) tiles[y][18].terrain = "sand";
+    if (tiles[y][19]) tiles[y][19].terrain = "sand";
   }
+  // Far headland, so the strait has two shores for the suspension span.
+  for (let y = 8; y <= 20; y++) {
+    for (let x = 29; x < size; x++) tiles[y][x].terrain = "grass";
+  }
+}
+
+/** East–west suspension span across the open water on row `y`. */
+function buildGateBridge(tiles: Tile[][], y: number) {
+  const span: number[] = [];
+  for (let x = 0; x < tiles.length; x++) {
+    if (tiles[y]?.[x]?.terrain === "water") span.push(x);
+  }
+  if (span.length < 6) return;
+  span.forEach((x, i) => {
+    const tile = tiles[y][x];
+    tile.road = { north: false, east: false, south: false, west: false };
+    tile.tree = null;
+    tile.buildingId = null;
+    tile.bridge = {
+      axis: "ew",
+      deck: 22,
+      pier: false,
+      pylon: i === 2 || i === span.length - 3,
+      abutment: i === 0 ? "start" : i === span.length - 1 ? "end" : null,
+      graffiti: null,
+      suspension: true,
+    };
+  });
 }
 
 /**
@@ -307,6 +333,7 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
   }
   if (kind === "coastal") {
     for (let y = 1; y < size - 1; y++) addRoad(tiles, COASTAL_BOARDWALK_X, y, size);
+    for (let y = 9; y <= 19; y++) addRoad(tiles, 30, y, size);
   }
   // Short spurs from the valley cross out to the foothills.
   if (kind === "mountain") {
@@ -318,6 +345,10 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
     for (let x = 8; x <= 12; x++) addRoad(tiles, x, 28, size);
   }
   connectRoads(tiles, size);
+  if (kind === "coastal") {
+    buildGateBridge(tiles, 14);
+    connectRoads(tiles, size);
+  }
 
   const buildings = new Map<string, Building>();
   let buildingIndex = 0;
@@ -605,8 +636,6 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
   } else {
     place("city_hall", 12, 12);
     place("police", 8, 12);
-    place("hospital", 16, 12);
-    place("school", 12, 8);
     place("shop", 8, 8);
     place("shop", 16, 8);
     place("office", 8, 16);
@@ -650,6 +679,71 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
           accent: club.accent,
         });
       });
+    }
+
+    place("fire", 2, 16);
+    place("school", 10, 28);
+    place("hospital", 15, 28);
+    place("office", 9, 2);
+    place("office", 10, 4);
+    place("office", 29, 16);
+    place("apartment", 17, 18);
+    place("apartment", 31, 12);
+    place("apartment", 9, 28);
+    place("shop", 2, 8, (b) => {
+      b.name = "Harbor Market";
+    });
+    place("shop", 3, 10, (b) => {
+      b.name = "Tide Books";
+    });
+    place("house", 2, 2);
+    place("house", 9, 4);
+    place("house", 16, 4);
+    place("house", 2, 22);
+    place("house", 13, 30);
+
+    // West green, clear of the arterials, so the neighborhoods still have a lawn.
+    for (let y = 23; y <= 30; y++) {
+      for (let x = 1; x <= 5; x++) {
+        const tile = tiles[y]?.[x];
+        if (!tile || tile.road || tile.buildingId || tile.terrain === "water" || tile.terrain === "sand") continue;
+        tile.terrain = "park";
+        tile.tree = null;
+      }
+    }
+
+    for (let y = 1; y < size - 1; y++) {
+      for (let x = 1; x < size - 1; x++) {
+        const tile = tiles[y][x];
+        if (tile.road || tile.buildingId || blockedTerrain(tile.terrain)) continue;
+        if (tile.terrain === "sand" || tile.terrain === "lot" || tile.terrain === "park") continue;
+        const nearRoad =
+          Boolean(tiles[y - 1]?.[x]?.road) ||
+          Boolean(tiles[y + 1]?.[x]?.road) ||
+          Boolean(tiles[y][x - 1]?.road) ||
+          Boolean(tiles[y][x + 1]?.road);
+        if (nearRoad && rand() < 0.74) {
+          const roll = rand();
+          const bKind: BuildingKind = roll < 0.16 ? "apartment" : roll < 0.28 ? "shop" : "house";
+          place(bKind, x, y, (b) => {
+            if (bKind === "shop") {
+              b.name = pick(rand, ["Cove Goods", "Salt Market", "Pier Bakery", "Dune Supply", "Harbor Deli"]);
+            }
+          });
+        } else if (tile.terrain === "grass" && rand() < 0.55) {
+          tile.tree = { variant: randInt(rand, 0, 5), scale: randRange(rand, 0.75, 1.15) };
+        }
+      }
+    }
+
+    for (let y = 23; y <= 30; y++) {
+      for (let x = 1; x <= 5; x++) {
+        const tile = tiles[y]?.[x];
+        if (!tile || tile.road || tile.buildingId || tile.terrain !== "park") continue;
+        if (rand() < 0.42) {
+          tile.tree = { variant: randInt(rand, 0, 5), scale: randRange(rand, 0.85, 1.25) };
+        }
+      }
     }
   }
 
