@@ -6,6 +6,7 @@ import {
   DREAM_ROOFS,
   DREAM_STYLES,
   DREAM_WALLS,
+  PROPERTY_CATEGORIES,
   dreamCityName,
   dreamStyle,
   previewDreamBuilding,
@@ -14,6 +15,7 @@ import {
   type DreamChoice,
   type DreamPlot,
   type DreamRoof,
+  type PropertyCategory,
 } from "@/lib/city/dreamHome";
 import { FURNISHINGS } from "@/lib/city/furnishings";
 import { DREAM_MESH_REV } from "@/lib/street/dreamHouseMesh";
@@ -37,6 +39,7 @@ const ROOF_LABEL: Record<DreamRoof, string> = {
 
 export function DreamHomeStudio({ plot, player, onPreview, onConfirm, onClose }: Props) {
   const first = DREAM_STYLES.find((style) => styleFits(plot, style)) ?? DREAM_STYLES[0];
+  const [category, setCategory] = useState<PropertyCategory | "all">("all");
   const [choice, setChoice] = useState<DreamChoice>({
     styleId: first.id,
     stories: first.minStories,
@@ -94,7 +97,13 @@ export function DreamHomeStudio({ plot, player, onPreview, onConfirm, onClose }:
             <p className="text-[0.65rem] uppercase tracking-[0.28em] text-emerald-300">
               {dreamCityName(plot.cityId)} · {plot.w}×{plot.d} lot
             </p>
-            <p className="text-lg font-semibold text-white">Build your dream home</p>
+            <p className="text-lg font-semibold text-white">Build on this lot</p>
+            <p className="text-sm text-sky-100/80">
+              {plot.lotId} · {plot.zone} · {plot.roadAccess ? "Road access" : "Set back from the street"}
+            </p>
+            <p className="text-sm text-sky-100/80">
+              Land {formatDollars(plot.landPrice)} · Market {formatDollars(plot.marketValue)} · Vacant
+            </p>
             <p className="text-sm text-sky-100/80">
               Wallet {formatDollars(player.wallet)} · Bank {formatDollars(player.bank)}
             </p>
@@ -109,7 +118,30 @@ export function DreamHomeStudio({ plot, player, onPreview, onConfirm, onClose }:
         </header>
         <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 md:grid-cols-[minmax(0,16rem)_1fr]">
           <div className="min-h-0 space-y-1.5 overflow-y-auto">
-            {DREAM_STYLES.map((item) => {
+            <div className="mb-2 flex flex-wrap gap-1">
+              <button
+                type="button"
+                onClick={() => setCategory("all")}
+                className={`rounded-full px-2 py-1 text-[0.65rem] font-semibold ${
+                  category === "all" ? "bg-emerald-400 text-[#0a1a22]" : "bg-white/10 text-white"
+                }`}
+              >
+                All
+              </button>
+              {PROPERTY_CATEGORIES.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setCategory(item.id)}
+                  className={`rounded-full px-2 py-1 text-[0.65rem] font-semibold ${
+                    category === item.id ? "bg-emerald-400 text-[#0a1a22]" : "bg-white/10 text-white"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            {DREAM_STYLES.filter((item) => category === "all" || item.category === category).map((item) => {
               const fits = styleFits(plot, item);
               const selected = item.id === choice.styleId;
               return (
@@ -128,6 +160,9 @@ export function DreamHomeStudio({ plot, player, onPreview, onConfirm, onClose }:
                   <span className="block text-xs text-slate-400">
                     {fits ? formatDollars(item.price) : "Lot too small"} · {item.minStories}–{item.maxStories}{" "}
                     stories
+                    {item.garage ? " · Garage" : ""}
+                    {item.porch ? " · Porch" : ""}
+                    {item.glass ? " · Glass" : ""}
                   </span>
                 </button>
               );
@@ -138,6 +173,10 @@ export function DreamHomeStudio({ plot, player, onPreview, onConfirm, onClose }:
             <div>
               <p className="text-sm font-semibold text-white">{style.name}</p>
               <p className="text-sm text-slate-300">{style.description}</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Needs a {style.front}×{style.depth} footprint. Construction finishes as soon as you pay, and the
+                house is saved to this lot.
+              </p>
             </div>
             <div>
               <p className="text-[0.65rem] uppercase tracking-[0.18em] text-slate-400">Stories</p>

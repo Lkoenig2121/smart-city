@@ -1514,7 +1514,7 @@ export function StreetView({
           return true;
         }
         if (
-          interior.zone === "room" &&
+          (interior.zone === "room" || building.stats.extra?.dream === "1") &&
           (world.aimedAtComputer() || world.nearComputer())
         ) {
           atComputerRef.current = true;
@@ -1578,10 +1578,10 @@ export function StreetView({
       setAtConsole((prev) => (prev === consoleNear ? prev : consoleNear));
       setNuketownOn(world.isNuketown());
       const aiming =
-        interior.zone === "room" &&
+        (interior.zone === "room" || building.stats.extra?.dream === "1") &&
         !atComputerRef.current &&
         !sleepingRef.current &&
-        world.aimedAtComputer();
+        (world.aimedAtComputer() || world.nearComputer());
       setAimComputer((prev) => (prev === aiming ? prev : aiming));
       clockAcc += dt;
       if (clockAcc > 0.25) {
@@ -1997,7 +1997,7 @@ export function StreetView({
       canvas &&
       world &&
       interior?.kind === "lodging" &&
-      interior.zone === "room"
+      (interior.zone === "room" || lodgingBuilding?.stats.extra?.dream === "1")
     ) {
       const rect = canvas.getBoundingClientRect();
       const lockedNow = document.pointerLockElement === canvas;
@@ -3121,7 +3121,7 @@ export function StreetView({
 
       {atComputer &&
       interior?.kind === "lodging" &&
-      interior.zone === "room" ? (
+      (interior.zone === "room" || lodgingBuilding?.stats.extra?.dream === "1") ? (
         <RoomComputer
           minuteOfDay={state.clock.minuteOfDay}
           onClose={() => {
@@ -3134,7 +3134,7 @@ export function StreetView({
       {aimComputer &&
       !atComputer &&
       interior?.kind === "lodging" &&
-      interior.zone === "room" ? (
+      (interior.zone === "room" || lodgingBuilding?.stats.extra?.dream === "1") ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
           <div className="rounded-xl border border-sky-300/40 bg-black/70 px-4 py-2 text-center backdrop-blur">
             <p className="text-xs text-slate-200">

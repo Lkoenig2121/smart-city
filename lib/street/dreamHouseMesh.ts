@@ -6,7 +6,7 @@ import { MeshBuilder } from "./meshBuilder";
 
 const INSET = 0.55;
 /** Bump when the house mesh changes so an open studio rebuilds the preview. */
-export const DREAM_MESH_REV = 2;
+export const DREAM_MESH_REV = 5;
 
 function bounds(building: Building) {
   const x0 = building.origin.x * TILE + INSET;
@@ -264,6 +264,81 @@ function addPorch(builder: MeshBuilder, building: Building, x0: number, z0: numb
   }
 }
 
+const ROW_TINTS = ["#f4efe6", "#c45c4a", "#6a5340"];
+
+/** Three street-facing homes sharing party walls. */
+function addTownhouseRow(
+  walls: MeshBuilder,
+  roof: MeshBuilder,
+  trim: MeshBuilder,
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  floors: number,
+  height: number,
+  wall: THREE.Color,
+  roofColor: THREE.Color,
+  accent: THREE.Color,
+  facing: number,
+) {
+  const alongX = facing === 0 || facing === 2;
+  const count = 3;
+  const span0 = alongX ? x0 : z0;
+  const span1 = alongX ? x1 : z1;
+  const party = 0.42;
+  const bay = (span1 - span0 - party * (count - 1)) / count;
+  const door = new THREE.Color("#2a2420");
+  const ink = new THREE.Color("#1a2430");
+  const slab = new THREE.Color("#cfc6b8");
+
+  for (let i = 0; i < count; i++) {
+    const a0 = span0 + i * (bay + party);
+    const a1 = a0 + bay;
+    const color = wall.clone().lerp(new THREE.Color(ROW_TINTS[i]), 0.55);
+    const bx0 = alongX ? a0 : x0;
+    const bx1 = alongX ? a1 : x1;
+    const bz0 = alongX ? z0 : a0;
+    const bz1 = alongX ? z1 : a1;
+    walls.walls(bx0, bz0, bx1, bz1, 0, height, color);
+    roof.gable(bx0 - 0.08, bz0 - 0.08, bx1 + 0.08, bz1 + 0.08, height, 1.7 + (i % 2) * 0.35, roofColor, alongX ? "z" : "x");
+    if (i < count - 1) {
+      const seam = a1;
+      if (alongX) trim.box(seam, z0 - 0.08, seam + party, z1 + 0.08, 0, height + 0.85, accent);
+      else trim.box(x0 - 0.08, seam, x1 + 0.08, seam + party, 0, height + 0.85, accent);
+    }
+    const mid = (a0 + a1) / 2;
+    for (let floor = 0; floor < floors; floor++) {
+      const y0 = floor === 0 ? 1.15 : 0.85 + floor * FLOOR_H;
+      const y1 = y0 + (floor === 0 ? 0.95 : 1.15);
+      const places = floor === 0 ? [mid - bay * 0.28, mid + bay * 0.28] : [mid];
+      for (const at of places) {
+        if (facing === 0) trim.box(at - 0.32, z1 - 0.02, at + 0.32, z1 + 0.08, y0, y1, ink);
+        else if (facing === 2) trim.box(at - 0.32, z0 - 0.08, at + 0.32, z0 + 0.02, y0, y1, ink);
+        else if (facing === 1) trim.box(x1 - 0.02, at - 0.32, x1 + 0.08, at + 0.32, y0, y1, ink);
+        else trim.box(x0 - 0.08, at - 0.32, x0 + 0.02, at + 0.32, y0, y1, ink);
+      }
+    }
+    if (facing === 0) {
+      trim.box(mid - 0.38, z1 - 0.04, mid + 0.38, z1 + 0.14, 0, 2.2, door);
+      trim.box(mid - 0.7, z1, mid + 0.7, z1 + 0.95, 0, 0.22, slab);
+      trim.box(mid - 0.55, z1 + 0.72, mid + 0.55, z1 + 0.95, 0.22, 0.38, slab);
+    } else if (facing === 2) {
+      trim.box(mid - 0.38, z0 - 0.14, mid + 0.38, z0 + 0.04, 0, 2.2, door);
+      trim.box(mid - 0.7, z0 - 0.95, mid + 0.7, z0, 0, 0.22, slab);
+      trim.box(mid - 0.55, z0 - 0.95, mid + 0.55, z0 - 0.72, 0.22, 0.38, slab);
+    } else if (facing === 1) {
+      trim.box(x1 - 0.04, mid - 0.38, x1 + 0.14, mid + 0.38, 0, 2.2, door);
+      trim.box(x1, mid - 0.7, x1 + 0.95, mid + 0.7, 0, 0.22, slab);
+      trim.box(x1 + 0.72, mid - 0.55, x1 + 0.95, mid + 0.55, 0.22, 0.38, slab);
+    } else {
+      trim.box(x0 - 0.14, mid - 0.38, x0 + 0.04, mid + 0.38, 0, 2.2, door);
+      trim.box(x0 - 0.95, mid - 0.7, x0, mid + 0.7, 0, 0.22, slab);
+      trim.box(x0 - 0.95, mid - 0.55, x0 - 0.72, mid + 0.55, 0.22, 0.38, slab);
+    }
+  }
+}
+
 export function dreamCollider(building: Building): Blocker {
   const { x0, z0, x1, z1 } = bounds(building);
   return { minX: x0, maxX: x1, minZ: z0, maxZ: z1 };
@@ -284,8 +359,10 @@ export function buildDreamHouseGroup(building: Building, ghost = false): THREE.G
   const roofColor = new THREE.Color(building.roofColor);
   const accent = new THREE.Color(building.accentColor);
   const styleId = building.stats.extra?.style ?? "";
-  const glassy = styleId === "glass" || styleId === "future";
-  if (styleId === "modern") {
+  const glassy = styleId === "glass" || styleId === "future" || styleId === "penthouse" || styleId === "mixed";
+  if (styleId === "townhouse") {
+    addTownhouseRow(walls, roof, trim, x0, z0, x1, z1, floors, height, wall, roofColor, accent, Number(building.stats.extra?.facing ?? 0));
+  } else if (styleId === "modern" || styleId === "apartment" || styleId === "penthouse" || styleId === "mixed") {
     addModernHouse(
       walls,
       roof,

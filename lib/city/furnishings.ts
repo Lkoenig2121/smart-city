@@ -53,6 +53,10 @@ export interface DreamHomePlot {
   houseW: number;
   houseD: number;
   landPrice: number;
+  lotId?: string;
+  zone?: string;
+  marketValue?: number;
+  roadAccess?: boolean;
 }
 
 export interface DreamHomeDesign {
@@ -473,6 +477,10 @@ function parseDreamPlot(value: unknown): DreamHomePlot | null {
     facing: num(raw.facing) ?? 0,
     houseX, houseY, houseW, houseD,
     landPrice: num(raw.landPrice) ?? 0,
+    ...(typeof raw.lotId === "string" ? { lotId: raw.lotId } : {}),
+    ...(typeof raw.zone === "string" ? { zone: raw.zone } : {}),
+    ...(num(raw.marketValue) != null ? { marketValue: num(raw.marketValue)! } : {}),
+    ...(typeof raw.roadAccess === "boolean" ? { roadAccess: raw.roadAccess } : {}),
   };
 }
 

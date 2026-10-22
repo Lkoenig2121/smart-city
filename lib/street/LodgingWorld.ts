@@ -168,8 +168,10 @@ export class LodgingWorld {
     holder.rotation.y = Math.atan2(dir.sx, -dir.sz);
     city.position.set(-fx, -fy, -fz);
     city.rotation.set(0, 0, 0);
+    const ownHouse = `dream-${this.building.id}`;
     city.traverse((obj) => {
       if (obj.userData.facadeBalconies) obj.visible = false;
+      if (obj.name === ownHouse) obj.visible = false;
     });
     holder.add(city);
     this.scene.add(holder);
@@ -201,8 +203,10 @@ export class LodgingWorld {
     if (city) {
       city.position.set(0, 0, 0);
       city.rotation.set(0, 0, 0);
+      const ownHouse = `dream-${this.building.id}`;
       city.traverse((obj) => {
         if (obj.userData.facadeBalconies) obj.visible = true;
+        if (obj.name === ownHouse) obj.visible = true;
       });
     }
     return city;
@@ -213,6 +217,7 @@ export class LodgingWorld {
   }
 
   nearComputer() {
+    if (this.building.stats.extra?.dream === "1" && this.controls.position.y < 4) return false;
     return this.interior.nearComputer(this.controls.position.x, this.controls.position.z);
   }
 
@@ -259,7 +264,8 @@ export class LodgingWorld {
 
   aimedAtComputer(ndcX = 0, ndcY = 0) {
     const target = this.interior.computerHit;
-    if (!target || this.zone !== "room") return false;
+    const dream = this.building.stats.extra?.dream === "1";
+    if (!target || (this.zone !== "room" && !dream)) return false;
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
     const hits = raycaster.intersectObject(target, true);

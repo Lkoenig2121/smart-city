@@ -8,11 +8,22 @@ import { earnCash, readPlayer, spendWallet, writePlayer, type PlayerState } from
 
 export type DreamFacing = 0 | 1 | 2 | 3;
 export type DreamRoof = "gable" | "hip" | "flat";
+export type PropertyCategory = "home" | "townhouse" | "apartment" | "luxury" | "mixed";
+export type LotZone = "residential" | "park" | "waterfront";
+
+export const PROPERTY_CATEGORIES: { id: PropertyCategory; label: string }[] = [
+  { id: "home", label: "Homes" },
+  { id: "townhouse", label: "Townhouses" },
+  { id: "apartment", label: "Apartments" },
+  { id: "luxury", label: "Luxury" },
+  { id: "mixed", label: "Mixed-use" },
+];
 
 export interface DreamStyle {
   id: string;
   name: string;
   description: string;
+  category: PropertyCategory;
   /** Tiles along the street. */
   front: number;
   /** Tiles back from the street. */
@@ -32,12 +43,17 @@ export interface DreamStyle {
 
 export interface DreamPlot {
   cityId: CityId;
+  /** Stable id for this grass rectangle in this city. */
+  lotId: string;
   x: number;
   y: number;
   w: number;
   d: number;
   facing: DreamFacing;
   landPrice: number;
+  marketValue: number;
+  zone: LotZone;
+  roadAccess: boolean;
 }
 
 export interface DreamChoice {
@@ -73,18 +89,22 @@ const SIZES: Array<[number, number]> = [
 ];
 
 export const DREAM_STYLES: DreamStyle[] = [
-  { id: "starter", name: "Starter Home", description: "A compact one-family house with a front porch.", front: 2, depth: 2, minStories: 1, maxStories: 2, price: 25_000, wall: "#d8c4a8", roofColor: "#6a5340", accent: "#c9a44c", roof: "gable", porch: true, garage: false, steep: false, glass: false },
-  { id: "traditional", name: "Traditional Family Home", description: "A wider family house with a brick-toned gable.", front: 3, depth: 2, minStories: 1, maxStories: 2, price: 65_000, wall: "#c45c4a", roofColor: "#4a3028", accent: "#f4efe6", roof: "gable", porch: true, garage: false, steep: false, glass: false },
-  { id: "modern", name: "Modern Home", description: "Clean lines and a flat roof.", front: 3, depth: 2, minStories: 1, maxStories: 3, price: 110_000, wall: "#e8e4dc", roofColor: "#2a2a2a", accent: "#1a2744", roof: "flat", porch: false, garage: false, steep: false, glass: false },
-  { id: "mansion", name: "Luxury Mansion", description: "A broad estate house with room to grow upward.", front: 4, depth: 3, minStories: 2, maxStories: 4, price: 250_000, wall: "#f4efe6", roofColor: "#3a3a3a", accent: "#c9a44c", roof: "hip", porch: true, garage: false, steep: false, glass: false },
-  { id: "glass", name: "Glass House", description: "Pale walls and a wide band of windows.", front: 3, depth: 2, minStories: 1, maxStories: 3, price: 180_000, wall: "#d5e6ea", roofColor: "#1a2744", accent: "#8fd0d8", roof: "flat", porch: false, garage: false, steep: false, glass: true },
-  { id: "craftsman", name: "Craftsman Home", description: "Low eaves, a deep porch, and warm wood trim.", front: 2, depth: 2, minStories: 1, maxStories: 2, price: 85_000, wall: "#8a6a4a", roofColor: "#3a2a1c", accent: "#c4a36a", roof: "gable", porch: true, garage: false, steep: false, glass: false },
-  { id: "farmhouse", name: "Modern Farmhouse", description: "A long porch and a simple gable.", front: 3, depth: 2, minStories: 1, maxStories: 2, price: 95_000, wall: "#f4f1ea", roofColor: "#2c2c2c", accent: "#1a2744", roof: "gable", porch: true, garage: false, steep: false, glass: false },
-  { id: "estate", name: "Contemporary Estate", description: "The largest footprint, with a hipped roof.", front: 4, depth: 3, minStories: 2, maxStories: 4, price: 300_000, wall: "#cfc8bc", roofColor: "#1c1c1c", accent: "#c9a44c", roof: "hip", porch: true, garage: false, steep: false, glass: false },
-  { id: "chalet", name: "Mountain Chalet", description: "A steep roof for snow country.", front: 2, depth: 2, minStories: 1, maxStories: 3, price: 90_000, wall: "#6a5340", roofColor: "#2a2420", accent: "#e8dcc8", roof: "gable", porch: true, garage: false, steep: true, glass: false },
-  { id: "coastal", name: "Coastal Home", description: "Light walls and a hip roof facing the street.", front: 3, depth: 2, minStories: 1, maxStories: 3, price: 125_000, wall: "#f7f3ea", roofColor: "#3d5a73", accent: "#2aa3a0", roof: "hip", porch: true, garage: false, steep: false, glass: false },
-  { id: "garage", name: "Garage Estate", description: "A family house with a garage on the street.", front: 3, depth: 3, minStories: 2, maxStories: 3, price: 160_000, wall: "#d8d0c4", roofColor: "#3a3a3a", accent: "#1a1a1a", roof: "gable", porch: false, garage: true, steep: false, glass: false },
-  { id: "future", name: "Future Home", description: "A flat-roofed house with a lit crown.", front: 3, depth: 3, minStories: 2, maxStories: 4, price: 350_000, wall: "#d8dde6", roofColor: "#10141c", accent: "#7ec8ff", roof: "flat", porch: false, garage: false, steep: false, glass: true },
+  { id: "starter", name: "Starter Home", description: "A compact one-family house with a front porch.", category: "home", front: 2, depth: 2, minStories: 1, maxStories: 2, price: 25_000, wall: "#d8c4a8", roofColor: "#6a5340", accent: "#c9a44c", roof: "gable", porch: true, garage: false, steep: false, glass: false },
+  { id: "traditional", name: "Traditional Family Home", description: "A wider family house with a brick-toned gable.", category: "home", front: 3, depth: 2, minStories: 1, maxStories: 2, price: 65_000, wall: "#c45c4a", roofColor: "#4a3028", accent: "#f4efe6", roof: "gable", porch: true, garage: false, steep: false, glass: false },
+  { id: "craftsman", name: "Craftsman Home", description: "Low eaves, a deep porch, and warm wood trim.", category: "home", front: 2, depth: 2, minStories: 1, maxStories: 2, price: 85_000, wall: "#8a6a4a", roofColor: "#3a2a1c", accent: "#c4a36a", roof: "gable", porch: true, garage: false, steep: false, glass: false },
+  { id: "farmhouse", name: "Modern Farmhouse", description: "A long porch and a simple gable.", category: "home", front: 3, depth: 2, minStories: 1, maxStories: 2, price: 95_000, wall: "#f4f1ea", roofColor: "#2c2c2c", accent: "#1a2744", roof: "gable", porch: true, garage: false, steep: false, glass: false },
+  { id: "coastal", name: "Coastal Home", description: "Light walls and a hip roof facing the street.", category: "home", front: 3, depth: 2, minStories: 1, maxStories: 3, price: 125_000, wall: "#f7f3ea", roofColor: "#3d5a73", accent: "#2aa3a0", roof: "hip", porch: true, garage: false, steep: false, glass: false },
+  { id: "chalet", name: "Mountain Chalet", description: "A steep roof for snow country.", category: "home", front: 2, depth: 2, minStories: 1, maxStories: 3, price: 90_000, wall: "#6a5340", roofColor: "#2a2420", accent: "#e8dcc8", roof: "gable", porch: true, garage: false, steep: true, glass: false },
+  { id: "townhouse", name: "Row Townhouses", description: "Three homes in a row, sharing walls, each with its own door and gable.", category: "townhouse", front: 3, depth: 2, minStories: 2, maxStories: 3, price: 168_000, wall: "#c4b29a", roofColor: "#4a3728", accent: "#f4efe6", roof: "gable", porch: true, garage: false, steep: false, glass: false },
+  { id: "apartment", name: "Walk-up Apartments", description: "A small apartment building with a flat roof and a shared entry.", category: "apartment", front: 2, depth: 2, minStories: 3, maxStories: 5, price: 140_000, wall: "#d8cfc4", roofColor: "#3a4450", accent: "#1a2744", roof: "flat", porch: false, garage: false, steep: false, glass: false },
+  { id: "penthouse", name: "Penthouse Block", description: "A glass-fronted residential block with a terrace roof.", category: "apartment", front: 3, depth: 2, minStories: 3, maxStories: 5, price: 220_000, wall: "#d5e6ea", roofColor: "#1a2744", accent: "#c9a44c", roof: "flat", porch: false, garage: false, steep: false, glass: true },
+  { id: "modern", name: "Modern Home", description: "Clean lines and a flat roof.", category: "luxury", front: 3, depth: 2, minStories: 1, maxStories: 3, price: 110_000, wall: "#e8e4dc", roofColor: "#2a2a2a", accent: "#1a2744", roof: "flat", porch: false, garage: false, steep: false, glass: false },
+  { id: "mansion", name: "Luxury Mansion", description: "A broad estate house with room to grow upward.", category: "luxury", front: 4, depth: 3, minStories: 2, maxStories: 4, price: 250_000, wall: "#f4efe6", roofColor: "#3a3a3a", accent: "#c9a44c", roof: "hip", porch: true, garage: false, steep: false, glass: false },
+  { id: "glass", name: "Glass House", description: "Pale walls and a wide band of windows.", category: "luxury", front: 3, depth: 2, minStories: 1, maxStories: 3, price: 180_000, wall: "#d5e6ea", roofColor: "#1a2744", accent: "#8fd0d8", roof: "flat", porch: false, garage: false, steep: false, glass: true },
+  { id: "estate", name: "Contemporary Estate", description: "The largest footprint, with a hipped roof.", category: "luxury", front: 4, depth: 3, minStories: 2, maxStories: 4, price: 300_000, wall: "#cfc8bc", roofColor: "#1c1c1c", accent: "#c9a44c", roof: "hip", porch: true, garage: false, steep: false, glass: false },
+  { id: "garage", name: "Garage Estate", description: "A family house with a garage on the street.", category: "luxury", front: 3, depth: 3, minStories: 2, maxStories: 3, price: 160_000, wall: "#d8d0c4", roofColor: "#3a3a3a", accent: "#1a1a1a", roof: "gable", porch: false, garage: true, steep: false, glass: false },
+  { id: "future", name: "Future Home", description: "A flat-roofed house with a lit crown.", category: "luxury", front: 3, depth: 3, minStories: 2, maxStories: 4, price: 350_000, wall: "#d8dde6", roofColor: "#10141c", accent: "#7ec8ff", roof: "flat", porch: false, garage: false, steep: false, glass: true },
+  { id: "mixed", name: "Corner Mixed-Use", description: "Shops on the street and apartments above a flat roof.", category: "mixed", front: 3, depth: 2, minStories: 2, maxStories: 4, price: 155_000, wall: "#e6ddd2", roofColor: "#2a3138", accent: "#c45c4a", roof: "flat", porch: false, garage: false, steep: false, glass: true },
 ];
 
 export const DREAM_WALLS = ["#d8c4a8", "#f4efe6", "#c45c4a", "#1c3a5a", "#2f6b48", "#e8e4dc", "#6a5340", "#111418", "#d5e6ea", "#8a6a4a"];
@@ -135,6 +155,39 @@ function landPrice(cityId: CityId, tiles: number) {
   const base = 8_000 + Math.max(0, tiles - 4) * 2_200;
   const mult = cityId === "riverside" ? 1.15 : cityId === "future" ? 1.25 : cityId === "coastal" ? 1.1 : 1;
   return Math.round((base * mult) / 100) * 100;
+}
+
+function lotZone(state: CityState, x: number, y: number, w: number, d: number): LotZone {
+  let park = false;
+  let water = false;
+  for (let iy = -1; iy <= d; iy++) {
+    for (let ix = -1; ix <= w; ix++) {
+      const tile = tileAt(state, x + ix, y + iy);
+      if (!tile) continue;
+      if (tile.terrain === "park") park = true;
+      if (tile.terrain === "water" || tile.terrain === "sand") water = true;
+    }
+  }
+  if (water) return "waterfront";
+  if (park) return "park";
+  return "residential";
+}
+
+function hasRoadAccess(state: CityState, x: number, y: number, w: number, d: number) {
+  for (const facing of [0, 1, 2, 3] as const) {
+    if (sideHasRoad(state, x, y, w, d, facing)) return true;
+  }
+  const cx = x + w / 2;
+  const cy = y + d / 2;
+  for (let radius = 1; radius <= 12; radius++) {
+    for (let i = -radius; i <= radius; i++) {
+      if (tileAt(state, Math.round(cx + i), Math.round(cy + radius))?.road) return true;
+      if (tileAt(state, Math.round(cx + i), Math.round(cy - radius))?.road) return true;
+      if (tileAt(state, Math.round(cx + radius), Math.round(cy + i))?.road) return true;
+      if (tileAt(state, Math.round(cx - radius), Math.round(cy + i))?.road) return true;
+    }
+  }
+  return false;
 }
 
 function nearestFacing(state: CityState, x: number, y: number, w: number, d: number, px: number, py: number): DreamFacing {
@@ -212,14 +265,19 @@ function plotAround(
         const score = w * d + ahead * 3;
         if (score <= bestScore) continue;
         bestScore = score;
+        const price = landPrice(cityId, w * d);
         best = {
           cityId,
+          lotId: `${cityId}-${x}-${y}-${w}x${d}`,
           x,
           y,
           w,
           d,
           facing,
-          landPrice: landPrice(cityId, w * d),
+          landPrice: price,
+          marketValue: Math.round((price * 1.12) / 100) * 100,
+          zone: lotZone(state, x, y, w, d),
+          roadAccess: hasRoadAccess(state, x, y, w, d),
         };
       }
     }
