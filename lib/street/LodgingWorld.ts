@@ -6,6 +6,8 @@ import { stadiumFireworksOn } from "@/lib/city/fireworks";
 import { cityThemeFor } from "@/lib/city/world/cities";
 import { TILE, towerStages } from "./buildCity";
 import { InteriorControls } from "./interiorControls";
+import { clearTreesNearBuildings } from "@/lib/city/siteTrees";
+import { hideStreetTreesNearBuildings } from "./buildCity";
 import { buildLodgingInterior, type LodgingInterior } from "./lodgingInterior";
 import { lodgingWindowDir } from "./StreetWorld";
 import { StreetFireworks } from "./streetFireworks";
@@ -168,6 +170,8 @@ export class LodgingWorld {
     holder.rotation.y = Math.atan2(dir.sx, -dir.sz);
     city.position.set(-fx, -fy, -fz);
     city.rotation.set(0, 0, 0);
+    clearTreesNearBuildings(this.state.tiles, this.state.buildings.values(), 2);
+    hideStreetTreesNearBuildings(city, this.state.buildings.values(), 2);
     const ownHouse = `dream-${this.building.id}`;
     city.traverse((obj) => {
       if (obj.userData.facadeBalconies) obj.visible = false;
@@ -217,14 +221,21 @@ export class LodgingWorld {
   }
 
   nearComputer() {
-    if (this.building.stats.extra?.dream === "1" && this.controls.position.y < 4) return false;
+    const extra = this.building.stats.extra;
+    if (extra?.dream === "1" && extra.style === "townhouse" && this.controls.position.y < 4) return false;
     return this.interior.nearComputer(this.controls.position.x, this.controls.position.z);
   }
 
   nearBed() {
     const hit = this.interior.nearBed(this.controls.position.x, this.controls.position.z);
     if (!hit) return false;
-    if (this.building.stats.extra?.dream === "1" && this.controls.position.y < 4) return false;
+    if (
+      this.building.stats.extra?.dream === "1" &&
+      this.building.floors >= 2 &&
+      this.controls.position.y < 4
+    ) {
+      return false;
+    }
     return true;
   }
 

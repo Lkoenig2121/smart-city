@@ -8,7 +8,8 @@ import { GarageDoor } from "./garageDoor";
 import { isMountainTerrain } from "@/lib/city/terrainElevation";
 import { lightingFor, type Lighting } from "@/lib/renderer/palette";
 import { AgentLayer } from "./agents";
-import { buildCity, TILE, updateTrafficSignals, type CityMeshes } from "./buildCity";
+import { clearTreesNearBuildings } from "@/lib/city/siteTrees";
+import { buildCity, hideStreetTreesNearBuildings, TILE, updateTrafficSignals, type CityMeshes } from "./buildCity";
 import { buildDreamHouseGroup, disposeDreamGroup, dreamCollider } from "./dreamHouseMesh";
 import { dreamDoorYaw, dreamExitTile, findDreamPlot, type DreamPlot } from "@/lib/city/dreamHome";
 import { buildMountainTunnelMouth, nearMountainTunnel } from "./mountainTunnel";
@@ -160,6 +161,7 @@ export class StreetWorld {
     this.heldView.attach(this.camera);
     this.dutyView.attach(this.camera);
 
+    clearTreesNearBuildings(state.tiles, state.buildings.values(), 2);
     this.city = buildCity(state);
     if (state.id === "mountain") {
       const mouth = buildMountainTunnelMouth();
@@ -1384,6 +1386,7 @@ export class StreetWorld {
 
   placeDreamHouse(building: Building) {
     this.clearDreamStudio();
+    this.removeTreesFor(building);
     if (this.dreamGroups.has(building.id)) return;
     const group = buildDreamHouseGroup(building);
     group.scale.y = 0.04;
@@ -1411,10 +1414,22 @@ export class StreetWorld {
   private mountDreamHouses() {
     for (const building of this.state.buildings.values()) {
       if (building.stats.extra?.dream !== "1") continue;
+      this.removeTreesFor(building);
       const group = buildDreamHouseGroup(building);
       this.city.group.add(group);
       this.dreamGroups.set(building.id, group);
     }
+  }
+
+  /** Trees on every building site, including the tiles around it. */
+  stripBuildingTrees() {
+    clearTreesNearBuildings(this.state.tiles, this.state.buildings.values(), 2);
+    hideStreetTreesNearBuildings(this.city.group, this.state.buildings.values(), 2);
+  }
+
+  private removeTreesFor(building: Building) {
+    clearTreesNearBuildings(this.state.tiles, [building], 2);
+    hideStreetTreesNearBuildings(this.city.group, [building], 2);
   }
 
   private tickDreamRise(dt: number) {

@@ -1,3 +1,4 @@
+import { clearTreesAround } from "./siteTrees";
 import type { Building, CityClock, CityState, Tile } from "./types";
 import { CITIES, CITY_IDS, type CityId } from "./world/cities";
 import {
@@ -418,6 +419,7 @@ function occupyPlot(state: CityState, home: OwnedHome) {
       }
     }
   }
+  clearTreesAround(state.tiles, plot.x, plot.y, plot.w, plot.d, 2);
 }
 
 function clearPlot(state: CityState, home: OwnedHome) {

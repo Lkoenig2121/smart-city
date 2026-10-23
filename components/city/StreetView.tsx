@@ -1386,6 +1386,7 @@ export function StreetView({
     if (!canvas || !wrap || !building) return;
 
     const street = worldRef.current;
+    street?.stripBuildingTrees?.();
     const dreamHouse = building.stats.extra?.dream === "1";
     const city =
       interior.zone === "room" || interior.zone === "pool" || (dreamHouse && interior.zone === "lobby")

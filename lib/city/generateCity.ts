@@ -7,6 +7,7 @@ import {
   riverXAt,
 } from "./waterfront";
 import { mulberry32, pick, randInt, randRange } from "./rng";
+import { clearTreesNearBuildings } from "./siteTrees";
 import { spawnCitizens } from "@/lib/simulation/citizens/spawnCitizens";
 import { bootstrapEvents } from "@/lib/simulation/events/cityEvents";
 import { seedTrafficNetwork } from "@/lib/simulation/traffic/roadNetwork";
@@ -407,6 +408,7 @@ export function generateCity(seed = 20260903): CityState {
   placeGarageNearMotors(buildings);
   markNotableVenues(buildings);
 
+  clearTreesNearBuildings(tiles, buildings.values(), 2);
   const citizens = spawnCitizens(buildings, rand);
 
   if ([...buildings.values()].some((b) => b.kind === "baseball_stadium")) {

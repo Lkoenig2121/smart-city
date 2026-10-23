@@ -120,6 +120,13 @@ export function addRoomTelevision(
     canvas.height = H;
   }
   const ctx = canvas?.getContext("2d") ?? null;
+  if (ctx && canvas) {
+    ctx.fillStyle = "#10233f";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#f4f1ea";
+    ctx.font = "700 48px sans-serif";
+    ctx.fillText("ON AIR", 40, 92);
+  }
   const texture = canvas ? new THREE.CanvasTexture(canvas) : null;
   if (texture) {
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -140,6 +147,7 @@ export function addRoomTelevision(
   const screen = new THREE.Mesh(screenGeo, screenMat);
   screen.position.set(cx, centerY, cz + 0.042);
   screen.receiveShadow = false;
+  screenMat.side = THREE.DoubleSide;
   tv.add(screen);
   disposables.push(screenGeo, screenMat);
   if (texture) disposables.push(texture);

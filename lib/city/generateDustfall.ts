@@ -1,6 +1,7 @@
 import { createBuilding, footprintFor } from "@/lib/simulation/buildings/buildings";
 import { markLodging } from "./lodging";
 import { mulberry32, pick, randRange } from "./rng";
+import { clearTreesNearBuildings } from "./siteTrees";
 import { spawnCitizens } from "@/lib/simulation/citizens/spawnCitizens";
 import { bootstrapEvents } from "@/lib/simulation/events/cityEvents";
 import { seedTrafficNetwork } from "@/lib/simulation/traffic/roadNetwork";
@@ -333,6 +334,7 @@ export function generateDustfall(seed = 934201): CityState {
     }
   }
 
+  clearTreesNearBuildings(tiles, buildings.values(), 2);
   const citizens = spawnCitizens(buildings, rand).slice(0, 36);
   const population = [...buildings.values()].reduce((sum, b) => sum + b.stats.residents, 0);
 

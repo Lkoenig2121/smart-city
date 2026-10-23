@@ -3,6 +3,7 @@ import { mulberry32, pick, randInt, randRange } from "@/lib/city/rng";
 import { BALLCLUBS, type Ballclub } from "@/lib/city/stadium";
 import { markVenue, type VenueRole } from "@/lib/city/venues";
 import { COASTAL_BOARDWALK_X } from "@/lib/city/waterfront";
+import { clearTreesNearBuildings } from "@/lib/city/siteTrees";
 import { spawnCitizens } from "@/lib/simulation/citizens/spawnCitizens";
 import { bootstrapEvents } from "@/lib/simulation/events/cityEvents";
 import { seedTrafficNetwork } from "@/lib/simulation/traffic/roadNetwork";
@@ -747,6 +748,7 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
     }
   }
 
+  clearTreesNearBuildings(tiles, buildings.values(), 2);
   const citizens = spawnCitizens(buildings, rand);
   const vehicles: Vehicle[] = [];
   const kinds: VehicleKind[] =

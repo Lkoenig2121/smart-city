@@ -1,4 +1,5 @@
 import { BRIDGE_DECK } from "@/lib/city/generateCity";
+import { clearTreesAround } from "@/lib/city/siteTrees";
 import { createBuilding, footprintFor } from "@/lib/simulation/buildings/buildings";
 import {
   STADIUM_BUILD_SECONDS,
@@ -362,6 +363,7 @@ export class CityEngine {
         tile.tree = null;
       }
     }
+    clearTreesAround(this.state.tiles, x, y, building.width, building.depth, 2);
     recountPopulation(this.state);
     this.selectedId = id;
     this.mapRev += 1;

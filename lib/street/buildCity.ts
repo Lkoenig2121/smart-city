@@ -1599,7 +1599,7 @@ function buildTrees(state: CityState) {
   for (let y = 0; y < state.size; y++) {
     for (let x = 0; x < state.size; x++) {
       const tile = state.tiles[y][x];
-      if (!tile.tree || tile.buildingId) continue;
+      if (!tile.tree || tile.buildingId || treeBesideBuilding(state, x, y)) continue;
       spots.push({
         x: x * TILE + TILE / 2,
         z: y * TILE + TILE / 2,
@@ -1651,6 +1651,78 @@ function buildTrees(state: CityState) {
   if (canopies.instanceColor) canopies.instanceColor.needsUpdate = true;
   trunks.castShadow = true;
   canopies.castShadow = true;
+  trunks.name = "street-tree-trunks";
+  canopies.name = "street-tree-canopies";
+  trunks.userData.streetTree = true;
+  canopies.userData.streetTree = true;
 
   return [trunks, canopies];
+}
+
+function treeBesideBuilding(state: CityState, x: number, y: number) {
+  for (let iy = -2; iy <= 2; iy++) {
+    for (let ix = -2; ix <= 2; ix++) {
+      if (state.tiles[y + iy]?.[x + ix]?.buildingId) return true;
+    }
+  }
+  return false;
+}
+
+function isStreetTreeMesh(obj: THREE.Object3D): obj is THREE.InstancedMesh {
+  if (!(obj instanceof THREE.InstancedMesh)) return false;
+  if (obj.userData.streetTree) return true;
+  if (obj.name === "street-tree-trunks" || obj.name === "street-tree-canopies") return true;
+  const geo = obj.geometry;
+  if (geo instanceof THREE.IcosahedronGeometry) return true;
+  if (geo instanceof THREE.CylinderGeometry) return (geo.parameters.radiusTop ?? 1) <= 0.4;
+  return false;
+}
+
+/** Drop tree instances whose trunks sit inside a world-space rectangle. */
+export function hideStreetTrees(
+  group: THREE.Object3D,
+  minX: number,
+  maxX: number,
+  minZ: number,
+  maxZ: number,
+) {
+  const matrix = new THREE.Matrix4();
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+  group.traverse((obj) => {
+    if (!isStreetTreeMesh(obj)) return;
+    let changed = false;
+    for (let i = 0; i < obj.count; i++) {
+      obj.getMatrixAt(i, matrix);
+      matrix.decompose(pos, quat, scale);
+      if (scale.x === 0) continue;
+      if (pos.x < minX || pos.x > maxX || pos.z < minZ || pos.z > maxZ) continue;
+      scale.set(0, 0, 0);
+      matrix.compose(pos, quat, scale);
+      obj.setMatrixAt(i, matrix);
+      changed = true;
+    }
+    if (changed) {
+      obj.instanceMatrix.needsUpdate = true;
+      obj.computeBoundingSphere();
+    }
+  });
+}
+
+/** Hide every tree that stands on or beside a building. */
+export function hideStreetTreesNearBuildings(
+  group: THREE.Object3D,
+  buildings: Iterable<Pick<Building, "origin" | "width" | "depth">>,
+  pad = 2,
+) {
+  for (const building of buildings) {
+    hideStreetTrees(
+      group,
+      (building.origin.x - pad) * TILE,
+      (building.origin.x + building.width + pad) * TILE,
+      (building.origin.y - pad) * TILE,
+      (building.origin.y + building.depth + pad) * TILE,
+    );
+  }
 }

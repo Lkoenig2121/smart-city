@@ -322,6 +322,8 @@ export function CityCanvas() {
   }, []);
 
   const leaveStreet = useCallback(() => {
+    const engine = engineRef.current;
+    if (engine) engine.mapRev += 1;
     setStreetOpen(false);
   }, []);
 

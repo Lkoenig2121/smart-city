@@ -84,7 +84,7 @@ function addBookcase(
   }
 }
 
-function addTownhouseComputer(
+export function addTownhouseComputer(
   group: THREE.Group,
   disposables: Array<{ dispose: () => void }>,
   at: { x: number; y: number; z: number; yaw: number },
@@ -477,16 +477,27 @@ export function buildTownhouseHome(building: Building): LodgingInterior {
   assemble(group, floorB, wallB, trimB, shellB, disposables);
   disposables.push(glassMat);
 
-  const tv = addRoomTelevision(group, disposables, {
-    mount: "wall",
-    scale: 1.05,
-    at: { x: 4.15, y: 2.25, z: -1.28, yaw: 0 },
-  });
-  addRoomTelevision(group, disposables, {
-    mount: "wall",
-    scale: 1.05,
-    at: { x: 0.35, y: UP + 1.55, z: maxZ - 0.46, yaw: Math.PI },
-  });
+  const screens = [
+    addRoomTelevision(group, disposables, {
+      mount: "wall",
+      scale: 1.05,
+      at: { x: 4.15, y: 2.25, z: -1.28, yaw: 0 },
+    }),
+    addRoomTelevision(group, disposables, {
+      mount: "wall",
+      scale: 1.05,
+      at: { x: 0.35, y: UP + 1.55, z: maxZ - 0.46, yaw: Math.PI },
+    }),
+  ];
+  const tv = {
+    update: (dt: number, state: Parameters<(typeof screens)[number]["update"]>[1]) => {
+      for (const screen of screens) screen.update(dt, state);
+    },
+    hasConsole: () => false,
+    isNuketown: () => false,
+    toggleNuketown: () => false,
+    dispose: () => undefined,
+  };
   const computer = addTownhouseComputer(group, disposables, { x: 5.15, y: UP, z: 6.15, yaw: Math.PI });
 
   const dreamGround = (x: number, z: number, feetY = 0) => {
@@ -514,7 +525,7 @@ export function buildTownhouseHome(building: Building): LodgingInterior {
     groundAt: dreamGround,
     nearDesk: () => false,
     nearComputer: (x, z) => x > 3.25 && x < 4.25 && z > 5.25 && z < 6.95,
-    nearBed: (x, z) => hasUp && x > 1.2 && x < 5.4 && z > -7.4 && z < -4.4,
+    nearBed: (x, z) => hasUp && x > 1.6 && x < 5.0 && z > -4.05 && z < -3.15,
     nearConsole: () => false,
     nearExit: (x, z) => z > 7.3 && Math.abs(x) < 1.2,
     computerHit: computer,

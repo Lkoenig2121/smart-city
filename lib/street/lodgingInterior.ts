@@ -9,7 +9,7 @@ import { buildStreetPerson, disposeObject3D } from "./streetPerson";
 import { addRoomTelevision, type RoomTv } from "./roomTv";
 import { resolveRoomStyle } from "@/lib/city/furnishings";
 import { readPlayer } from "@/lib/city/player";
-import { buildTownhouseHome } from "./townhouseInterior";
+import { addTownhouseComputer, buildTownhouseHome } from "./townhouseInterior";
 
 export interface LodgingInterior {
   group: THREE.Group;
@@ -383,6 +383,8 @@ function buildDreamHome(building: Building): LodgingInterior {
   const SX1 = 6.8;
   const SZ0 = -2.4;
   const SZ1 = 2.2;
+  const LAND_Z = SZ0 + 1.2;
+  const MOUTH_Z = SZ1 - 1.2;
   const upperZ = 4.15;
   const wall = 0.28;
   const style = resolveRoomStyle(readPlayer());
@@ -436,14 +438,24 @@ function buildDreamHome(building: Building): LodgingInterior {
   if (hasUp) {
     addCeiling(floorB, minX, upperZ, maxX, maxZ, TOP, ceiling);
     const slab = (x0: number, z0: number, x1: number, z1: number) => {
-      floorB.box(x0, z0, x1, z1, UP - 0.16, UP, floor);
-      floorB.soffit(x0, z0, x1, z1, UP - 0.16, ceiling);
-      blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, minY: UP - 0.2, maxY: UP - 0.02 });
+      floorB.ground(x0, z0, x1, z1, UP, floor);
+      floorB.soffit(x0, z0, x1, z1, UP - 0.14, ceiling);
+      const ix0 = Math.abs(x0 - SX0) < 0.01 ? x0 + 0.7 : x0;
+      const ix1 = Math.abs(x1 - SX1) < 0.01 ? x1 - 0.7 : x1;
+      const iz0 = Math.abs(z0 - SZ1) < 0.01 ? z0 + 0.7 : z0;
+      const iz1 = Math.abs(z1 - SZ0) < 0.01 ? z1 - 0.7 : z1;
+      blockers.push({
+        minX: ix0,
+        maxX: ix1,
+        minZ: iz0,
+        maxZ: iz1,
+        minY: UP - 0.2,
+        maxY: UP - 0.12,
+      });
     };
     slab(minX, minZ, SX0, upperZ);
     slab(SX1, minZ, maxX, upperZ);
     slab(SX0, minZ, SX1, SZ0);
-    slab(SX0, SZ1, SX1, upperZ);
     addCeiling(floorB, minX, minZ, maxX, upperZ, TOP, ceiling);
   } else {
     addCeiling(floorB, minX, minZ, maxX, maxZ, shellTop, ceiling);
@@ -498,16 +510,16 @@ function buildDreamHome(building: Building): LodgingInterior {
   trimB.box(-6.55, 2.25, -6.05, 2.75, 0, 0.62, ink);
   trimB.box(-5.05, 2.25, -4.55, 2.75, 0, 0.62, ink);
 
-  wallB.box(2.15, 3.2, 8.3, 4.95, 0, 0.42, sofa);
-  wallB.box(2.35, 3.4, 8.1, 4.75, 0.42, 0.78, sofa);
-  wallB.box(2.15, 4.55, 2.7, 5.15, 0.42, 1.05, cloth);
-  wallB.box(7.7, 4.55, 8.25, 5.15, 0.42, 1.05, cloth);
-  trimB.box(3.1, 4.15, 4.0, 4.7, 0.8, 0.98, art);
-  trimB.box(6.4, 4.15, 7.3, 4.7, 0.8, 0.98, linen);
-  low({ minX: 2.15, maxX: 8.3, minZ: 3.2, maxZ: 5.15 });
-  trimB.box(3.35, 1.2, 7.15, 2.55, 0, 0.32, stone);
-  trimB.box(4.5, 1.55, 5.15, 2.15, 0.32, 0.4, ink);
-  trimB.box(5.5, 1.7, 6.35, 2.2, 0.32, 0.48, wood);
+  wallB.box(-2.2, 3.15, 2.55, 4.85, 0, 0.42, sofa);
+  wallB.box(-2.0, 3.35, 2.35, 4.65, 0.42, 0.78, sofa);
+  wallB.box(-2.2, 4.45, -1.65, 5.05, 0.42, 1.05, cloth);
+  wallB.box(2.0, 4.45, 2.55, 5.05, 0.42, 1.05, cloth);
+  trimB.box(-1.15, 4.05, -0.25, 4.6, 0.8, 0.98, art);
+  trimB.box(0.85, 4.05, 1.75, 4.6, 0.8, 0.98, linen);
+  low({ minX: -2.2, maxX: 2.55, minZ: 3.15, maxZ: 5.05 });
+  trimB.box(-0.85, 1.9, 2.15, 2.85, 0, 0.32, stone);
+  trimB.box(0.1, 2.15, 0.7, 2.55, 0.32, 0.4, ink);
+  trimB.box(1.05, 2.2, 1.7, 2.55, 0.32, 0.48, wood);
 
   trimB.box(9.55, 1.6, 9.9, 5.4, 0, 0.4, wood);
   trimB.box(9.63, 2.1, 9.85, 4.4, 0.45, 1.7, ink);
@@ -527,6 +539,14 @@ function buildDreamHome(building: Building): LodgingInterior {
   low({ minX: -4.6, maxX: -1.9, minZ: 7.35, maxZ: 8.2 });
   trimB.box(-9.6, 4.2, -7.2, 4.35, 1.35, 2.55, art);
   trimB.box(-8.2, 1.4, -6.4, 1.55, 1.2, 2.35, ink);
+  trimB.box(-0.55, 1.12, 0.55, 1.72, 0, 0.42, wood);
+  low({ minX: -0.65, maxX: 0.65, minZ: 1.02, maxZ: 1.82 });
+
+  wallB.box(-9.35, 4.85, -7.55, 6.45, 0, 0.74, wood);
+  trimB.box(-9.4, 4.8, -7.5, 6.5, 0.74, 0.8, new THREE.Color("#3a2a1c"));
+  wallB.box(-7.4, 5.15, -6.85, 6.15, 0, 0.46, ink);
+  low({ minX: -9.45, maxX: -6.8, minZ: 4.75, maxZ: 6.55 });
+
   wallB.box(8.55, 5.35, 10.55, 6.15, 0, 0.28, wood);
   wallB.box(8.7, 5.5, 10.4, 6.0, 0.28, 1.55, cabinet);
   trimB.box(8.85, 5.58, 10.25, 5.92, 0.42, 0.52, art);
@@ -542,25 +562,45 @@ function buildDreamHome(building: Building): LodgingInterior {
   wallB.box(4.75, -7.05, 5.15, -6.65, 0.28, 1.05, plant);
 
   if (hasUp) {
-    const steps = 14;
-    const run = (SZ1 - SZ0) / steps;
+    floorB.ground(SX0, SZ0 - 0.04, SX1, LAND_Z, UP, floor);
+    floorB.soffit(SX0, SZ0 - 0.04, SX1, LAND_Z, UP - 0.14, ceiling);
+    const steps = 12;
+    const run = (SZ1 - LAND_Z) / steps;
     for (let i = 0; i < steps; i++) {
       const z1 = SZ1 - i * run;
       const z0 = z1 - run;
       const y = ((i + 1) / steps) * UP;
-      wallB.box(SX0 + 0.18, z0, SX1 - 0.18, z1, y - 0.1, y, stone);
+      wallB.box(SX0 + 0.16, z0, SX1 - 0.16, z1, Math.max(0.02, y - 0.08), y, stone);
     }
-    trimB.box(SX0 - 0.06, SZ0, SX0 + 0.08, SZ1, 0.4, UP + 0.95, ink);
-    trimB.box(SX1 - 0.08, SZ0, SX1 + 0.06, SZ1, 0.4, UP + 0.95, ink);
-    trimB.box(SX0 + 0.12, SZ1 - 0.05, SX1 - 0.12, SZ1 + 0.05, UP + 0.82, UP + 0.96, ink);
-    blockers.push({ minX: SX0 - 0.1, maxX: SX0 + 0.1, minZ: SZ0, maxZ: SZ1, maxY: UP + 1 });
-    blockers.push({ minX: SX1 - 0.1, maxX: SX1 + 0.1, minZ: SZ0, maxZ: SZ1, maxY: UP + 1 });
+    trimB.box(SX0 - 0.02, LAND_Z + 0.4, SX0 + 0.08, MOUTH_Z, 0.4, UP + 0.12, ink);
+    trimB.box(SX1 - 0.08, LAND_Z + 0.4, SX1 + 0.02, MOUTH_Z, 0.4, UP + 0.12, ink);
+    trimB.box(SX0 - 0.04, LAND_Z, SX0 + 0.04, SZ1, UP + 0.62, UP + 0.84, ink);
+    trimB.box(SX1 - 0.04, LAND_Z, SX1 + 0.04, SZ1, UP + 0.62, UP + 0.84, ink);
+    trimB.box(SX0, SZ1 - 0.04, SX1, SZ1 + 0.04, UP + 0.62, UP + 0.84, ink);
+    blockers.push({ minX: SX0 - 0.06, maxX: SX0 + 0.1, minZ: LAND_Z + 0.4, maxZ: MOUTH_Z, maxY: UP + 0.15 });
+    blockers.push({ minX: SX1 - 0.1, maxX: SX1 + 0.06, minZ: LAND_Z + 0.4, maxZ: MOUTH_Z, maxY: UP + 0.15 });
     blockers.push({
-      minX: SX0 + 0.08,
-      maxX: SX1 - 0.08,
-      minZ: SZ1 - 0.1,
+      minX: SX0 - 0.08,
+      maxX: SX0 + 0.08,
+      minZ: LAND_Z,
+      maxZ: SZ1,
+      minY: UP + 0.55,
+      maxY: UP + 1.05,
+    });
+    blockers.push({
+      minX: SX1 - 0.08,
+      maxX: SX1 + 0.08,
+      minZ: LAND_Z,
+      maxZ: SZ1,
+      minY: UP + 0.55,
+      maxY: UP + 1.05,
+    });
+    blockers.push({
+      minX: SX0,
+      maxX: SX1,
+      minZ: SZ1 - 0.08,
       maxZ: SZ1 + 0.08,
-      minY: UP + 0.15,
+      minY: UP + 0.55,
       maxY: UP + 1.05,
     });
 
@@ -578,12 +618,26 @@ function buildDreamHome(building: Building): LodgingInterior {
     wallB.box(1.2, -1.2, 2.5, 0.6, UP, UP + 0.45, sofa);
     wallB.box(1.2, -1.2, 1.55, 0.6, UP + 0.45, UP + 1.05, sofa);
     high({ minX: 1.2, maxX: 2.5, minZ: -1.2, maxZ: 0.6 });
+    trimB.box(2.82, -0.92, 3.32, 0.32, UP, UP + 0.4, wood);
+    high({ minX: 2.75, maxX: 3.38, minZ: -1.0, maxZ: 0.4 });
     wallB.box(-10.55, -1.4, -9.7, 2.4, UP, UP + 2.15, cabinet);
     high({ minX: -10.55, maxX: -9.7, minZ: -1.4, maxZ: 2.4 });
     trimB.box(-6.5, -7.55, -3.2, -7.4, UP + 1.3, UP + 2.15, art);
     wallB.box(-4.2, 1.6, -3.5, 2.3, UP, UP + 0.25, stone);
     wallB.box(-4.05, 1.75, -3.65, 2.15, UP + 0.25, UP + 1.15, plant);
     mullion(winX0, minZ + 0.02, winX1, minZ + 0.16, UP + 0.32, UP + 0.4);
+  } else {
+    wallB.box(-8.8, -7.55, -3.6, -5.15, 0, 0.36, wood);
+    wallB.box(-8.6, -7.35, -3.8, -5.35, 0.36, 0.7, linen);
+    wallB.box(-8.7, -7.7, -3.7, -7.4, 0.36, 1.05, wood);
+    wallB.box(-7.8, -7.1, -6.4, -6.2, 0.7, 0.9, cloth);
+    wallB.box(-5.4, -7.1, -4.2, -6.2, 0.7, 0.9, cloth);
+    low({ minX: -8.8, maxX: -3.6, minZ: -7.7, maxZ: -5.15 });
+    trimB.box(-9.35, -6.7, -8.85, -5.9, 0, 0.48, wood);
+    trimB.box(-3.45, -6.7, -2.95, -5.9, 0, 0.48, wood);
+    const lamp = new THREE.PointLight(0xfff1d6, 6, 8, 1.8);
+    lamp.position.set(-6.2, 2.3, -6.2);
+    group.add(lamp);
   }
 
   const pendant = new THREE.PointLight(0xfff4e0, 7, 8, 1.6);
@@ -599,15 +653,44 @@ function buildDreamHome(building: Building): LodgingInterior {
   assemble(group, floorB, wallB, trimB, disposables);
   disposables.push(glassMat);
 
+  const screens = [
+    addRoomTelevision(group, disposables, {
+      mount: "stand",
+      scale: 1.15,
+      at: { x: 0, y: 0.42, z: 1.42, yaw: 0 },
+    }),
+  ];
+  if (hasUp) {
+    screens.push(
+      addRoomTelevision(group, disposables, {
+        mount: "stand",
+        scale: 1.05,
+        at: { x: 3.07, y: UP + 0.4, z: -0.3, yaw: -Math.PI / 2 },
+      }),
+    );
+  }
+  const tv = {
+    update: (dt: number, state: Parameters<(typeof screens)[number]["update"]>[1]) => {
+      for (const screen of screens) screen.update(dt, state);
+    },
+    hasConsole: () => false,
+    isNuketown: () => false,
+    toggleNuketown: () => false,
+    dispose: () => undefined,
+  };
+  const computer = addTownhouseComputer(group, disposables, { x: -8.45, y: 0, z: 5.65, yaw: 0 });
+
   const dreamGround = (x: number, z: number, feetY = 0) => {
     if (!hasUp) return 0;
-    const onStair = x > SX0 + 0.12 && x < SX1 - 0.12 && z > SZ0 - 0.4 && z < SZ1 + 0.15;
+    const onLanding = x > SX0 - 0.05 && x < SX1 + 0.1 && z > SZ0 - 0.15 && z < LAND_Z + 0.08;
+    if (onLanding && feetY > UP - 1.15) return UP;
+    const onStair = x > SX0 + 0.05 && x < SX1 - 0.05 && z >= LAND_Z - 0.05 && z < SZ1 + 0.3;
     if (onStair) {
-      const t = Math.min(1, Math.max(0, (SZ1 - z) / (SZ1 - SZ0)));
+      const t = Math.min(1, Math.max(0, (SZ1 - z) / (SZ1 - LAND_Z)));
       const ramp = t * UP;
       if (feetY > ramp - 1.35 && feetY < ramp + 1.2) return ramp;
     }
-    const inHole = x > SX0 + 0.02 && x < SX1 - 0.02 && z > SZ0 + 0.05 && z < SZ1 - 0.05;
+    const inHole = x > SX0 + 0.05 && x < SX1 - 0.05 && z > LAND_Z + 0.02 && z < SZ1 - 0.02;
     if (feetY > UP - 1.05 && z < upperZ && !inHole) return UP;
     return 0;
   };
@@ -618,14 +701,17 @@ function buildDreamHome(building: Building): LodgingInterior {
     spawn: { x: 0, z: 5.9, yaw: 0, pitch: -0.04 },
     bounds: { minX, maxX, minZ, maxZ },
     deskMat: null,
-    tv: null,
+    tv,
     groundAt: dreamGround,
     nearDesk: () => false,
-    nearComputer: () => false,
-    nearBed: (x, z) => hasUp && x > -8.8 && x < -2.2 && z > -4.8 && z < -0.8,
+    nearComputer: (x, z) => x > -6.95 && x < -5.45 && z > 4.85 && z < 6.45,
+    nearBed: (x, z) =>
+      hasUp
+        ? x > -8.4 && x < -2.6 && z > -0.5 && z < 0.45
+        : x > -8.4 && x < -4.0 && z > -4.55 && z < -3.35,
     nearConsole: () => false,
     nearExit: (x, z) => z > 7.15 && Math.abs(x) < 1.15,
-    computerHit: null,
+    computerHit: computer,
     windowMesh: null,
     windowAnchor: { x: (winX0 + winX1) / 2, y: 1.55, z: minZ + 0.2 },
     slider: null,
