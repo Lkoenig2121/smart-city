@@ -219,6 +219,7 @@ export function StreetView({
   const [locked, setLocked] = useState(false);
   const [clock, setClock] = useState(() => formatClock(state));
   const [failed, setFailed] = useState<string | null>(null);
+  const [streetReady, setStreetReady] = useState(0);
   const [mode, setMode] = useState<MoveMode>("hop");
   const [interior, setInterior] = useState<Interior | null>(startInterior);
   const interiorRef = useRef(interior);
@@ -836,31 +837,48 @@ export function StreetView({
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
 
-    let world: StreetWorld;
-    try {
-      world = new StreetWorld(canvas, state);
-    } catch (error) {
-      setFailed(
-        error instanceof Error
-          ? error.message
-          : "WebGL is unavailable in this browser.",
-      );
-      return;
-    }
+    let world: StreetWorld | null = null;
+    let frame = 0;
+    let stopped = false;
+    let ro: ResizeObserver | null = null;
 
-    worldRef.current = world;
-    if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
-    const resize = () => {
-      const rect = wrap.getBoundingClientRect();
-      world.resize(rect.width, rect.height);
+    const boot = () => {
+      if (stopped) return;
+      const surface = outdoorCanvasRef.current;
+      if (!surface) return;
+      try {
+        world = new StreetWorld(surface, state);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        setFailed(
+          message.includes("WebGL")
+            ? "Chrome’s graphics process is stuck. Quit Chrome completely (Cmd+Q), reopen it, and enter the street again. Reloading this tab is not enough."
+            : message || "WebGL is unavailable in this browser.",
+        );
+        return;
+      }
+
+      setFailed(null);
+      worldRef.current = world;
+      setStreetReady((ready) => ready + 1);
+      if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
+      const resize = () => {
+        const rect = wrap.getBoundingClientRect();
+        world?.resize(rect.width, rect.height);
+      };
+      resize();
+      ro = new ResizeObserver(resize);
+      ro.observe(wrap);
     };
-    resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(wrap);
+    // Wait one frame so a discarded setup pass does not open a context and
+    // immediately close it. Chrome then refuses the real one.
+    frame = requestAnimationFrame(boot);
 
     return () => {
-      ro.disconnect();
-      world.dispose();
+      stopped = true;
+      cancelAnimationFrame(frame);
+      ro?.disconnect();
+      world?.dispose();
       worldRef.current = null;
     };
   }, [state]);
@@ -1195,7 +1213,7 @@ export function StreetView({
       detachInput();
       if (document.pointerLockElement === canvas) document.exitPointerLock();
     };
-  }, [active, interior, spawn.x, spawn.y, state]);
+  }, [active, interior, spawn.x, spawn.y, state, streetReady]);
 
   useEffect(() => {
     if (!active || interior?.kind !== "stadium") return;

@@ -10,6 +10,7 @@ import { lightingFor, type Lighting } from "@/lib/renderer/palette";
 import { AgentLayer } from "./agents";
 import { clearTreesNearBuildings } from "@/lib/city/siteTrees";
 import { buildCity, hideStreetTreesNearBuildings, TILE, updateTrafficSignals, type CityMeshes } from "./buildCity";
+import { createGlRenderer, releaseGlRenderer } from "./glRenderer";
 import { buildDreamHouseGroup, disposeDreamGroup, dreamCollider } from "./dreamHouseMesh";
 import { dreamDoorYaw, dreamExitTile, findDreamPlot, type DreamPlot } from "@/lib/city/dreamHome";
 import { buildMountainTunnelMouth, nearMountainTunnel } from "./mountainTunnel";
@@ -144,11 +145,7 @@ export class StreetWorld {
     canvas: HTMLCanvasElement,
     private state: CityState,
   ) {
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      powerPreference: "high-performance",
-    });
+    this.renderer = createGlRenderer(canvas);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1496,7 +1493,7 @@ export class StreetWorld {
     this.city.dispose();
     this.sky?.dispose();
     this.windowRT?.dispose();
-    this.renderer.dispose();
+    releaseGlRenderer(this.renderer);
   }
 }
 

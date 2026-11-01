@@ -13,6 +13,7 @@ import {
   ballclubFor,
 } from "@/lib/city/stadium";
 import { consumableById } from "@/lib/city/consumables";
+import { createGlRenderer, releaseGlRenderer } from "./glRenderer";
 import { buildBlimp, type Blimp } from "./blimp";
 import { createFireworkSparks, FIREWORK_PALETTE, sparkFade, stepFireworks, type FireworkSpark } from "@/lib/city/fireworks";
 import { paintRavensScoreboard } from "./ravensScoreboard";
@@ -148,11 +149,7 @@ export class StadiumWorld {
     canvas: HTMLCanvasElement,
     private state: CityState,
   ) {
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      powerPreference: "high-performance",
-    });
+    this.renderer = createGlRenderer(canvas);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -659,6 +656,6 @@ export class StadiumWorld {
     (this.ball.material as THREE.Material).dispose();
     this.sparks.geometry.dispose();
     (this.sparks.material as THREE.Material).dispose();
-    this.renderer.dispose();
+    releaseGlRenderer(this.renderer);
   }
 }

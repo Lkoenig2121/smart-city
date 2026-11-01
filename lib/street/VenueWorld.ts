@@ -7,6 +7,7 @@ import { buildVenueInterior, type VenueInterior } from "./venueInterior";
 import { HeldItemView } from "./heldItem";
 import { DutyUniformView } from "./dutyUniform";
 import { TILE } from "./buildCity";
+import { createGlRenderer, releaseGlRenderer } from "./glRenderer";
 
 /** Half-width the office floor needs clear of neighbouring buildings (its walls sit at ±11). */
 const OFFICE_CLEARANCE = 12.5;
@@ -33,11 +34,7 @@ export class VenueWorld {
   constructor(canvas: HTMLCanvasElement, private state: CityState, building: Building) {
     this.building = building;
     this.mall = venueRole(building) === "mall";
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      powerPreference: "high-performance",
-    });
+    this.renderer = createGlRenderer(canvas);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -349,6 +346,6 @@ export class VenueWorld {
     this.heldView.dispose();
     this.dutyView.dispose();
     this.interior.dispose();
-    this.renderer.dispose();
+    releaseGlRenderer(this.renderer);
   }
 }

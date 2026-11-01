@@ -6,6 +6,7 @@ import { stadiumFireworksOn } from "@/lib/city/fireworks";
 import { cityThemeFor } from "@/lib/city/world/cities";
 import { TILE, towerStages } from "./buildCity";
 import { InteriorControls } from "./interiorControls";
+import { createGlRenderer, releaseGlRenderer } from "./glRenderer";
 import { clearTreesNearBuildings } from "@/lib/city/siteTrees";
 import { hideStreetTreesNearBuildings } from "./buildCity";
 import { buildLodgingInterior, type LodgingInterior } from "./lodgingInterior";
@@ -52,11 +53,7 @@ export class LodgingWorld {
     this.building = building;
     this.zone = zone;
     const room = zone === "room" ? findLodgingRoom(building, roomId) : null;
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      powerPreference: "high-performance",
-    });
+    this.renderer = createGlRenderer(canvas);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -379,6 +376,6 @@ export class LodgingWorld {
     this.fireworks?.dispose();
     this.interior.dispose();
     this.deskTexture?.dispose();
-    this.renderer.dispose();
+    releaseGlRenderer(this.renderer);
   }
 }

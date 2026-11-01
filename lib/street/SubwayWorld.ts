@@ -4,6 +4,7 @@ import { stationIndex } from "@/lib/city/subway";
 import { EYE_HEIGHT, InteriorControls } from "./interiorControls";
 import { TRACK_Z, buildSubwayInterior, type SubwayInterior } from "./subwayInterior";
 import { HeldItemView } from "./heldItem";
+import { createGlRenderer, releaseGlRenderer } from "./glRenderer";
 
 type Phase = "away" | "arriving" | "dwell" | "departing" | "riding";
 
@@ -36,11 +37,7 @@ export class SubwayWorld {
   ) {
     this.stationId = stationId;
     this.arrived = arrived;
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      powerPreference: "high-performance",
-    });
+    this.renderer = createGlRenderer(canvas);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -220,7 +217,7 @@ export class SubwayWorld {
   dispose() {
     this.heldView.dispose();
     this.interior.dispose();
-    this.renderer.dispose();
+    releaseGlRenderer(this.renderer);
   }
 }
 

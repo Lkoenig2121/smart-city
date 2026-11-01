@@ -3,6 +3,7 @@ import type { CityState } from "@/lib/city/types";
 import { buildAirfieldInterior, type AirfieldInterior } from "./airfieldInterior";
 import { InteriorControls } from "./interiorControls";
 import { HeldItemView } from "./heldItem";
+import { createGlRenderer, releaseGlRenderer } from "./glRenderer";
 
 /** Grass strip beyond the Mountain City service tunnel. */
 export class AirfieldWorld {
@@ -21,11 +22,7 @@ export class AirfieldWorld {
     canvas: HTMLCanvasElement,
     private state: CityState,
   ) {
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      powerPreference: "high-performance",
-    });
+    this.renderer = createGlRenderer(canvas);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -98,6 +95,6 @@ export class AirfieldWorld {
   dispose() {
     this.interior.dispose();
     this.heldView.dispose();
-    this.renderer.dispose();
+    releaseGlRenderer(this.renderer);
   }
 }
