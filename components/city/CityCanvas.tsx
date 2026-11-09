@@ -82,6 +82,7 @@ export function CityCanvas() {
   const [street, setStreet] = useState<{
     state: CityState;
     entry: { x: number; y: number };
+    streetRev: number;
     startInterior?: { kind: "subway"; stationId: string };
   } | null>(null);
   const [streetOpen, setStreetOpen] = useState(false);
@@ -294,7 +295,11 @@ export function CityCanvas() {
       x: Math.max(0, Math.min(engine.state.size - 1, centre.x)),
       y: Math.max(0, Math.min(engine.state.size - 1, centre.y)),
     };
-    setStreet({ state: engine.state, entry: clamped });
+    setStreet({
+      state: engine.state,
+      entry: clamped,
+      streetRev: engine.mapRev - engine.mapOverlayRev,
+    });
     selectedIdRef.current = engine.selectedId;
     setStreetOpen(true);
   }, []);
@@ -311,6 +316,7 @@ export function CityCanvas() {
     setStreet({
       state: engine.state,
       entry: subwayGateTile(selected),
+      streetRev: engine.mapRev - engine.mapOverlayRev,
       startInterior: { kind: "subway", stationId: id },
     });
     selectedIdRef.current = selected.id;
@@ -323,7 +329,10 @@ export function CityCanvas() {
 
   const leaveStreet = useCallback(() => {
     const engine = engineRef.current;
-    if (engine) engine.mapRev += 1;
+    if (engine) {
+      engine.mapRev += 1;
+      engine.mapOverlayRev += 1;
+    }
     setStreetOpen(false);
   }, []);
 
@@ -408,12 +417,6 @@ export function CityCanvas() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [worldMapOpen]);
-
-  useEffect(() => {
-    if (streetOpen || !street) return;
-    const id = window.setTimeout(() => setStreet(null), 160);
-    return () => window.clearTimeout(id);
-  }, [streetOpen, street]);
 
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     drag.current = {
@@ -549,6 +552,7 @@ export function CityCanvas() {
             state={street.state}
             entry={street.entry}
             startInterior={street.startInterior}
+            streetRev={street.streetRev}
             active={streetOpen}
             selectedBuildingId={selectedIdRef}
             onTick={tickFromStreet}

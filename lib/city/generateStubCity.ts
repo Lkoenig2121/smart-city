@@ -749,7 +749,7 @@ export function generateStubCity(kind: "mountain" | "coastal" | "future"): CityS
   }
 
   clearTreesNearBuildings(tiles, buildings.values(), 2);
-  const citizens = spawnCitizens(buildings, rand);
+  const citizens = spawnCitizens(buildings, rand, kind === "future" ? "full" : "modest");
   const vehicles: Vehicle[] = [];
   const kinds: VehicleKind[] =
     kind === "future"

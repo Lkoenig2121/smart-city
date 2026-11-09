@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { CityState } from "@/lib/city/types";
-import { buildAirfieldInterior, type AirfieldInterior } from "./airfieldInterior";
+import { buildAirfieldInterior, HEAVEN_GATE_APPROACH, type AirfieldInterior } from "./airfieldInterior";
 import { InteriorControls } from "./interiorControls";
 import { HeldItemView } from "./heldItem";
 import { createGlRenderer, releaseGlRenderer } from "./glRenderer";
@@ -73,6 +73,15 @@ export class AirfieldWorld {
 
   onField() {
     return this.interior.onField(this.controls.position.x, this.controls.position.z);
+  }
+
+  nearHeavenGate() {
+    return this.interior.nearHeavenGate(this.controls.position.x, this.controls.position.z);
+  }
+
+  /** Face the gate in the far ridge. Used when leaving heaven. */
+  spawnAtGate() {
+    this.controls.spawn(HEAVEN_GATE_APPROACH.x, HEAVEN_GATE_APPROACH.z, 0, 0);
   }
 
   render(rawDt: number) {

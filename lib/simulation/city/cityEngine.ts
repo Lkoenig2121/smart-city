@@ -40,6 +40,11 @@ export class CityEngine {
   placementHint = "";
   /** Bumps when tiles or buildings change so the iso renderer can recache. */
   mapRev = 0;
+  /**
+   * mapRev bumps that only refresh the overhead map. The street mesh ignores
+   * these, so leaving the street does not rebuild the whole city next time.
+   */
+  mapOverlayRev = 0;
   private seed: number;
 
   constructor(seed = 20260903) {

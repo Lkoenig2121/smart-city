@@ -335,7 +335,7 @@ export function generateDustfall(seed = 934201): CityState {
   }
 
   clearTreesNearBuildings(tiles, buildings.values(), 2);
-  const citizens = spawnCitizens(buildings, rand).slice(0, 36);
+  const citizens = spawnCitizens(buildings, rand, "modest").slice(0, 36);
   const population = [...buildings.values()].reduce((sum, b) => sum + b.stats.residents, 0);
 
   const vehicles: Vehicle[] = [];

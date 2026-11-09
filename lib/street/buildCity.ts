@@ -1649,8 +1649,10 @@ function buildTrees(state: CityState) {
   trunks.instanceMatrix.needsUpdate = true;
   canopies.instanceMatrix.needsUpdate = true;
   if (canopies.instanceColor) canopies.instanceColor.needsUpdate = true;
-  trunks.castShadow = true;
-  canopies.castShadow = true;
+  trunks.castShadow = false;
+  canopies.castShadow = false;
+  trunks.receiveShadow = false;
+  canopies.receiveShadow = false;
   trunks.name = "street-tree-trunks";
   canopies.name = "street-tree-canopies";
   trunks.userData.streetTree = true;

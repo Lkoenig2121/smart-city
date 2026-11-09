@@ -4,12 +4,21 @@ import type { Building, Citizen, CitizenRole } from "@/lib/city/types";
 import { lodgingUse } from "@/lib/city/lodging";
 import { venueRole } from "@/lib/city/venues";
 
-const ROLE_MIX: { role: CitizenRole; count: number }[] = [
+/** Future City's streets. The other towns use the smaller mix. */
+const FULL_MIX: { role: CitizenRole; count: number }[] = [
   { role: "worker", count: 80 },
   { role: "family", count: 48 },
   { role: "shopper", count: 44 },
   { role: "student", count: 36 },
   { role: "tourist", count: 28 },
+];
+
+const MODEST_MIX: { role: CitizenRole; count: number }[] = [
+  { role: "worker", count: 18 },
+  { role: "family", count: 10 },
+  { role: "shopper", count: 8 },
+  { role: "student", count: 8 },
+  { role: "tourist", count: 6 },
 ];
 
 const ROLE_COLORS: Record<CitizenRole, string[]> = {
@@ -27,7 +36,11 @@ function ofKind(buildings: Building[], kinds: Building["kind"][]) {
 /**
  * Seeds the city with typed citizens and the destinations their daily loop needs.
  */
-export function spawnCitizens(buildingMap: Map<string, Building>, rand: () => number): Citizen[] {
+export function spawnCitizens(
+  buildingMap: Map<string, Building>,
+  rand: () => number,
+  crowd: "full" | "modest" = "modest",
+): Citizen[] {
   const buildings = [...buildingMap.values()];
   const homes = buildings.filter(
     (b) => b.kind === "house" || b.kind === "apartment" || lodgingUse(b) === "residences",
@@ -46,7 +59,7 @@ export function spawnCitizens(buildingMap: Map<string, Building>, rand: () => nu
 
   const citizens: Citizen[] = [];
   let i = 0;
-  for (const { role, count } of ROLE_MIX) {
+  for (const { role, count } of crowd === "full" ? FULL_MIX : MODEST_MIX) {
     for (let n = 0; n < count; n++) {
       const hotel = hotels.length ? hotels[i % hotels.length] : null;
       const home =

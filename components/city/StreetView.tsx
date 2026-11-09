@@ -108,6 +108,7 @@ import { RoomCustomize } from "./RoomCustomize";
 import type { MoveMode } from "@/lib/street/controls";
 import { StreetWorld } from "@/lib/street/StreetWorld";
 import { AirfieldWorld } from "@/lib/street/AirfieldWorld";
+import { HeavenWorld } from "@/lib/street/HeavenWorld";
 import { MOUNTAIN_TUNNEL_TILE } from "@/lib/street/mountainTunnel";
 import { StadiumWorld } from "@/lib/street/StadiumWorld";
 import { LodgingWorld } from "@/lib/street/LodgingWorld";
@@ -154,11 +155,14 @@ type Interior =
   | { kind: "lodging"; buildingId: string; zone: LodgingZone; roomId?: string }
   | { kind: "subway"; stationId: string; arrived?: boolean }
   | { kind: "venue"; buildingId: string }
-  | { kind: "airfield" };
+  | { kind: "airfield" }
+  | { kind: "heaven" };
 
 interface Props {
   state: CityState;
   entry: { x: number; y: number };
+  /** City edits since load. Leaving the street does not change this. */
+  streetRev?: number;
   startInterior?: Interior | null;
   /** False while the overlay is hiding so the isometric view can paint first. */
   active?: boolean;
@@ -172,6 +176,7 @@ interface Props {
 export function StreetView({
   state,
   entry,
+  streetRev = 0,
   startInterior = null,
   active = true,
   selectedBuildingId,
@@ -188,6 +193,8 @@ export function StreetView({
   const subwayRef = useRef<SubwayWorld | null>(null);
   const venueRef = useRef<VenueWorld | null>(null);
   const airfieldRef = useRef<AirfieldWorld | null>(null);
+  const heavenRef = useRef<HeavenWorld | null>(null);
+  const heavenReturnRef = useRef(false);
   const positionRef = useRef<{ x: number; y: number; yaw: number } | null>(
     null,
   );
@@ -220,6 +227,10 @@ export function StreetView({
   const [clock, setClock] = useState(() => formatClock(state));
   const [failed, setFailed] = useState<string | null>(null);
   const [streetReady, setStreetReady] = useState(0);
+  const [streetEpoch, setStreetEpoch] = useState(0);
+  const streetRevRef = useRef(streetRev);
+  streetRevRef.current = streetRev;
+  const builtRevRef = useRef(-1);
   const [mode, setMode] = useState<MoveMode>("hop");
   const [interior, setInterior] = useState<Interior | null>(startInterior);
   const interiorRef = useRef(interior);
@@ -247,6 +258,10 @@ export function StreetView({
   const [atTunnel, setAtTunnel] = useState(false);
   const [onAirfield, setOnAirfield] = useState(false);
   const [atTunnelMouth, setAtTunnelMouth] = useState(false);
+  const [atHeavenGate, setAtHeavenGate] = useState(false);
+  const [atHeavenExit, setAtHeavenExit] = useState(false);
+  const [onHeavenEscalator, setOnHeavenEscalator] = useState(false);
+  const [atHeavenHost, setAtHeavenHost] = useState(false);
   const [subwayDoor, setSubwayDoor] = useState<Building | null>(null);
   const [atDesk, setAtDesk] = useState(false);
   const [atSubwayExit, setAtSubwayExit] = useState(false);
@@ -538,6 +553,7 @@ export function StreetView({
     apply(subwayRef.current?.controls);
     apply(venueRef.current?.controls);
     apply(airfieldRef.current?.controls);
+    apply(heavenRef.current?.controls);
     if (paused && document.pointerLockElement) document.exitPointerLock();
   }, [busyUi, interior]);
 
@@ -556,6 +572,7 @@ export function StreetView({
     if (subwayRef.current) subwayRef.current.controls.boost = indoor;
     if (venueRef.current) venueRef.current.controls.boost = indoor;
     if (airfieldRef.current) airfieldRef.current.controls.boost = indoor;
+    if (heavenRef.current) heavenRef.current.controls.boost = indoor;
     const held = player.life.held;
     const sips = player.life.heldSips ?? 0;
     if (!sippingRef.current) {
@@ -565,6 +582,7 @@ export function StreetView({
       subwayRef.current?.setHeld(held, sips);
       venueRef.current?.setHeld(held, sips);
       airfieldRef.current?.setHeld(held, sips);
+      heavenRef.current?.setHeld(held, sips);
     }
   }, [player, interior]);
 
@@ -818,6 +836,7 @@ export function StreetView({
       subwayRef.current?.playSip();
       venueRef.current?.playSip();
       airfieldRef.current?.playSip();
+      heavenRef.current?.playSip();
       const result = consumeHeld();
       window.clearTimeout(sipTimerRef.current);
       sipTimerRef.current = window.setTimeout(() => {
@@ -860,6 +879,7 @@ export function StreetView({
 
       setFailed(null);
       worldRef.current = world;
+      builtRevRef.current = streetRevRef.current;
       setStreetReady((ready) => ready + 1);
       if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
       const resize = () => {
@@ -881,7 +901,25 @@ export function StreetView({
       world?.dispose();
       worldRef.current = null;
     };
-  }, [state]);
+  }, [state, streetEpoch]);
+
+  useEffect(() => {
+    if (!active) return;
+    if (builtRevRef.current < 0 || builtRevRef.current === streetRevRef.current) return;
+    setStreetEpoch((epoch) => epoch + 1);
+  }, [active, streetRev]);
+
+  const streetWasOpen = useRef(false);
+  useEffect(() => {
+    const opened = active && !streetWasOpen.current;
+    streetWasOpen.current = active;
+    if (!opened) return;
+    drivingRef.current = false;
+    setDriving(false);
+    setInterior(startInterior ?? null);
+    setSpawn({ x: entry.x, y: entry.y });
+    worldRef.current?.stopDriving();
+  }, [active, entry.x, entry.y, startInterior]);
 
   useEffect(() => {
     if (!active || interior) return;
@@ -1037,13 +1075,19 @@ export function StreetView({
     let frame = 0;
     let last = performance.now();
     let clockAcc = 0;
+    let saveAcc = 0.2;
+    let live = readPlayer();
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       tickRef.current(dt);
       world.setPinnedSelection(selectedBuildingId?.current ?? null);
       world.setWaypoint(waypointRef.current);
-      const live = readPlayer();
+      saveAcc += dt;
+      if (saveAcc >= 0.2) {
+        saveAcc = 0;
+        live = readPlayer();
+      }
       const activeCar = activeOwnedVehicle(live);
       world.syncOwnedCars(
         live.policeShift ? [...live.ownedVehicles, policeCruiser(live)] : live.ownedVehicles,
@@ -1094,8 +1138,11 @@ export function StreetView({
       {
         const pos = world.tilePosition;
         const arrived = syncPoliceCallArrival(pos.x, pos.y);
-        if (arrived) setPlayer(arrived);
-        const callNow = readPlayer().policeCall;
+        if (arrived) {
+          live = arrived;
+          setPlayer(arrived);
+        }
+        const callNow = live.policeCall;
         world.setPoliceMission(callNow);
         const track = world.suspectTracker;
         suspectRef.current = track;
@@ -1112,6 +1159,7 @@ export function StreetView({
       for (const event of world.consumePoliceEvents()) {
         const result = applyPoliceSceneEvent(state, event);
         if (!result) continue;
+        live = result.player;
         setPlayer(result.player);
         setPoliceNote(result.note);
         setWaypoint(readPhone().waypoint);
@@ -1123,7 +1171,7 @@ export function StreetView({
         }
       }
       if (live.policeShift) {
-        const objective = policeObjective(readPlayer().policeCall, {
+        const objective = policeObjective(live.policeCall, {
           inCruiser: world.inPoliceCruiser,
           driving: world.isDriving,
           lights: world.policeLightsEnabled,
@@ -1148,6 +1196,7 @@ export function StreetView({
           world.tilePosition,
         );
         writePlayer(next);
+        live = next;
         if (Math.random() < 0.02) setPlayer(next);
       }
       const pin = waypointRef.current;
@@ -1199,10 +1248,11 @@ export function StreetView({
         setDreamOffer((prev) => (prev === show ? prev : show));
       }
       clockAcc += dt;
-      if (clockAcc > 0.25) {
+      if (clockAcc > 1) {
         clockAcc = 0;
-        setClock(formatClock(state));
-        setPlayer(readPlayer());
+        const nextClock = formatClock(state);
+        setClock((prev) => (prev === nextClock ? prev : nextClock));
+        setPlayer(live);
       }
       frame = requestAnimationFrame(loop);
     };
@@ -1335,6 +1385,10 @@ export function StreetView({
       return;
     }
     airfieldRef.current = world;
+    if (heavenReturnRef.current) {
+      heavenReturnRef.current = false;
+      world.spawnAtGate();
+    }
     if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
 
     const resize = () => {
@@ -1355,6 +1409,12 @@ export function StreetView({
       setLocked,
       consumeKey: (event) => {
         if (event.code !== "KeyE") return false;
+        if (world.nearHeavenGate()) {
+          event.preventDefault();
+          setAtHeavenGate(false);
+          setInterior({ kind: "heaven" });
+          return true;
+        }
         if (!world.nearCityMouth()) return false;
         event.preventDefault();
         leave();
@@ -1373,8 +1433,10 @@ export function StreetView({
       world.render(dt);
       const field = world.onField();
       const mouth = world.nearCityMouth();
+      const gate = world.nearHeavenGate();
       setOnAirfield((prev) => (prev === field ? prev : field));
       setAtTunnelMouth((prev) => (prev === mouth ? prev : mouth));
+      setAtHeavenGate((prev) => (prev === gate ? prev : gate));
       clockAcc += dt;
       if (clockAcc > 0.25) {
         clockAcc = 0;
@@ -1393,6 +1455,88 @@ export function StreetView({
       airfieldRef.current = null;
       setOnAirfield(false);
       setAtTunnelMouth(false);
+      setAtHeavenGate(false);
+    };
+  }, [active, interior, state]);
+
+  useEffect(() => {
+    if (!active || interior?.kind !== "heaven") return;
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+
+    let world: HeavenWorld;
+    try {
+      world = new HeavenWorld(canvas, state);
+    } catch (error) {
+      setFailed(
+        error instanceof Error ? error.message : "WebGL is unavailable in this browser.",
+      );
+      heavenReturnRef.current = true;
+      setInterior({ kind: "airfield" });
+      return;
+    }
+    heavenRef.current = world;
+    if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
+
+    const resize = () => {
+      const rect = wrap.getBoundingClientRect();
+      world.resize(rect.width, rect.height);
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(wrap);
+
+    const leave = () => {
+      heavenReturnRef.current = true;
+      setAtHeavenExit(false);
+      setInterior({ kind: "airfield" });
+    };
+    const detachInput = attachPointerInput(canvas, world.controls, {
+      setLocked,
+      consumeKey: (event) => {
+        if (event.code !== "KeyE") return false;
+        if (!world.nearExit()) return false;
+        event.preventDefault();
+        leave();
+        return true;
+      },
+    });
+
+    let frame = 0;
+    let last = performance.now();
+    let clockAcc = 0;
+    const loop = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      tickRef.current(dt);
+      if (!sippingRef.current) world.setHeld(heldRef.current, sipsRef.current);
+      world.render(dt);
+      const exit = world.nearExit();
+      setAtHeavenExit((prev) => (prev === exit ? prev : exit));
+      const ridingEscalator = world.onEscalator();
+      setOnHeavenEscalator((prev) => (prev === ridingEscalator ? prev : ridingEscalator));
+      const host = world.nearHost();
+      setAtHeavenHost((prev) => (prev === host ? prev : host));
+      clockAcc += dt;
+      if (clockAcc > 0.25) {
+        clockAcc = 0;
+        setClock(formatClock(state));
+      }
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      detachInput();
+      if (document.pointerLockElement === canvas) document.exitPointerLock();
+      world.dispose();
+      heavenRef.current = null;
+      setAtHeavenExit(false);
+      setOnHeavenEscalator(false);
+      setAtHeavenHost(false);
     };
   }, [active, interior, state]);
 
@@ -2129,7 +2273,9 @@ export function StreetView({
     setInterior({ kind: "stadium" });
   };
   const placeName =
-    interior?.kind === "airfield"
+    interior?.kind === "heaven"
+      ? "Heaven"
+      : interior?.kind === "airfield"
       ? onAirfield
         ? "Airfield"
         : "Tunnel"
@@ -2377,6 +2523,12 @@ export function StreetView({
             <>
               <button
                 onClick={() => {
+                  if (interior?.kind === "heaven") {
+                    heavenReturnRef.current = true;
+                    setAtHeavenExit(false);
+                    setInterior({ kind: "airfield" });
+                    return;
+                  }
                   if (interior?.kind === "stadium") {
                     const stadium = findStadium(state);
                     if (stadium) setSpawn(stadiumGateTile(stadium));
@@ -2404,9 +2556,11 @@ export function StreetView({
                 }}
                 className="rounded-xl bg-amber-400 px-3.5 py-2 text-xs font-semibold text-[#1a1206] backdrop-blur"
               >
-                {interior?.kind === "stadium"
-                  ? "Leave stadium"
-                  : "Leave building"}
+                {interior?.kind === "heaven"
+                  ? "Leave heaven"
+                  : interior?.kind === "stadium"
+                    ? "Leave stadium"
+                    : "Leave building"}
               </button>
               {interior?.kind === "lodging" && interior.zone === "room" ? (
                 <>
@@ -2717,6 +2871,58 @@ export function StreetView({
             <p className="mt-1 text-sm text-slate-300">
               <span className="font-semibold text-white">Click</span> or press{" "}
               <span className="font-semibold text-white">E</span> to step inside
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {interior?.kind === "airfield" && atHeavenGate && !failed ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-2xl border border-amber-200/50 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-200">
+              Far ridge
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">Heaven&apos;s gate</p>
+            <p className="mt-1 text-sm text-slate-300">
+              Press <span className="font-semibold text-white">E</span> to step through
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {interior?.kind === "heaven" && onHeavenEscalator && !failed ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-2xl border border-white/30 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-100">
+              Escalator
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">It carries you upward</p>
+            <p className="mt-1 text-sm text-slate-300">Step inward to step off</p>
+          </div>
+        </div>
+      ) : null}
+
+      {interior?.kind === "heaven" && atHeavenHost && !onHeavenEscalator && !failed ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-2xl border border-amber-200/50 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-200">
+              The heavenly host
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">Michael the Archangel</p>
+            <p className="mt-1 text-sm text-slate-300">Gabriel, the cherubim, the harp, and the doves</p>
+          </div>
+        </div>
+      ) : null}
+
+      {interior?.kind === "heaven" && atHeavenExit && !failed ? (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2">
+          <div className="rounded-2xl border border-amber-200/50 bg-black/75 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <p className="text-[0.65rem] uppercase tracking-[0.28em] text-amber-200">
+              The gate
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">Back to the airfield</p>
+            <p className="mt-1 text-sm text-slate-300">
+              Press <span className="font-semibold text-white">E</span> to return
             </p>
           </div>
         </div>

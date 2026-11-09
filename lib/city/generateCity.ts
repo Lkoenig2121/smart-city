@@ -409,7 +409,7 @@ export function generateCity(seed = 20260903): CityState {
   markNotableVenues(buildings);
 
   clearTreesNearBuildings(tiles, buildings.values(), 2);
-  const citizens = spawnCitizens(buildings, rand);
+  const citizens = spawnCitizens(buildings, rand, "modest");
 
   if ([...buildings.values()].some((b) => b.kind === "baseball_stadium")) {
     for (const citizen of citizens) {

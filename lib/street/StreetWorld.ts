@@ -146,12 +146,12 @@ export class StreetWorld {
     private state: CityState,
   ) {
     this.renderer = createGlRenderer(canvas);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 1400);
     this.scene.add(this.camera);
@@ -181,7 +181,7 @@ export class StreetWorld {
 
     // The sun casts across a moving box centred on the player.
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.set(1024, 1024);
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 260;
     this.sun.shadow.camera.left = -70;
